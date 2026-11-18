@@ -121,12 +121,12 @@ void MainWindow::installVisitors()
     connect(warp,&QSpinBox::valueChanged,this,[this](int){refreshVisitors();});
     connect(tree,&QTreeWidget::itemSelectionChanged,this,[this]{refreshVisitors();});
     connect(fleet,&QComboBox::currentIndexChanged,this,[this](int){refreshVisitors();});
-    connect(this,&MainWindow::routeProgramContextChanged,this,[this]{refreshVisitors();}); refreshVisitors();
+    refreshDockOnContextChange(dock, [this] { refreshVisitors(); }); refreshVisitors();
 }
 void MainWindow::refreshVisitors()
 {
     auto* tree=findChild<QTreeWidget*>("visitorContacts"); if(!tree || !find_player(state_,pendingOrders_.player)) return;
-    const auto view=make_player_view(state_,pendingOrders_.player).state;
+    const auto& view = receivedPlayerState();
     const auto selected=tree->currentItem()?tree->currentItem()->data(0,Qt::UserRole).toUInt():0;
     const QSignalBlocker guard(tree); tree->clear();
     for(const auto& x:view.players[0].visitorKnowledge) {

@@ -445,7 +445,7 @@ int main(int argc, char** argv)
         for (auto* child : item->childItems())
             if (auto* label = dynamic_cast<QGraphicsSimpleTextItem*>(child)) hoverLabel = label;
     }
-    assert(hoverLabel && !hoverLabel->isVisible());
+    assert(hoverLabel);
     const auto movePointer = [&](const QPoint& position) {
         QMouseEvent move(QEvent::MouseMove, QPointF(position),
             QPointF(view->viewport()->mapToGlobal(position)), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
@@ -453,6 +453,10 @@ int main(int argc, char** argv)
         QApplication::processEvents();
     };
     const auto hoverPosition = view->mapFromScene(35, 30);
+    // Course edits retain the map marker and therefore its current hover.
+    // Begin the check by moving off the marker, as the player would.
+    movePointer(hoverPosition + QPoint(40, 40));
+    assert(!hoverLabel->isVisible());
     movePointer(hoverPosition);
     assert(hoverLabel->isVisible());
     movePointer(hoverPosition + QPoint(40, 40));

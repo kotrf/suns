@@ -931,6 +931,16 @@ void MainWindow::fitGalaxyView()
     statusBar()->showMessage("Galaxy fitted to map viewport", 1000);
 }
 
+void MainWindow::refreshDockOnContextChange(QDockWidget* dock, std::function<void()> refresh)
+{
+    connect(this, &MainWindow::routeProgramContextChanged, dock, [dock, refresh] {
+        if (!dock->isHidden()) refresh();
+    });
+    connect(dock, &QDockWidget::visibilityChanged, dock, [refresh](bool visible) {
+        if (visible) refresh();
+    });
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
     if (!shuttingDown_ && view_ && watched == view_->viewport()
@@ -949,6 +959,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
                 if (kind == kMapItemOrbit) kind = 1;
+                const auto previousRender = renderedPlanningRevision_;
                 if (mouse->button() == Qt::RightButton || routeProgramMapTargetPickActive_) {
                     const bool append=quick || routeProgramAppendPickedWaypoint_;
                     if (!selectRouteProgramMapTarget(kind, id)) return true;
@@ -956,10 +967,14 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     if (append)
                         emit routeProgramQuickTargetRequested(kind, id);
                 } else {
-                    if (!selectWorkspaceObject(kind, id)) return true;
-                    if (kind == 1) emit routeProgramMapTargetPicked(kind, id);
+                    const bool star = kind == 1;
+                    if (!selectWorkspaceObject(kind, id, !star)) return true;
+                    if (star) emit routeProgramMapTargetPicked(kind, id);
                 }
-                queueMapSelectionRebuild();
+                // An accepted quick waypoint already shows the selected
+                // system and programme. A rejected one still needs highlights.
+                if (previousRender == renderedPlanningRevision_)
+                    queueMapSelectionRebuild();
                 return true;
             }
             if (routeProgramMapTargetPickActive_ && mouse->button() == Qt::LeftButton) {

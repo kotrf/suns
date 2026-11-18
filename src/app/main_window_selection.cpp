@@ -126,7 +126,7 @@ void MainWindow::rememberMapSelection(int kind, std::uint32_t id)
     currentDistanceSelectionId_ = id;
 }
 
-bool MainWindow::selectWorkspaceObject(int kind, std::uint32_t id)
+bool MainWindow::selectWorkspaceObject(int kind, std::uint32_t id, bool refreshEditor)
 {
     if (id == 0) return false;
     auto selected = selection_;
@@ -135,7 +135,7 @@ bool MainWindow::selectWorkspaceObject(int kind, std::uint32_t id)
     else return false;
     if (!session_->select(selected, this)) return false;
     rememberMapSelection(kind, id);
-    emit routeProgramContextChanged();
+    if (refreshEditor) emit routeProgramContextChanged();
     return true;
 }
 
@@ -196,7 +196,7 @@ void MainWindow::installDeferredMapSelectionHandler()
             queueMapSelectionRebuild();
             return;
         }
-        if (!selectWorkspaceObject(kind, id)) return;
+        if (!selectWorkspaceObject(kind, id, kind != kMapItemStar)) return;
         if (kind == kMapItemStar) emit routeProgramMapTargetPicked(kind, id);
 
         queueMapSelectionRebuild();

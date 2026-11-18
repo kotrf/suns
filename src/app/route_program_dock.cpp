@@ -127,42 +127,52 @@ private:
     double damageRate_{};
 };
 
-void clearRouteOverlay(QGraphicsScene* scene)
-{
-    if (!scene) return;
-    const auto items = scene->items();
-    for (auto* item : items) {
-        if (item->data(kRouteOverlayDataKey).toBool()) delete item;
-    }
-}
-
 void drawRouteOverlay(MainWindow& window, std::optional<Position> coordinateDraft = std::nullopt)
 {
     auto* scene = window.routeProgramScene();
     if (!scene) return;
 
-    clearRouteOverlay(scene);
-    if (coordinateDraft) {
-        auto* marker = scene->addEllipse(-5, -5, 10, 10, QPen(QColor("#96d7ff"), 1.5));
-        marker->setPos(coordinateDraft->x, coordinateDraft->y);
-        marker->setFlag(QGraphicsItem::ItemIgnoresTransformations);
-        marker->setAcceptedMouseButtons(Qt::NoButton);
-        marker->setData(kRouteOverlayDataKey, true);
-        marker->setToolTip("New coordinate waypoint — press Add waypoint to confirm");
-        marker->setZValue(12);
+    // Route-table and panel updates can ask for the very same overlay. Keep
+    // the items and only invalidate the pieces whose geometry changed.
+    QGraphicsEllipseItem* marker = nullptr;
+    std::vector<QGraphicsLineItem*> segments;
+    for (auto* item : scene->items(Qt::AscendingOrder)) {
+        if (!item->data(kRouteOverlayDataKey).toBool()) continue;
+        if (auto* line = qgraphicsitem_cast<QGraphicsLineItem*>(item)) segments.push_back(line);
+        else marker = qgraphicsitem_cast<QGraphicsEllipseItem*>(item);
     }
+    if (coordinateDraft) {
+        if (!marker) {
+            marker = scene->addEllipse(-5, -5, 10, 10, QPen(QColor("#96d7ff"), 1.5));
+            marker->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+            marker->setAcceptedMouseButtons(Qt::NoButton);
+            marker->setData(kRouteOverlayDataKey, true);
+            marker->setToolTip("New coordinate waypoint — press Add waypoint to confirm");
+            marker->setZValue(12);
+        }
+        marker->setPos(coordinateDraft->x, coordinateDraft->y);
+    } else {
+        delete marker;
+    }
+
     const auto points = window.selectedFleetRouteProgramPolyline();
-    if (points.size() < 2) return;
+    const auto segmentCount = points.empty() ? 0 : points.size() - 1;
+    for (std::size_t i = segmentCount; i < segments.size(); ++i) delete segments[i];
 
     QPen pen(QColor(110, 190, 255, 175));
     pen.setWidthF(0.8);
     pen.setCosmetic(true);
     pen.setStyle(Qt::SolidLine);
 
-    for (std::size_t index = 1; index < points.size(); ++index) {
-        const auto& from = points[index - 1];
-        const auto& to = points[index];
-        auto* line = scene->addLine(from.x, from.y, to.x, to.y, pen);
+    for (std::size_t i = 0; i < segmentCount; ++i) {
+        const auto& from = points[i];
+        const auto& to = points[i + 1];
+        const QLineF geometry(from.x, from.y, to.x, to.y);
+        if (i < segments.size()) {
+            if (segments[i]->line() != geometry) segments[i]->setLine(geometry);
+            continue;
+        }
+        auto* line = scene->addLine(geometry, pen);
         line->setData(kRouteOverlayDataKey, true);
         line->setZValue(-10.0);
         line->setAcceptedMouseButtons(Qt::NoButton);

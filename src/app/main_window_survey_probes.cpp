@@ -118,12 +118,12 @@ void MainWindow::installSurveyProbes()
         rebuildScene();
     });
     connect(fleet, &QComboBox::currentIndexChanged, this, [this](int) { refreshSurveyProbes(); });
-    connect(this, &MainWindow::routeProgramContextChanged, this, [this] { refreshSurveyProbes(); }); refreshSurveyProbes();
+    refreshDockOnContextChange(dock, [this] { refreshSurveyProbes(); }); refreshSurveyProbes();
 }
 void MainWindow::refreshSurveyProbes()
 {
     auto* combo = findChild<QComboBox*>("probeFleet"); if (!combo || !find_player(state_, pendingOrders_.player)) return;
-    const auto view = make_player_view(state_, pendingOrders_.player).state;
+    const auto& view = receivedPlayerState();
     const QSignalBlocker guard(combo); const auto old = combo->currentData(); combo->clear();
     for (const auto& f : view.fleets) if (f.probe.configured || probe_capable(view, f)) combo->addItem(QString::fromStdString(f.name), f.id);
     if (combo->findData(old) >= 0) combo->setCurrentIndex(combo->findData(old));

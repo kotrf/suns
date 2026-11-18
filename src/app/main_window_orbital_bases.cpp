@@ -72,7 +72,7 @@ void MainWindow::installOrbitalBases()
     auto* cancelRetirement=button("orbitalBaseCancelRetirement","Cancel pending retirement (no completed demolition can be undone)");
     auto* scroll=new QScrollArea(dock); scroll->setWidgetResizable(true); scroll->setWidget(body); dock->setWidget(scroll);
     addDockWidget(Qt::RightDockWidgetArea,dock); dock->hide(); menuBar()->addAction(dock->toggleViewAction());
-    const auto knownWorld=[this] { return make_player_view(state_,pendingOrders_.player).state; };
+    const auto knownWorld = [this]() -> const GameState& { return receivedPlayerState(); };
     const auto update=[=,this] {
         auto known=knownWorld(); const auto* f=find_service_fleet(known,bases->currentData().toUInt());
         for (auto* button : {approach,deploy,pause,resume,build,refit,cancel,deliver,evacuate,dismantle,rebuild,cancelRetirement}) button->setEnabled(f!=nullptr);
@@ -191,6 +191,6 @@ void MainWindow::installOrbitalBases()
     connect(bases,&QComboBox::currentIndexChanged,this,[=](int){refresh();});
     connect(planets,&QComboBox::currentIndexChanged,this,[=](int){update();}); connect(clients,&QComboBox::currentIndexChanged,this,[=](int){update();});
     connect(stationHulls,&QComboBox::currentIndexChanged,this,[=](int){update();});
-    connect(this,&MainWindow::routeProgramContextChanged,this,refresh); refresh();
+    refreshDockOnContextChange(dock, refresh); refresh();
 }
 } // namespace suns

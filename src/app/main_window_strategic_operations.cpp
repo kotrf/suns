@@ -148,7 +148,7 @@ void MainWindow::installStrategicOperations()
         else if(mode->currentIndex()!=int(known.electronics.mode))
             text+="\nEmission selection is a draft. Press Set to queue it.";
         text+="\nProgram work with Route → On arrival. Stop cancels work and travel; emissions use Set. Command reception stays on while silent; reports wait for transmission or friendly orbital exchange.";
-        const auto statuses=known_sensor_status(state_,pendingOrders_.player);
+        const auto& statuses = receivedPlayerState().players.front().sensorStatus;
         const auto status=std::find_if(statuses.begin(),statuses.end(),[&](const auto& s){return s.fleet==known.id;});
         if(status!=statuses.end()) text+=QString("\nReceived sensor status, year %1: interference %2%; active %3 / passive baseline %4 / emission reception %5 ly.")
             .arg(qulonglong(status->observedTurn)).arg(status->interferencePercent).arg(status->activeRange,0,'f',0)
@@ -159,7 +159,6 @@ void MainWindow::installStrategicOperations()
     };
     auto* timer = new QTimer(this); timer->setSingleShot(true);
     connect(timer,&QTimer::timeout,this,refresh);
-    connect(scene_,&QGraphicsScene::changed,this,[this,timer](const QList<QRectF>&) { if (!shuttingDown_) timer->start(0); });
     connect(mode,&QComboBox::currentIndexChanged,this,[timer] { timer->start(0); });
     connect(interval,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
     connect(years,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
@@ -173,7 +172,7 @@ void MainWindow::installStrategicOperations()
 void MainWindow::renderStrategicObjects()
 {
     const auto* player = find_player(state_,pendingOrders_.player); if (!player) return;
-    for(const auto& c:known_enemy_contacts(state_,pendingOrders_.player)) if(!c.lost) {
+    for (const auto& c : receivedPlayerState().players.front().enemyContacts) if (!c.lost) {
         const auto age=state_.turn>c.lastSeenTurn?state_.turn-c.lastSeenTurn:0;
         if(c.uncertainty<=0 && !age) continue;
         const double radius=std::max(2.0,c.uncertainty);

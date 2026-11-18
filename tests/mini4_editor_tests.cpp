@@ -9,6 +9,8 @@
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QGraphicsItem>
+#include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QMouseEvent>
 #include <QProgressBar>
@@ -59,6 +61,37 @@ struct MainWindowTestAccess {
         load(w);auto* pick=w.findChild<QPushButton*>("routePickTargetButton");assert(pick);
         pick->click();click(w,w.state_.stars[1].position);
         assert(w.pendingOrders_.orders.empty() && w.selectedFleetRouteProgramRows().empty()); // Legacy draft picking.
+    }
+    static void route_changes_reuse_map_items(MainWindow& w)
+    {
+        load(w);
+        const auto solMarker = [&] {
+            const auto items = w.scene_->items();
+            const auto it = std::find_if(items.begin(), items.end(), [](const auto* item) {
+                return item->data(1).toInt() == 1 && item->data(0).toUInt() == 1;
+            });
+            assert(it != items.end());
+            return *it;
+        };
+        constexpr int sentinel = 99;
+        solMarker()->setData(sentinel, true);
+        auto* add = w.findChild<QPushButton*>("routeNewWaypointButton");
+        auto* queue = w.findChild<QTreeWidget*>("routeProgramQueue");
+        assert(add && queue);
+        add->click();
+        click(w, w.state_.stars[1].position);
+        assert(queue->topLevelItemCount() == 1 && solMarker()->data(sentinel).toBool());
+        assert(w.selection_.star == 2 && !solMarker()->isSelected());
+        assert(w.removeSelectedFleetRouteProgramLeg(0));
+        assert(queue->topLevelItemCount() == 0 && solMarker()->data(sentinel).toBool());
+
+        // Combining the course with a scanner/emissions edit must use the
+        // complete map path so the scanner geometry cannot go stale.
+        w.appendPendingOrder(SetFleetElectronicsOrder{1, {EmissionMode::Passive}}, "Passive sensors");
+        solMarker()->setData(sentinel, true);
+        add->click();
+        click(w, w.state_.stars[2].position);
+        assert(queue->topLevelItemCount() == 1 && !solMarker()->data(sentinel).isValid());
     }
     static void queueBudget(MainWindow& w) {
         load(w);w.state_.players[0].technology.levels.fill(26);w.state_.players[0].technology.researchActive=false;
@@ -226,7 +259,8 @@ int main(int argc,char** argv) {
         if(std::string(argv[1])=="selected-quick") {MainWindowTestAccess::selectedLegMapAppend(w,false);return 0;}
         if(std::string(argv[1])=="selected-new") {MainWindowTestAccess::selectedLegMapAppend(w,true);return 0;}
     }
-    MainWindowTestAccess::navigation(w);MainWindowTestAccess::queueBudget(w);MainWindowTestAccess::radiation(w);MainWindowTestAccess::split(w);
+    MainWindowTestAccess::navigation(w);MainWindowTestAccess::route_changes_reuse_map_items(w);
+    MainWindowTestAccess::queueBudget(w);MainWindowTestAccess::radiation(w);MainWindowTestAccess::split(w);
     MainWindowTestAccess::fleetArrivalChoice(w);MainWindowTestAccess::paidRefitMinerals(w);
     MainWindowTestAccess::selectedLegMapAppend(w,false);MainWindowTestAccess::selectedLegMapAppend(w,true);
 }

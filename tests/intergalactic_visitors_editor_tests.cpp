@@ -3,6 +3,7 @@
 #include "suns/intergalactic_visitors.hpp"
 #include "suns/communications.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QDataStream>
 #include <QFile>
 #include <QLabel>
@@ -277,7 +278,9 @@ int main(int argc,char** argv)
     generated_oblique_path_survives_save_and_continuation();
     turning_path_round_trips_without_leaking_its_schedule();
     changed_course_evidence_round_trips();
-    MainWindow w; w.installVisitors(); w.startVisitorDemo();
+    MainWindow w; w.installVisitors();
+    w.findChild<QDockWidget*>("visitorsDock")->show();
+    w.startVisitorDemo();
     auto* tree=w.findChild<QTreeWidget*>("visitorContacts"); auto* send=w.findChild<QPushButton*>("interceptVisitor");
     assert(tree && tree->topLevelItemCount()==1 && send->isEnabled());
     const auto measured=tree->topLevelItem(0)->text(2), forecast=tree->topLevelItem(0)->text(3);

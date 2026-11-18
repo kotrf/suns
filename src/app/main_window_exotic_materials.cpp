@@ -111,7 +111,7 @@ void MainWindow::installExoticMaterials()
     connect(pause, &QPushButton::clicked, this, [project] { project(ResonanceAction::Pause); });
     connect(active, &QPushButton::clicked, this, [project] { project(ResonanceAction::SetActive); });
     connect(dismantle, &QPushButton::clicked, this, [project] { project(ResonanceAction::Dismantle); });
-    connect(this, &MainWindow::routeProgramContextChanged, this, [this] { refreshExoticMaterials(); });
+    refreshDockOnContextChange(dock, [this] { refreshExoticMaterials(); });
     refreshExoticMaterials();
 }
 void MainWindow::refreshExoticMaterials()
@@ -119,7 +119,7 @@ void MainWindow::refreshExoticMaterials()
     auto* tree = findChild<QTreeWidget*>("exoticInventory"); if (!tree || !find_player(state_, pendingOrders_.player)) return;
     const auto selected = tree->currentItem() ? tree->currentItem()->data(0, Qt::UserRole).toULongLong() : 0;
     const QSignalBlocker block(tree); tree->clear();
-    const auto known = plan(state_, pendingOrders_);
+    const auto known = planned_production_state(receivedPlayerState(), pendingOrders_);
     for (const auto& p : known.planets) {
         const auto observation = known_xenocrystal(known, pendingOrders_.player, p.id);
         auto* row = new QTreeWidgetItem(tree); row->setData(0, Qt::UserRole, QVariant::fromValue(key({p.id, 0})));
@@ -166,11 +166,11 @@ void MainWindow::refreshExoticMaterials()
 void MainWindow::refreshExoticMaterialControls()
 {
     auto* tree = findChild<QTreeWidget*>("exoticInventory"); if (!tree) return;
-    auto known = plan(state_, pendingOrders_);
+    auto known = planned_production_state(receivedPlayerState(), pendingOrders_);
     auto* from = findChild<QComboBox*>("exoticTransferSource"); auto* to = findChild<QComboBox*>("exoticTransferDestination");
     findChild<QPushButton*>("transferXenocrystal")->setEnabled(preview_xenocrystal_transfer(known, pendingOrders_.player,
         {endpoint(from->currentData().toULongLong()), endpoint(to->currentData().toULongLong()), std::uint32_t(findChild<QSpinBox*>("exoticTransferAmount")->value())}, &pendingOrders_));
-    known = plan(state_, pendingOrders_);
+    known = planned_production_state(receivedPlayerState(), pendingOrders_);
     const auto place = tree->currentItem() ? endpoint(tree->currentItem()->data(0, Qt::UserRole).toULongLong()) : CargoTransferEndpoint{};
     const auto* p = find_planet(known, place.planet);
     const auto f = std::find_if(known.fleets.begin(), known.fleets.end(), [&](const auto& f) { return f.id == findChild<QComboBox*>("exoticExpeditionFleet")->currentData().toUInt(); });

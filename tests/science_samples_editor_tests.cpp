@@ -7,6 +7,7 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/player_knowledge.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QComboBox>
 #include <QDataStream>
 #include <QFile>
@@ -399,6 +400,8 @@ int main(int argc, char** argv)
     exports_and_order_exchange(); colonist_only_split_produces_a_reloadable_save();
     merged_historical_manifests_stay_reloadable();
     MainWindow window; window.installUnknownObjects(); window.installScienceSamples();
+    window.findChild<QDockWidget*>("scienceSamplesDock")->show();
+
     editor_authors_orders_without_mutating_physical_inventory(window);
     stale_manifest_cannot_transfer_or_create_a_phantom_artifact(window);
     remote_surface_changes_wait_for_receipts_in_ui_ai_and_exports(window);
