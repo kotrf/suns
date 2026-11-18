@@ -1,5 +1,26 @@
 # UI responsiveness and planning performance
 
+## Order editing on mature campaigns
+
+Draft orders reuse the received player view. The accepted plan still changes
+with the orders. Turn, player and document changes refresh received evidence
+through the normal state boundary, including a different save at the same turn.
+Route target and scanner panels read the contacts and sensor reports already
+in that view. The accepted plan shares communication queries while it prepares
+current manifests, then installs those manifests together.
+
+Closed engineering, base, specimen, probe and visitor docks refresh when they
+open. Drawing the map and updating an unrelated order no longer rebuild those
+closed tools. A map click that selects a star updates the destination draft
+immediately and refreshes the rest of the workspace with the resulting action.
+
+When the pending orders are courses and panel-only edits, changing a route
+retains the star, fleet and scanner items. Its course lines, affected fleet
+tooltip and selection are refreshed. Mixed plans that can change the map use
+the complete rebuild. The route overlay retains segments whose geometry is
+unchanged. These changes use the [minimal estimates](minimal-ui-estimates.md)
+and the same order validation and turn rules.
+
 ## Late-campaign system selection — 3 November 2026, #265/#266
 
 MainWindow separates selection redraws from state/order boundaries. Selecting a

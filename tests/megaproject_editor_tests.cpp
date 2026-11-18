@@ -259,5 +259,7 @@ int main(int argc,char** argv)
     physical_received_inflight_and_private_shelters_remain_separate();
     versioned_orders_and_paused_completed_experiments_roundtrip();
     MainWindowTestAccess::cargo_distinguishes_invasion_from_peaceful_shelter_unloading();
-    MainWindow w;w.installUiPolish();w.installPlanetaryEngineering();MainWindowTestAccess::explicit_ui_orders_pass_through_pbem_and_hidden_updates_wait_for_reports(w);
+    MainWindow w;w.installUiPolish();w.installPlanetaryEngineering();
+    w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
+    MainWindowTestAccess::explicit_ui_orders_pass_through_pbem_and_hidden_updates_wait_for_reports(w);
 }

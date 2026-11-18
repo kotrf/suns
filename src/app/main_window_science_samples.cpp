@@ -23,7 +23,7 @@ qulonglong endpoint_key(CargoTransferEndpoint e) { return (qulonglong(e.planet) 
 CargoTransferEndpoint endpoint(qulonglong key) { return {PlanetId(key >> 32), FleetId(key)}; }
 GameState sample_plan(const GameState& state, const PlayerOrders& orders)
 {
-    return projected_cargo_order_state(make_player_view(state, orders.player).state, orders);
+    return projected_cargo_order_state(state, orders);
 }
 }
 void MainWindow::installScienceSamples()
@@ -53,16 +53,16 @@ void MainWindow::installScienceSamples()
         transfer->setEnabled(false); retain->setEnabled(false); analyze->setEnabled(false); details->clear();
         const auto* selected = tree->currentItem();
         if (!selected) return;
-        auto known = sample_plan(state_, pendingOrders_);
+        auto known = sample_plan(receivedPlayerState(), pendingOrders_);
         const auto source = endpoint(selected->data(1, Qt::UserRole).toULongLong());
         const auto id = selected->data(0, Qt::UserRole).toUInt();
         transfer->setEnabled(preview_science_sample_transfer(known, pendingOrders_.player,
             {source, endpoint(destination->currentData().toULongLong()), id}));
         const auto kind = UnknownObjectKind(selected->data(2, Qt::UserRole).toUInt());
         if (source.planet) {
-            auto preview = sample_plan(state_, pendingOrders_);
+            auto preview = sample_plan(receivedPlayerState(), pendingOrders_);
             analyze->setEnabled(process_science_sample(preview, pendingOrders_.player, {source.planet, id, false}));
-            preview = sample_plan(state_, pendingOrders_);
+            preview = sample_plan(receivedPlayerState(), pendingOrders_);
             retain->setEnabled(process_science_sample(preview, pendingOrders_.player, {source.planet, id, true}));
         }
         details->setText(QString("Analyze: consume this unique specimen for %1 %2 research points, usable after the normal report arrives.\n"
@@ -75,7 +75,7 @@ void MainWindow::installScienceSamples()
         const QSignalBlocker block(destination); destination->clear();
         if (const auto* selected = tree->currentItem()) {
             const auto source = selected->data(1, Qt::UserRole).toULongLong();
-            const auto known = sample_plan(state_, pendingOrders_);
+            const auto known = sample_plan(receivedPlayerState(), pendingOrders_);
             for (const auto& p : known.planets) if (p.owner == pendingOrders_.player
                 && (p.population || (native_orbital_station(known,p) && p.nativeOrbit.population)) && source != endpoint_key({p.id, 0}))
                 destination->addItem(QString::fromStdString(p.name) + " — colony", QVariant::fromValue(endpoint_key({p.id, 0})));
@@ -102,7 +102,7 @@ void MainWindow::installScienceSamples()
     };
     connect(retain, &QPushButton::clicked, this, [process] { process(true); });
     connect(analyze, &QPushButton::clicked, this, [process] { process(false); });
-    connect(this, &MainWindow::routeProgramContextChanged, this, [this, update] { refreshScienceSamples(); update(); });
+    refreshDockOnContextChange(dock, [this, update] { refreshScienceSamples(); update(); });
     refreshScienceSamples(); update();
 }
 void MainWindow::refreshScienceSamples()
@@ -111,7 +111,7 @@ void MainWindow::refreshScienceSamples()
     const auto oldId = tree->currentItem() ? tree->currentItem()->data(0, Qt::UserRole).toUInt() : 0;
     const auto oldPlace = tree->currentItem() ? tree->currentItem()->data(1, Qt::UserRole).toULongLong() : 0;
     tree->clear();
-    const auto known = sample_plan(state_, pendingOrders_);
+    const auto known = sample_plan(receivedPlayerState(), pendingOrders_);
     const auto add = [&](const auto& samples, CargoTransferEndpoint place, const QString& name) {
         for (const auto& s : samples) {
             auto* row = new QTreeWidgetItem(tree);

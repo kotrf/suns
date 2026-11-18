@@ -8,6 +8,7 @@
 #include "suns/stations.hpp"
 #include "remote_receiver_fixture.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QComboBox>
 #include <QDataStream>
 #include <QFile>
@@ -209,7 +210,9 @@ void ship_authoring_waits_for_station_evidence()
 }
 void gui_upkeep_forecast_includes_ordinary_mining()
 {
-    MainWindow w;w.installPlanetaryEngineering();MainWindowTestAccess::research(w);
+    MainWindow w;w.installPlanetaryEngineering();
+    w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
+    MainWindowTestAccess::research(w);
     for(const bool supplied:{true,false}) {
         auto s=fixture();s.fleets.clear();auto& p=s.planets[0];
         p.population=1000000;p.habitat.population=1500000;p.industry=0;p.mines=supplied?20:0;p.minerals={};
@@ -230,6 +233,8 @@ void gui_upkeep_forecast_includes_ordinary_mining()
 void gui_authors_build_and_population_orders_without_mutation()
 {
     MainWindow w;MainWindowTestAccess::load(w,fixture(false));w.installPlanetaryEngineering();
+    w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
+
     auto* kind=w.findChild<QComboBox*>("engineeringKind");auto* start=w.findChild<QPushButton*>("engineeringStart");
     kind->setCurrentIndex(kind->findData(int(PlanetaryEngineeringKind::OrbitalHabitat)));assert(start->isEnabled());start->click();
     assert(std::get<SetPlanetaryEngineeringOrder>(MainWindowTestAccess::orders(w).orders[0]).kind==PlanetaryEngineeringKind::OrbitalHabitat);

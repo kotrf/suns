@@ -15,6 +15,7 @@
 #include <QStringList>
 #include <QVariant>
 
+#include <functional>
 #include <optional>
 #include <set>
 #include <vector>
@@ -214,6 +215,10 @@ private:
     friend struct MainWindowTestAccess;
     static constexpr int workspaceLayoutVersion = 6;
     void rebuildScene(bool planningStateChanged = true);
+    void rebuildSceneForOrderEdit(std::optional<FleetId> courseFleet = {});
+    void drawFleetCourses(const GameState&, const std::vector<Fleet>&);
+    void finishSceneRefresh();
+    void refreshDockOnContextChange(QDockWidget* dock, std::function<void()> refresh);
     void scheduleSessionRefresh(GameSession::Change change);
     [[nodiscard]] const GameState& receivedPlayerState() const;
     [[nodiscard]] QGraphicsItem* mapObjectAtViewportPosition(const QPoint& position) const;
@@ -291,7 +296,7 @@ private:
     void removeSelectedProductionItem();
     std::vector<ProductionItem> plannedProductionQueue(const Planet& planet) const;
     void rememberMapSelection(int kind, std::uint32_t id);
-    bool selectWorkspaceObject(int kind, std::uint32_t id);
+    bool selectWorkspaceObject(int kind, std::uint32_t id, bool refreshEditor = true);
     [[nodiscard]] QString selectedObjectDistanceSummary() const;
     [[nodiscard]] bool confirmFleetColonization(
         const Fleet& fleet, const Planet& planet, bool scheduledRoute);
@@ -334,6 +339,7 @@ private:
     std::uint64_t& planningRevision_;
     std::uint64_t renderedPlanningRevision_{std::uint64_t(-1)};
     std::optional<FleetId> renderedFleetSelection_;
+    std::vector<QGraphicsItem*> fleetCourseItems_;
     std::uint64_t& movementPreviewRevision_;
     PlayerId& movementPreviewPlayer_;
     std::optional<GameState>& movementPreview_;

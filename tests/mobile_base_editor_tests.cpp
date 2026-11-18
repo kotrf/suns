@@ -84,7 +84,9 @@ void persistence(const GameState& initial)
 }
 int main(int argc,char** argv)
 {
-    QApplication app(argc,argv); MainWindow w; w.installMobileBases(); MainWindowTestAccess::setup(w);
+    QApplication app(argc,argv); MainWindow w; w.installMobileBases();
+    w.findChild<QDockWidget*>("mobileBasesDock")->show();
+    MainWindowTestAccess::setup(w);
     auto* bases=w.findChild<QComboBox*>("mobileBaseSelection"); auto* queue=w.findChild<QListWidget*>("mobileBaseClients");
     auto* clients=w.findChild<QComboBox*>("mobileBaseClientSelection"); auto* stocks=w.findChild<QLabel*>("mobileBaseStocks");
     assert(bases && bases->count()==1 && clients->count()==1 && queue->count()==0);

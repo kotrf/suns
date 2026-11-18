@@ -72,7 +72,7 @@ void MainWindow::installPlanetaryEngineering()
     auto* scroll=new QScrollArea(dock); scroll->setWidgetResizable(true); scroll->setWidget(body); dock->setWidget(scroll);
     addDockWidget(Qt::RightDockWidgetArea,dock); dock->hide(); menuBar()->addAction(dock->toggleViewAction());
     const auto knownWorld=[this] { return find_player(state_,pendingOrders_.player)
-        ? planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_):GameState{}; };
+        ? planned_production_state(receivedPlayerState(), pendingOrders_):GameState{}; };
     const QString generalNote=note->text();
     const auto update=[=,this] {
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
@@ -280,6 +280,6 @@ void MainWindow::installPlanetaryEngineering()
         if(QMessageBox::question(this,"Dismantle engineering project",warning)!=QMessageBox::Yes)return;
         issue(EngineeringAction::Dismantle);
     });
-    connect(this,&MainWindow::routeProgramContextChanged,this,refresh); refresh();
+    refreshDockOnContextChange(dock, refresh); refresh();
 }
 } // namespace suns

@@ -177,6 +177,6 @@ void MainWindow::installMobileBases()
         rebuildScene();
     };
     connect(deliver,&QPushButton::clicked,this,[transfer]{transfer(true);}); connect(collect,&QPushButton::clicked,this,[transfer]{transfer(false);});
-    connect(this,&MainWindow::routeProgramContextChanged,this,refresh); refresh();
+    refreshDockOnContextChange(dock, refresh); refresh();
 }
 } // namespace suns

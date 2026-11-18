@@ -6,6 +6,7 @@
 #include "suns/player_knowledge.hpp"
 #include "star_item.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QComboBox>
 #include <QDataStream>
 #include <QDebug>
@@ -278,12 +279,15 @@ int main(int argc,char** argv)
     QApplication app(argc,argv); MainWindow w;
     if(argc>1) {
         w.installUiPolish(); w.installProductionQueue(); w.installPlanetaryEngineering();
+        w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
         if(QString::fromLocal8Bit(argv[1])=="--start-forecast")newly_planned_project_uses_projected_planet(w);
         else if(QString::fromLocal8Bit(argv[1])=="--research-forecast")research_orders_reach_both_forecasts(w);
         else assert(false);
         return 0;
     }
     w.installPlanetaryEngineering();
+    w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
+
     MainWindowTestAccess::setup(w);
     const auto state=MainWindowTestAccess::state(w);
     auto* start=w.findChild<QPushButton*>("engineeringStart"); auto* pause=w.findChild<QPushButton*>("engineeringPause");

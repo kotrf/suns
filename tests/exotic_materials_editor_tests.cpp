@@ -7,6 +7,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QDialog>
@@ -542,7 +543,9 @@ int main(int argc, char** argv)
     resonant_gate_persistence_and_exchange();
     colony_materials_save_reports_and_frozen_exports();
     resonant_gate_cannot_use_later_base_delivery();
-    MainWindow w; w.installExoticMaterials(); ui_commands_and_previews(w);
+    MainWindow w; w.installExoticMaterials();
+    w.findChild<QDockWidget*>("exoticMaterialsDock")->show();
+    ui_commands_and_previews(w);
     resonant_gate_ui_uses_current_received_payment(w);
     cargo_and_system_gate_forecasts_ignore_unreceived_station_loss(w);
     gate_dialog_respects_prior_route_and_clear(w);

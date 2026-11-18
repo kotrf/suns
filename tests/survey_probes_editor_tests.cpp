@@ -5,6 +5,7 @@
 #include "suns/communications.hpp"
 #include "suns/survey_probes.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDataStream>
@@ -166,6 +167,8 @@ void ui_and_catalogs(MainWindow& w)
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv); saves_notebooks_telemetry_and_pbem(); immutable_exports_validation_and_v87_migration();
-    MainWindow w; w.installSurveyProbes(); stop_before_first_programme_confirmation(w); ui_and_catalogs(w);
+    MainWindow w; w.installSurveyProbes();
+    w.findChild<QDockWidget*>("surveyProbesDock")->show();
+    stop_before_first_programme_confirmation(w); ui_and_catalogs(w);
     std::cout << "Probe UI, catalogs, frozen exports, save/load and PBEM passed\n";
 }

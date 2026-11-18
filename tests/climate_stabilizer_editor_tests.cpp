@@ -26,7 +26,9 @@ struct MainWindowTestAccess {
 }
 int main(int argc,char** argv)
 {
-    QApplication app(argc,argv);MainWindow w;w.installUiPolish();w.installProductionQueue();w.installPlanetaryEngineering();MainWindowTestAccess::load(w,test::climate_fixture());
+    QApplication app(argc,argv);MainWindow w;w.installUiPolish();w.installProductionQueue();w.installPlanetaryEngineering();
+    w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
+    MainWindowTestAccess::load(w,test::climate_fixture());
     auto* kind=w.findChild<QComboBox*>("engineeringKind");auto* target=w.findChild<QSpinBox*>("engineeringTargetTemperature");
     auto* output=w.findChild<QSpinBox*>("engineeringOutput");auto* start=w.findChild<QPushButton*>("engineeringStart");
     auto* effect=w.findChild<QLabel*>("engineeringEffect");auto* status=w.findChild<QLabel*>("engineeringStatus");
@@ -73,4 +75,19 @@ int main(int argc,char** argv)
     MainWindowTestAccess::load(w,plateau);assert(!MainWindowTestAccess::canTerraform(w));
     assert(apply_planetary_engineering_order(plateau,p,{1,E::ClimateStabilizer,EngineeringAction::SetOutput,10,52}));
     MainWindowTestAccess::load(w,plateau);assert(MainWindowTestAccess::canTerraform(w));
+
+    // Closed tools leave their widgets alone, then read the latest document
+    // when opened, including a replacement at the very same turn.
+    auto* dock = w.findChild<QDockWidget*>("planetaryEngineeringDock");
+    w.show();
+    app.processEvents();
+    assert(target->value() == 52);
+    dock->hide();
+    assert(apply_planetary_engineering_order(plateau, p,
+        {1, E::ClimateStabilizer, EngineeringAction::SetOutput, 10, 54}));
+    MainWindowTestAccess::load(w, plateau);
+    assert(target->value() == 52);
+    dock->show();
+    app.processEvents();
+    assert(target->value() == 54);
 }

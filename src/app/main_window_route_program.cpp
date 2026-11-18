@@ -502,7 +502,7 @@ std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
     const auto source = selectedFleetForRouteProgram();
     auto targets = availableOwnedFleetsForRouteProgram();
     std::erase(targets, source);
-    for (const auto& contact : known_enemy_contacts(state_, pendingOrders_.player))
+    for (const auto& contact : receivedPlayerState().players.front().enemyContacts)
         if (contact.fleet != source && !contact.lost && contact.quality != ContactQuality::Probable)
             targets.push_back(contact.fleet);
     std::sort(targets.begin(), targets.end());
@@ -568,7 +568,7 @@ std::optional<Fleet> MainWindow::knownFleetTarget(FleetId id) const
 {
     if(const auto* f=findFleet(fleetPlanningState(),id); f && f->owner==pendingOrders_.player) return *f;
     for(const auto& f:missing_fleet_contacts(state_,pendingOrders_.player)) if(f.id==id) return f;
-    for(const auto& c:known_enemy_contacts(state_,pendingOrders_.player))
+    for (const auto& c : receivedPlayerState().players.front().enemyContacts)
         if(c.fleet==id && !c.lost && c.quality!=ContactQuality::Probable) return recon_contact_fleet(c,state_.turn);
     return {};
 }
@@ -687,7 +687,9 @@ bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
             statusBar()->showMessage("The selected star is no longer available", 3000);
             return false;
         }
-        if (!selectWorkspaceObject(1, id)) return false;
+        // The picked-target signal updates the draft immediately. Publish the
+        // rest of the editor when the new route or star selection is rendered.
+        if (!selectWorkspaceObject(1, id, false)) return false;
     } else if (kind == 2 || kind == 3) {
         const auto target = knownFleetTarget(static_cast<FleetId>(id));
         if (!target || target->id == source->id) {
@@ -1049,7 +1051,7 @@ bool MainWindow::appendRouteWaypoint(
                 break;
             }
         }
-        rebuildScene();
+        rebuildSceneForOrderEdit(fleet->id);
         statusBar()->showMessage("Waypoint appended to pending fleet program");
         return true;
     }
@@ -1091,7 +1093,7 @@ bool MainWindow::stageSelectedFleetRoute(
             }
             break;
         }
-        rebuildScene();
+        rebuildSceneForOrderEdit(fleet.id);
     } else {
         appendPendingOrder(route, routeDescription(state_, fleet, route));
     }
@@ -1337,7 +1339,7 @@ bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
                 break;
             }
         }
-        rebuildScene();
+        rebuildSceneForOrderEdit(fleet->id);
     } else {
         appendPendingOrder(*route, routeDescription(state_, *fleet, *route));
     }
@@ -1375,7 +1377,7 @@ bool MainWindow::clearSelectedFleetRouteProgram()
             move && move->fleet == fleet->id) {
             pendingOrders_.orders[index] = clear;
             pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, clear);
-            rebuildScene();
+            rebuildSceneForOrderEdit(fleet->id);
             statusBar()->showMessage("Fleet route program cleared for End Turn");
             return true;
         }

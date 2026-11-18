@@ -121,6 +121,7 @@ struct MainWindowTestAccess {
     static void system_details_radiation_matches_received_engineering_and_terraforming()
     {
         MainWindow w;w.installUiPolish();w.installPlanetaryEngineering();
+        w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
         auto s=test::atmospheric_fixture();s.players.front().race.habitableRadiation={50,70};
         test::finish_atmosphere(s,70);load(w,s);QApplication::processEvents();
         auto* radiation=w.findChild<QProgressBar*>("planetRadiationBar");
@@ -174,6 +175,8 @@ int main(int argc,char** argv)
     QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
     targets_remain_separate_in_physical_received_inflight_draft_and_inbox_records();
     versioned_kinds_and_unrelated_target_bytes_are_strict();
-    MainWindow w;w.installPlanetaryEngineering();MainWindowTestAccess::controls_author_radiation_and_keep_hidden_changes_frozen(w);
+    MainWindow w;w.installPlanetaryEngineering();
+    w.findChild<QDockWidget*>("planetaryEngineeringDock")->show();
+    MainWindowTestAccess::controls_author_radiation_and_keep_hidden_changes_frozen(w);
     MainWindowTestAccess::system_details_radiation_matches_received_engineering_and_terraforming();
 }

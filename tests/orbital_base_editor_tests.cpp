@@ -2,6 +2,7 @@
 #include "orbital_base_fixture.hpp"
 #include "route_program_dock.hpp"
 #include <QApplication>
+#include <QDockWidget>
 #include <QComboBox>
 #include <QLabel>
 #include <QListWidget>
@@ -42,6 +43,8 @@ struct MainWindowTestAccess {
 }
 int main(int argc,char** argv) {
     QApplication app(argc,argv);using namespace suns;MainWindow w;MainWindowTestAccess::setup(w);w.installOrbitalBases();
+    w.findChild<QDockWidget*>("orbitalBasesDock")->show();
+
     auto* bases=w.findChild<QComboBox*>("orbitalBaseSelection");auto* planets=w.findChild<QComboBox*>("orbitalBasePlanet");
     auto* status=w.findChild<QLabel*>("orbitalBaseStatus");auto* queue=w.findChild<QListWidget*>("orbitalBaseQueue");
     auto* deploy=w.findChild<QPushButton*>("orbitalBaseDeploy");

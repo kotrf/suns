@@ -69,12 +69,23 @@ const GameState& GameSession::plannedState() const
                 fleet.pendingCommands = original->pendingCommands; // Sent owner intent, never live physical manifests.
         }
         data_.fleetPlanningState = projected_cargo_order_state(received,data_.pendingOrders,&data_.fleetPlanningBaseTransfers);
-        for (auto& fleet : data_.fleetPlanningState->fleets) {
-            if (fleet.owner != data_.pendingOrders.player || fleet_telemetry_age(*data_.fleetPlanningState, fleet) != 0
-                || !fleet_has_instant_link(*data_.fleetPlanningState, fleet)) continue;
-            fleet.telemetry = {};
-            fleet.telemetry = confirmed_fleet_telemetry(*data_.fleetPlanningState, fleet);
+        auto& planned = *data_.fleetPlanningState;
+        std::vector<std::pair<std::size_t, FleetTelemetry>> telemetry;
+        {
+            // All queries see the same finished plan. Install the derived
+            // manifests afterwards so the communications scope is immutable.
+            const CommunicationQueryScope communicationScope(planned);
+            for (std::size_t index = 0; index < planned.fleets.size(); ++index) {
+                const auto& fleet = planned.fleets[index];
+                if (fleet.owner != data_.pendingOrders.player || fleet_telemetry_age(planned, fleet) != 0
+                    || !fleet_has_instant_link(planned, fleet)) continue;
+                auto current = fleet;
+                current.telemetry = {};
+                telemetry.emplace_back(index, confirmed_fleet_telemetry(planned, current));
+            }
         }
+        for (auto& [index, manifest] : telemetry)
+            planned.fleets[index].telemetry = std::move(manifest);
         data_.fleetPlanningRevision = data_.planningRevision;
     }
     return *data_.fleetPlanningState;

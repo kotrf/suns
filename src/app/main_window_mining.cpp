@@ -58,8 +58,8 @@ void MainWindow::installMiningInfrastructure()
         if (shuttingDown_) return;
 
         const auto* star = selectedStar();
-        const auto received = make_player_view(state_, pendingOrders_.player).state;
-        const auto planned = projected_cargo_order_state(received, pendingOrders_);
+        const auto& received = receivedPlayerState();
+        const auto& planned = fleetPlanningState();
         const auto* planet = star ? find_planet_at_star(planned, star->id) : nullptr;
         const bool friendlyColony = star
             && is_surveyed(planned, pendingOrders_.player, star->id)
@@ -97,14 +97,7 @@ void MainWindow::installMiningInfrastructure()
     refreshTimer->setSingleShot(true);
     refreshTimer->setInterval(0);
     connect(refreshTimer, &QTimer::timeout, this, refresh);
-    if (scene_) {
-        connect(scene_, &QGraphicsScene::changed, this, [this, refreshTimer](const QList<QRectF>&) {
-            if (!shuttingDown_) refreshTimer->start();
-        });
-        connect(scene_, &QGraphicsScene::selectionChanged, this, [this, refreshTimer] {
-            if (!shuttingDown_) refreshTimer->start();
-        });
-    }
+    connect(this, &MainWindow::controlsChanged, refreshTimer, [refreshTimer] { refreshTimer->start(); });
     refresh();
 }
 
