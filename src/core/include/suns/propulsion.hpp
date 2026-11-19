@@ -15,8 +15,13 @@ inline constexpr double kFuelContainersPerMg = 10.0;
     return fuel_containers_required(requiredMg) / kFuelContainersPerMg;
 }
 [[nodiscard]] double fuel_in_complete_containers(double storedMg);
+// Apply a signed fuel adjustment in mg while preserving fractional amounts.
+[[nodiscard]] double fuel_after_change(double storedMg, double changeMg);
 // Subtract a whole-container charge while carrying the fractional reserve forward.
 [[nodiscard]] double fuel_after_consumption(double storedMg, double consumedMg);
+// Tank accounting for a transfer whose participants have already been validated.
+[[nodiscard]] double transfer_fuel(Fleet& source, Fleet& destination,
+    double requestedMg, double sourceReserveMg, double destinationCapacityMg);
 
 enum class EngineAccess { Any, ImprovedFuelEfficiency, NoRamScoops, Settler };
 

@@ -145,19 +145,14 @@ Fleet* depot_at(GameState& state, const Fleet& visitor)
         && same_position(candidate.position, visitor.position) && (!result || candidate.id < result->id)) result = &candidate;
     return result;
 }
-double transfer(Fleet& source, Fleet& destination, double amount)
-{
-    if (!std::isfinite(amount) || amount <= 0) return 0;
-    source.fuel -= amount; destination.fuel += amount; return amount;
-}
 }
 double refuel_from_outpost(GameState& state, Fleet& visitor)
 {
     if (visitor.outpost != OutpostKind::None) return 0;
     auto* depot = depot_at(state, visitor);
     if (!depot || !outpost_online(*depot)) return 0;
-    const auto amount = transfer(*depot, visitor, std::min(std::max(0.0, depot->fuel - (depot->outpost == OutpostKind::OrbitalShipyard ? depot->mobileBase.fuelReserve : 0.0)),
-        std::max(0.0, fleet_fuel_capacity(state, visitor) - visitor.fuel)));
+    const auto reserve = depot->outpost == OutpostKind::OrbitalShipyard ? depot->mobileBase.fuelReserve : 0.0;
+    const auto amount = transfer_fuel(*depot, visitor, depot->fuel, reserve, fleet_fuel_capacity(state, visitor));
     if (amount > 0 && !outpost_online(*depot)) queue_player_report(state, depot->owner, PlayerReportKind::OutpostFuelExhausted,
         depot->position, state.turn + 1, 0, 0, depot->id, 0, ProductionKind::ColonyShip, std::uint32_t(depot->outpost));
     return amount;
@@ -171,7 +166,6 @@ double supply_outpost(GameState& state, Fleet& tanker, double reserve)
         && candidate.outpost != OutpostKind::None && candidate.damagePercent < 100
         && same_position(candidate.position, tanker.position) && (!receiver || candidate.id < receiver->id)) receiver = &candidate;
     if (!receiver) return 0;
-    return transfer(tanker, *receiver, std::min(std::max(0.0, tanker.fuel - reserve),
-        std::max(0.0, fleet_fuel_capacity(state, *receiver) - receiver->fuel)));
+    return transfer_fuel(tanker, *receiver, tanker.fuel, reserve, fleet_fuel_capacity(state, *receiver));
 }
 } // namespace suns

@@ -98,7 +98,8 @@ std::string orbital_retirement_error(const GameState& s, const Fleet& f, const O
     const auto recovered = orbital_base_recovery(s, f);
     if (fleet_cargo_used(s, *receiver) + mineral_cargo_mass(f.minerals) + mineral_cargo_mass(recovered)
         > fleet_cargo_capacity(s, *receiver)) return "Recovery transport needs room for all stocks and recovered I/B/G";
-    if (receiver->fuel + f.fuel > fleet_fuel_capacity(s, *receiver)) return "Recovery transport needs tank space for all remaining fuel";
+    if (fuel_after_change(receiver->fuel, f.fuel) > fleet_fuel_capacity(s, *receiver))
+        return "Recovery transport needs tank space for all remaining fuel";
     if (c.action == OrbitalBaseAction::RebuildStation) {
         const auto* p = find_planet(s, f.orbitalBase.planet);
         if (!p || p->owner != f.owner || !p->population) return "Station rebuilding requires your populated surface colony";
@@ -267,7 +268,7 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
             receiver.minerals.ironium += f.minerals.ironium + recovered.ironium;
             receiver.minerals.boranium += f.minerals.boranium + recovered.boranium;
             receiver.minerals.germanium += f.minerals.germanium + recovered.germanium;
-            receiver.fuel += f.fuel;
+            receiver.fuel = fuel_after_change(receiver.fuel, f.fuel);
             if (command.station) {
                 auto& p = *std::find_if(s.planets.begin(), s.planets.end(), [&](const auto& p) { return p.id == b.planet; });
                 ProductionItem item{ProductionKind::OrbitalStation, station_build_cost(*command.station)};

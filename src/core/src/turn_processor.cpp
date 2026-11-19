@@ -1255,7 +1255,7 @@ void generate_fleet_fuel(GameState& state, bool deployed)
             fleet.fuel = 0.0;
             continue;
         }
-        fleet.fuel = std::min(capacity, fleet.fuel + fleet_fuel_generation(state, fleet));
+        fleet.fuel = std::min(capacity, fuel_after_change(fleet.fuel, fleet_fuel_generation(state, fleet)));
     }
 }
 
@@ -1397,7 +1397,7 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     auto sourceShips = fleet_ship_stacks(*source);
     sync_fleet_presentation(state, *destination);
     destination->ships.insert(destination->ships.end(), sourceShips.begin(), sourceShips.end());
-    destination->fuel += source->fuel;
+    destination->fuel = fuel_after_change(destination->fuel, source->fuel);
     destination->colonists += source->colonists;
     destination->minerals.ironium += source->minerals.ironium;
     destination->minerals.boranium += source->minerals.boranium;
@@ -1520,7 +1520,7 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     detached.minerals.boranium = remaining.minerals.boranium * mineralShare;
     detached.minerals.germanium = remaining.minerals.germanium * mineralShare;
 
-    remaining.fuel -= detached.fuel;
+    remaining.fuel = fuel_after_change(remaining.fuel, -detached.fuel);
     remaining.minerals.ironium -= detached.minerals.ironium;
     remaining.minerals.boranium -= detached.minerals.boranium;
     remaining.minerals.germanium -= detached.minerals.germanium;
@@ -1728,7 +1728,7 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     auto sourceShips = fleet_ship_stacks(source);
     sync_fleet_presentation(state, destination);
     destination.ships.insert(destination.ships.end(), sourceShips.begin(), sourceShips.end());
-    destination.fuel += source.fuel;
+    destination.fuel = fuel_after_change(destination.fuel, source.fuel);
     destination.colonists += source.colonists;
     destination.minerals.ironium += source.minerals.ironium;
     destination.minerals.boranium += source.minerals.boranium;
@@ -1967,10 +1967,8 @@ void continue_merged_fleet_route(
     }
 
     const auto budget = fleet_movement_budget(state, fleet, endpoint, travelled, remainingTurnFraction);
-    fleet.fuel = std::clamp(
-        fuel_after_consumption(fleet.fuel, budget.fuel.consumed) + budget.fuel.collected,
-        0.0,
-        fleet_fuel_capacity(state, fleet));
+    const auto afterBurn = fuel_after_consumption(fleet.fuel, budget.fuel.consumed);
+    fleet.fuel = std::min(fleet_fuel_capacity(state, fleet), fuel_after_change(afterBurn, budget.fuel.collected));
     if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
     fleet.position = endpoint;
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuel.consumed, fleet.fuel,
@@ -2294,8 +2292,8 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
         const auto budget = fleet_movement_budget(state, beforeStrike, endpoint, distance_between(start, endpoint), 1.0);
         const auto capacity = fleet_fuel_capacity(state, fleet);
-        fleet.fuel = std::clamp(
-            fuel_after_consumption(fleet.fuel, budget.fuel.consumed) + budget.fuel.collected, 0.0, capacity);
+        const auto afterBurn = fuel_after_consumption(fleet.fuel, budget.fuel.consumed);
+        fleet.fuel = std::min(capacity, fuel_after_change(afterBurn, budget.fuel.collected));
         if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
         fleet.position = endpoint;
         recordFuel(budget.fuel.consumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);

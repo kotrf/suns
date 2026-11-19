@@ -13,7 +13,12 @@ double complete_fuel_container_count(double storedMg)
 {
     const auto available = std::max(0.0, storedMg);
     const auto nearest = std::round(available * kFuelContainersPerMg);
-    return nearest / kFuelContainersPerMg - available > kFuelRoundingToleranceMg ? nearest - 1.0 : nearest;
+    const auto boundary = nearest / kFuelContainersPerMg;
+    // A sum of fractional amounts can land one representable step below the
+    // boundary, even when its nominal value covers the whole container.
+    if (boundary - available > kFuelRoundingToleranceMg && available < std::nextafter(boundary, 0.0))
+        return nearest - 1.0;
+    return nearest;
 }
 }
 
@@ -31,13 +36,38 @@ double fuel_in_complete_containers(double storedMg)
     return complete_fuel_container_count(storedMg) / kFuelContainersPerMg;
 }
 
+double fuel_after_change(double storedMg, double changeMg)
+{
+    if (storedMg == 0.0 || changeMg == 0.0 || changeMg <= -storedMg)
+        return std::max(0.0, storedMg + changeMg);
+
+    // Sum counts before converting back to mg, so exact tenths stay exact
+    // even when a small delivery goes into a large tank.
+    const auto storedContainers = std::round(storedMg * kFuelContainersPerMg);
+    const auto changedContainers = std::round(changeMg * kFuelContainersPerMg);
+    const auto storedFraction = storedMg - storedContainers / kFuelContainersPerMg;
+    const auto changedFraction = changeMg - changedContainers / kFuelContainersPerMg;
+    return std::max(0.0, (storedContainers + changedContainers) / kFuelContainersPerMg
+        + (storedFraction + changedFraction));
+}
+
 double fuel_after_consumption(double storedMg, double consumedMg)
 {
     if (consumedMg <= 0.0) return storedMg;
-    const auto available = complete_fuel_container_count(storedMg);
-    const auto consumed = std::round(consumedMg * kFuelContainersPerMg);
-    const auto reserve = std::max(0.0, storedMg - available / kFuelContainersPerMg);
-    return std::max(0.0, available - consumed) / kFuelContainersPerMg + reserve;
+    const auto available = fuel_in_complete_containers(storedMg);
+    return fuel_after_change(std::max(storedMg, available), -std::min(consumedMg, available));
+}
+
+double transfer_fuel(Fleet& source, Fleet& destination,
+    double requestedMg, double sourceReserveMg, double destinationCapacityMg)
+{
+    const auto available = fuel_after_change(source.fuel, -sourceReserveMg);
+    const auto room = fuel_after_change(destinationCapacityMg, -destination.fuel);
+    const auto amount = std::min({requestedMg, available, room});
+    if (!std::isfinite(amount) || amount <= 0.0) return 0.0;
+    source.fuel = std::max(sourceReserveMg, fuel_after_change(source.fuel, -amount));
+    destination.fuel = std::min(destinationCapacityMg, fuel_after_change(destination.fuel, amount));
+    return amount;
 }
 
 // Stars! Technical Reference Guide, p11, and Player's Guide, B-6 (PDF p246).
