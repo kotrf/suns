@@ -26,7 +26,10 @@ double fuel_containers_required(double requiredMg)
 {
     if (!(requiredMg > 0.0)) return 0.0;
     const auto nearest = std::round(requiredMg * kFuelContainersPerMg);
-    const auto required = requiredMg - nearest / kFuelContainersPerMg > kFuelRoundingToleranceMg
+    const auto boundary = nearest / kFuelContainersPerMg;
+    // Allow the same one-step floating-point error as for available fuel.
+    const auto required = requiredMg - boundary > kFuelRoundingToleranceMg
+            && requiredMg > std::nextafter(boundary, requiredMg)
         ? nearest + 1.0 : nearest;
     return std::max(1.0, required);
 }

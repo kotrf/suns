@@ -433,6 +433,34 @@ void verify_refuelling_covers_exact_movement_budget()
     assert(fuel_in_complete_containers(fuel_after_change(largeBalance, -0.01)) == 16'783'717.5);
 }
 
+void verify_fuel_cost_for_equal_cargo_mass()
+{
+    using namespace suns;
+    auto state = loaded_freighters(2430);
+    auto& fleet = state.fleets.front();
+    constexpr auto budget = 8'391'859.2;
+    fleet.fuel = budget;
+    const PlayerOrders orders{1, {MoveFleetOrder{fleet.id, {64, 0}, 8}}};
+    const TurnProcessor processor;
+
+    for (const auto& cargo : {MineralCargo{2'916'000, 0, 0},
+             MineralCargo{2'500'000.1, 20'000.2, 395'999.7}}) {
+        fleet.minerals = cargo;
+        const auto result = processor.process_with_events(state, {orders});
+        const auto& arrived = result.state.fleets.front();
+        assert(arrived.position == Position(64, 0) && !arrived.destination);
+        assert(result.movementFuel.size() == 1);
+        assert(result.movementFuel.front().consumed == budget && !result.movementFuel.front().fuelLimited);
+        assert(arrived.fuel == 0.0);
+        assert(fleet_fuel_consumption_for_distance(state, fleet, 64) == budget);
+    }
+
+    constexpr auto nextContainer = 8'391'859.3;
+    const auto aboveBudget = std::nextafter(budget, nextContainer);
+    assert(fuel_container_cost(aboveBudget) == budget);
+    assert(fuel_container_cost(std::nextafter(aboveBudget, nextContainer)) == nextContainer);
+}
+
 void verify_default_propulsion_and_cargo()
 {
     const auto state = suns::make_demo_game();
@@ -659,6 +687,7 @@ int main()
     verify_exact_container_budget_with_many_stacks();
     verify_exact_container_budget_across_turns();
     verify_refuelling_covers_exact_movement_budget();
+    verify_fuel_cost_for_equal_cargo_mass();
     verify_stars_progression_and_multifield_gates();
     verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();
