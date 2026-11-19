@@ -433,18 +433,17 @@ void verify_refuelling_covers_exact_movement_budget()
     assert(fuel_in_complete_containers(fuel_after_change(largeBalance, -0.01)) == 16'783'717.5);
 }
 
-void verify_fuel_cost_for_equal_cargo_mass()
+void verify_fuel_cost_for_equal_cargo_mass(std::uint32_t shipCount, suns::MineralCargo mixedCargo, double budget)
 {
     using namespace suns;
-    auto state = loaded_freighters(2430);
+    auto state = loaded_freighters(shipCount);
     auto& fleet = state.fleets.front();
-    constexpr auto budget = 8'391'859.2;
     fleet.fuel = budget;
     const PlayerOrders orders{1, {MoveFleetOrder{fleet.id, {64, 0}, 8}}};
     const TurnProcessor processor;
 
-    for (const auto& cargo : {MineralCargo{2'916'000, 0, 0},
-             MineralCargo{2'500'000.1, 20'000.2, 395'999.7}}) {
+    for (const auto& cargo : {fleet.minerals, mixedCargo,
+             MineralCargo{mixedCargo.germanium, mixedCargo.boranium, mixedCargo.ironium}}) {
         fleet.minerals = cargo;
         const auto result = processor.process_with_events(state, {orders});
         const auto& arrived = result.state.fleets.front();
@@ -455,10 +454,8 @@ void verify_fuel_cost_for_equal_cargo_mass()
         assert(fleet_fuel_consumption_for_distance(state, fleet, 64) == budget);
     }
 
-    constexpr auto nextContainer = 8'391'859.3;
-    const auto aboveBudget = std::nextafter(budget, nextContainer);
-    assert(fuel_container_cost(aboveBudget) == budget);
-    assert(fuel_container_cost(std::nextafter(aboveBudget, nextContainer)) == nextContainer);
+    const auto nextContainer = (std::round(budget * kFuelContainersPerMg) + 1.0) / kFuelContainersPerMg;
+    assert(fuel_container_cost(budget + 0.01) == nextContainer);
 }
 
 void verify_default_propulsion_and_cargo()
@@ -527,6 +524,8 @@ void verify_fuel_limits_actual_travel()
     assert(near(fuel_container_cost(1e-6), 0.1));
     assert(near(fuel_container_cost(0.1 + 0.2), 0.3));
     assert(near(fuel_container_cost(1.001), 1.1));
+    constexpr auto largeBill = 10'000'000'000'000.0;
+    assert(fuel_container_cost(largeBill + 0.01) == 10'000'000'000'000.1);
     assert(fuel_in_complete_containers(0.099) == 0.0);
     assert(near(fuel_in_complete_containers(1.086), 1.0));
 
@@ -687,7 +686,8 @@ int main()
     verify_exact_container_budget_with_many_stacks();
     verify_exact_container_budget_across_turns();
     verify_refuelling_covers_exact_movement_budget();
-    verify_fuel_cost_for_equal_cargo_mass();
+    verify_fuel_cost_for_equal_cargo_mass(2430, {2'500'000.1, 20'000.2, 395'999.7}, 8'391'859.2);
+    verify_fuel_cost_for_equal_cargo_mass(2400, {2'500'000.1, 20'000.2, 359'999.7}, 8'288'256.0);
     verify_stars_progression_and_multifield_gates();
     verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();

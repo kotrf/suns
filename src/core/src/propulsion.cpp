@@ -3,11 +3,14 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 namespace suns {
 
 namespace {
 constexpr double kFuelRoundingToleranceMg = 1e-9;
+constexpr double kRelativeFuelCostRoundoff = 8.0 * std::numeric_limits<double>::epsilon();
+constexpr double kMaximumFuelCostRoundoffMg = 0.005;
 
 double complete_fuel_container_count(double storedMg)
 {
@@ -27,8 +30,11 @@ double fuel_containers_required(double requiredMg)
     if (!(requiredMg > 0.0)) return 0.0;
     const auto nearest = std::round(requiredMg * kFuelContainersPerMg);
     const auto boundary = nearest / kFuelContainersPerMg;
-    // Allow the same one-step floating-point error as for available fuel.
-    const auto required = requiredMg - boundary > kFuelRoundingToleranceMg
+    // Cargo sums, load allocation and engine scaling can each round. Allow
+    // their accumulated error while keeping an extra hundredth of a mg billable.
+    const auto roundoff = std::clamp(boundary * kRelativeFuelCostRoundoff,
+        kFuelRoundingToleranceMg, kMaximumFuelCostRoundoffMg);
+    const auto required = requiredMg - boundary > roundoff
             && requiredMg > std::nextafter(boundary, requiredMg)
         ? nearest + 1.0 : nearest;
     return std::max(1.0, required);
