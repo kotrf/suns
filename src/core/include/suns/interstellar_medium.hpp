@@ -32,6 +32,11 @@ struct SegmentFuelBounds {
     double consumedMinimum{}, consumedMaximum{};
     double changeMinimum{}, changeMaximum{};
 };
+struct FleetFuelAmounts {
+    double consumed{};
+    double collected{};
+};
+[[nodiscard]] FleetFuelAmounts fleet_fuel_amounts_for_segment(const GameState&, const Fleet&, Position end);
 [[nodiscard]] double fleet_fuel_change_for_segment(const GameState&, const Fleet&, Position end);
 [[nodiscard]] double fleet_fuel_consumption_for_segment(const GameState&, const Fleet&, Position end);
 [[nodiscard]] double fleet_fuel_affordable_segment_distance(

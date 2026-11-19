@@ -102,7 +102,7 @@ void maintain_outposts(GameState& state, std::uint64_t turn)
     for (auto& fleet : state.fleets) if (fleet.outpost != OutpostKind::None && fleet.outpost != OutpostKind::OrbitalShipyard) {
         const auto burn = std::min(kOutpostUpkeepMg, fuel_in_complete_containers(fleet.fuel));
         if (burn <= 0.0) continue;
-        fleet.fuel = std::max(0.0, fleet.fuel - burn);
+        fleet.fuel = fuel_after_consumption(fleet.fuel, burn);
         if (fuel_in_complete_containers(fleet.fuel) == 0.0) exhausted.push_back(fleet.id);
     }
     // Every service observes the same post-upkeep network. Queueing during

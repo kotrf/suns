@@ -340,6 +340,36 @@ void verify_exact_container_budget_with_many_stacks()
     assert(fleet_fuel_affordable_distance(state, fleet, 64) == 64);
 }
 
+void verify_exact_container_budget_across_turns()
+{
+    using namespace suns;
+    auto state = make_demo_game();
+    state.planets.clear();
+    const auto design = state.nextShipDesignId++;
+    state.shipDesigns.push_back({design, 1, "Loaded freighter", ShipHullType::LargeFreighter,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5,
+            ShipComponentType::SuperFuelTank, ShipComponentType::SuperFuelTank}});
+    auto& fleet = state.fleets.front();
+    fleet.design = design;
+    fleet.ships = {{design, 2378}};
+    fleet.minerals.ironium = fleet_cargo_capacity(state, fleet);
+    fleet.position = {0, 0};
+    fleet.warp = 8;
+    fleet.fuel = 8'468'914.2;
+    assert(fleet.fuel <= fleet_fuel_capacity(state, fleet));
+    const PlayerOrders orders{1, {MoveFleetOrder{fleet.id, {66, 0}, 8}}};
+
+    const TurnProcessor processor;
+    const auto first = processor.process_with_events(state, {orders});
+    assert(first.state.fleets.front().position == Position(64, 0));
+    assert(first.movementFuel.size() == 1 && near(first.movementFuel.front().consumed, 8'212'280.4));
+    const auto second = processor.process_with_events(first.state, {});
+    const auto& arrived = second.state.fleets.front();
+    assert(arrived.position == Position(66, 0) && !arrived.destination);
+    assert(second.movementFuel.size() == 1 && near(second.movementFuel.front().consumed, 256'633.8));
+    assert(!second.movementFuel.front().fuelLimited && arrived.fuel == 0.0);
+}
+
 void verify_default_propulsion_and_cargo()
 {
     const auto state = suns::make_demo_game();
@@ -564,6 +594,7 @@ int main()
     verify_mixed_fleet_cargo_and_fuel_collection();
     verify_reference_fuel_exhaustion_and_free_speed();
     verify_exact_container_budget_with_many_stacks();
+    verify_exact_container_budget_across_turns();
     verify_stars_progression_and_multifield_gates();
     verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();

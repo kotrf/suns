@@ -1267,11 +1267,6 @@ double fleet_gross_mass(const GameState& state, const Fleet& fleet)
 
 namespace {
 
-struct FleetFuelAmounts {
-    double consumed{};
-    double collected{};
-};
-
 bool has_reference_engine(const GameState& state, const Fleet& fleet)
 {
     for (const auto& stack : fleet_ship_stacks(fleet)) {
@@ -1415,16 +1410,19 @@ double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet
     return lo < 1e-8 ? 0.0 : lo;
 }
 
-double fleet_fuel_change_for_segment(const GameState& state,const Fleet& fleet,Position end)
+FleetFuelAmounts fleet_fuel_amounts_for_segment(const GameState& state, const Fleet& fleet, Position end)
 {
-    const auto amounts=fleet_fuel_amounts(state,fleet,distance_between(fleet.position,end),true,
-        medium_segment_density(state,fleet.position,end),0,state.interstellarMediumEnabled);
-    return amounts.consumed-amounts.collected;
+    return fleet_fuel_amounts(state, fleet, distance_between(fleet.position, end), true,
+        medium_segment_density(state, fleet.position, end), 0, state.interstellarMediumEnabled);
 }
-double fleet_fuel_consumption_for_segment(const GameState& state,const Fleet& fleet,Position end)
+double fleet_fuel_change_for_segment(const GameState& state, const Fleet& fleet, Position end)
 {
-    return fleet_fuel_amounts(state,fleet,distance_between(fleet.position,end),true,
-        medium_segment_density(state,fleet.position,end),0,state.interstellarMediumEnabled).consumed;
+    const auto amounts = fleet_fuel_amounts_for_segment(state, fleet, end);
+    return amounts.consumed - amounts.collected;
+}
+double fleet_fuel_consumption_for_segment(const GameState& state, const Fleet& fleet, Position end)
+{
+    return fleet_fuel_amounts_for_segment(state, fleet, end).consumed;
 }
 double fleet_fuel_affordable_segment_distance(const GameState& state,const Fleet& fleet,Position end,double maximumDistance)
 {

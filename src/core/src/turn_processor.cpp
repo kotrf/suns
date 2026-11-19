@@ -27,6 +27,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/production.hpp"
 #include "suns/production_template_edits.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/terraforming.hpp"
 
 #include <algorithm>
@@ -1800,9 +1801,8 @@ bool resolve_fleet_target_arrival(
 
 struct MovementBudget {
     double distance{};
-    double fuelChange{};
     double damage{};
-    double fuelConsumed{};
+    FleetFuelAmounts fuel;
     double fuelMinimum{}, fuelMaximum{};
 };
 
@@ -1831,11 +1831,11 @@ MovementBudget fleet_movement_budget(
         return high;
     };
     paidDistance=capDamageDistance(fleet,paidDistance,along);
+    const auto paidEndpoint = along(paidDistance);
     MovementBudget result{
         paidDistance,
-        fleet_fuel_change_for_segment(state, fleet, along(paidDistance)),
-        fleet_segment_damage(state, fleet, along(paidDistance)),
-        fleet_fuel_consumption_for_segment(state, fleet, along(paidDistance)),
+        fleet_segment_damage(state, fleet, paidEndpoint),
+        fleet_fuel_amounts_for_segment(state, fleet, paidEndpoint),
     };
     const auto bounds=fleet_segment_fuel_bounds(state,fleet,paidDistance);
     result.fuelMinimum=bounds.consumedMinimum; result.fuelMaximum=bounds.consumedMaximum;
@@ -1846,15 +1846,17 @@ MovementBudget fleet_movement_budget(
         && fleet.damagePercent + result.damage < 100.0 - epsilon) {
         auto coasting = fleet;
         coasting.warp = freeWarp;
-        coasting.position=along(paidDistance);
+        coasting.position = paidEndpoint;
         coasting.damagePercent += result.damage;
         auto freeDistance = std::min(
             remaining - paidDistance, warp_distance(freeWarp) * std::max(0.0, time - paidDistance / speed));
         freeDistance=capDamageDistance(coasting,freeDistance,[&](double d) { return along(paidDistance+d); });
-        result.damage += fleet_segment_damage(state,coasting,along(paidDistance+freeDistance));
+        const auto coastEndpoint = along(paidDistance + freeDistance);
+        result.damage += fleet_segment_damage(state, coasting, coastEndpoint);
         result.distance += freeDistance;
-        result.fuelChange += fleet_fuel_change_for_segment(state, coasting, along(paidDistance+freeDistance));
-        result.fuelConsumed += fleet_fuel_consumption_for_segment(state, coasting, along(paidDistance+freeDistance));
+        const auto coastFuel = fleet_fuel_amounts_for_segment(state, coasting, coastEndpoint);
+        result.fuel.consumed += coastFuel.consumed;
+        result.fuel.collected += coastFuel.collected;
         const auto coastBounds=fleet_segment_fuel_bounds(state,coasting,freeDistance);
         result.fuelMinimum+=coastBounds.consumedMinimum; result.fuelMaximum+=coastBounds.consumedMaximum;
     }
@@ -1966,12 +1968,12 @@ void continue_merged_fleet_route(
 
     const auto budget = fleet_movement_budget(state, fleet, endpoint, travelled, remainingTurnFraction);
     fleet.fuel = std::clamp(
-        fleet.fuel - budget.fuelChange,
+        fuel_after_consumption(fleet.fuel, budget.fuel.consumed) + budget.fuel.collected,
         0.0,
         fleet_fuel_capacity(state, fleet));
     if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
     fleet.position = endpoint;
-    movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuelConsumed, fleet.fuel,
+    movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuel.consumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
     fleet.fuelStalled = false;
     apply_movement_effects(state, fleet, start, budget.damage, exposure);
@@ -2292,10 +2294,11 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
         const auto budget = fleet_movement_budget(state, beforeStrike, endpoint, distance_between(start, endpoint), 1.0);
         const auto capacity = fleet_fuel_capacity(state, fleet);
-        fleet.fuel = std::clamp(fleet.fuel - budget.fuelChange, 0.0, capacity);
+        fleet.fuel = std::clamp(
+            fuel_after_consumption(fleet.fuel, budget.fuel.consumed) + budget.fuel.collected, 0.0, capacity);
         if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
         fleet.position = endpoint;
-        recordFuel(budget.fuelConsumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
+        recordFuel(budget.fuel.consumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
         apply_movement_effects(state, fleet, start, budget.damage, exposure);
 

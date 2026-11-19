@@ -15,6 +15,8 @@ inline constexpr double kFuelContainersPerMg = 10.0;
     return fuel_containers_required(requiredMg) / kFuelContainersPerMg;
 }
 [[nodiscard]] double fuel_in_complete_containers(double storedMg);
+// Subtract a whole-container charge while carrying the fractional reserve forward.
+[[nodiscard]] double fuel_after_consumption(double storedMg, double consumedMg);
 
 enum class EngineAccess { Any, ImprovedFuelEfficiency, NoRamScoops, Settler };
 

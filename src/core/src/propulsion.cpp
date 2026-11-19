@@ -8,18 +8,36 @@ namespace suns {
 
 namespace {
 constexpr double kFuelRoundingToleranceMg = 1e-9;
+
+double complete_fuel_container_count(double storedMg)
+{
+    const auto available = std::max(0.0, storedMg);
+    const auto nearest = std::round(available * kFuelContainersPerMg);
+    return nearest / kFuelContainersPerMg - available > kFuelRoundingToleranceMg ? nearest - 1.0 : nearest;
+}
 }
 
 double fuel_containers_required(double requiredMg)
 {
     if (!(requiredMg > 0.0)) return 0.0;
-    return std::max(1.0, std::ceil((requiredMg - kFuelRoundingToleranceMg) * kFuelContainersPerMg));
+    const auto nearest = std::round(requiredMg * kFuelContainersPerMg);
+    const auto required = requiredMg - nearest / kFuelContainersPerMg > kFuelRoundingToleranceMg
+        ? nearest + 1.0 : nearest;
+    return std::max(1.0, required);
 }
 
 double fuel_in_complete_containers(double storedMg)
 {
-    const auto containers = std::floor((std::max(0.0, storedMg) + kFuelRoundingToleranceMg) * kFuelContainersPerMg);
-    return containers / kFuelContainersPerMg;
+    return complete_fuel_container_count(storedMg) / kFuelContainersPerMg;
+}
+
+double fuel_after_consumption(double storedMg, double consumedMg)
+{
+    if (consumedMg <= 0.0) return storedMg;
+    const auto available = complete_fuel_container_count(storedMg);
+    const auto consumed = std::round(consumedMg * kFuelContainersPerMg);
+    const auto reserve = std::max(0.0, storedMg - available / kFuelContainersPerMg);
+    return std::max(0.0, available - consumed) / kFuelContainersPerMg + reserve;
 }
 
 // Stars! Technical Reference Guide, p11, and Player's Guide, B-6 (PDF p246).

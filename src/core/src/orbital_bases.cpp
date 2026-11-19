@@ -292,10 +292,10 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
         }
         if (!f.colonists) { if (previouslySupported) report(2); continue; }
         if (f.damagePercent < 100 && fuel_in_complete_containers(f.fuel) >= 1.0 && pay(f, {1, 1, 1})) {
-            f.fuel = std::max(0.0, f.fuel - 1.0);
+            f.fuel = fuel_after_consumption(f.fuel, 1.0);
             b.supported = true;
             if (b.reserveYears < 3 && fuel_in_complete_containers(f.fuel) >= 1.0 && pay(f, {1, 1, 1})) {
-                f.fuel = std::max(0.0, f.fuel - 1.0);
+                f.fuel = fuel_after_consumption(f.fuel, 1.0);
                 ++b.reserveYears;
             }
         } else if (b.reserveYears) --b.reserveYears;
