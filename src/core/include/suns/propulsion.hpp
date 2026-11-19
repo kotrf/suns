@@ -6,8 +6,14 @@
 
 namespace suns {
 
-// Both amounts are in mg. Opening a 0.1 mg container consumes it in full.
-[[nodiscard]] double fuel_container_cost(double requiredMg);
+inline constexpr double kFuelContainersPerMg = 10.0;
+
+// Opening a 0.1 mg container consumes it in full.
+[[nodiscard]] double fuel_containers_required(double requiredMg);
+[[nodiscard]] inline double fuel_container_cost(double requiredMg)
+{
+    return fuel_containers_required(requiredMg) / kFuelContainersPerMg;
+}
 [[nodiscard]] double fuel_in_complete_containers(double storedMg);
 
 enum class EngineAccess { Any, ImprovedFuelEfficiency, NoRamScoops, Settler };

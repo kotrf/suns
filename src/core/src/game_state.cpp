@@ -1328,6 +1328,11 @@ FleetFuelAmounts fleet_fuel_amounts(
     }
 
     FleetFuelAmounts result;
+    double consumedContainers = 0.0;
+    const auto addConsumption = [&](double amount) {
+        if (rounded) consumedContainers += fuel_containers_required(amount);
+        else result.consumed += std::max(0.0, amount);
+    };
     const auto cargo = fleet_cargo_used(state, fleet);
     const auto capacity = fleet_cargo_capacity(state, fleet);
     const auto dryMass = fleet_gross_mass(state, fleet) - cargo;
@@ -1352,16 +1357,20 @@ FleetFuelAmounts fleet_fuel_amounts(
             const auto effectiveDistance = distance * consumption;
             const auto billedDistance = rounded ? std::ceil(std::max(0.0, effectiveDistance - 1e-9)) : effectiveDistance;
             // The distance and fuel bill are calculated for each design stack.
-            result.consumed += charge(mass * efficiency * billedDistance / 20000.0);
+            addConsumption(mass * efficiency * billedDistance / 20000.0);
             result.collected += engine->fuelCollectedPerEngineLy[fleet.warp]
                 * ship_design_engine_slots_used(*design) * stack.count * distance * collection;
         } else {
             const auto change = engine->fuelPer100MassLy[fleet.warp] * mass / 100.0 * distance;
-            result.consumed += charge(std::max(0.0, change) * consumption);
+            addConsumption(std::max(0.0, change) * consumption);
             result.collected += std::max(0.0, -change)*collection;
         }
     }
-    if (rounded) result.collected = std::floor(result.collected + 1e-9);
+    if (rounded) {
+        // Adding whole counts keeps an exactly funded fleet affordable.
+        result.consumed = consumedContainers / kFuelContainersPerMg;
+        result.collected = std::floor(result.collected + 1e-9);
+    }
     return result;
 }
 

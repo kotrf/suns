@@ -7,15 +7,13 @@
 namespace suns {
 
 namespace {
-constexpr double kFuelContainersPerMg = 10.0;
 constexpr double kFuelRoundingToleranceMg = 1e-9;
 }
 
-double fuel_container_cost(double requiredMg)
+double fuel_containers_required(double requiredMg)
 {
     if (!(requiredMg > 0.0)) return 0.0;
-    const auto containers = std::ceil((requiredMg - kFuelRoundingToleranceMg) * kFuelContainersPerMg);
-    return std::max(1.0, containers) / kFuelContainersPerMg;
+    return std::max(1.0, std::ceil((requiredMg - kFuelRoundingToleranceMg) * kFuelContainersPerMg));
 }
 
 double fuel_in_complete_containers(double storedMg)

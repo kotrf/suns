@@ -322,6 +322,24 @@ void verify_reference_fuel_exhaustion_and_free_speed()
     assert(next.fleets.front().fuel == 1);
 }
 
+void verify_exact_container_budget_with_many_stacks()
+{
+    using namespace suns;
+    GameState state;
+    Fleet fleet;
+    fleet.owner = 1;
+    fleet.warp = 8;
+    fleet.fuel = 2'517'074.4;
+    for (ShipDesignId id = 1; id <= 24; ++id) {
+        state.shipDesigns.push_back({id, 1, "Scout", ShipHullType::StarsScout, {ShipComponentType::QuickJump5}});
+        fleet.ships.push_back({id, 3414});
+    }
+
+    // Each of the 24 stacks costs 104878.1 mg. The budget covers all 64 ly.
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 64) == fleet.fuel);
+    assert(fleet_fuel_affordable_distance(state, fleet, 64) == 64);
+}
+
 void verify_default_propulsion_and_cargo()
 {
     const auto state = suns::make_demo_game();
@@ -545,6 +563,7 @@ int main()
     verify_original_collection_is_per_engine();
     verify_mixed_fleet_cargo_and_fuel_collection();
     verify_reference_fuel_exhaustion_and_free_speed();
+    verify_exact_container_budget_with_many_stacks();
     verify_stars_progression_and_multifield_gates();
     verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();
