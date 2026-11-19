@@ -6,6 +6,10 @@
 
 namespace suns {
 
+// Both amounts are in mg. Opening a 0.1 mg container consumes it in full.
+[[nodiscard]] double fuel_container_cost(double requiredMg);
+[[nodiscard]] double fuel_in_complete_containers(double storedMg);
+
 enum class EngineAccess { Any, ImprovedFuelEfficiency, NoRamScoops, Settler };
 
 struct PropulsionTechnology {

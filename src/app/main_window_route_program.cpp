@@ -444,7 +444,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             fuelFleet.warp = leg.warp;
             const auto cost = fleet_fuel_consumption_for_distance(planned, fuelFleet, distance);
             if (std::isfinite(distance) && std::isfinite(cost) && leg.warp > 0 && leg.warp <= kMaxWarp)
-                fuel = QString("≈%1").arg(cost, 0, 'f', cost < 10.0 ? 1 : 0);
+                fuel = QString("≈%1").arg(cost, 0, 'f', 1);
             else {
                 knownFuel = false;
                 fuelUncertainty = "No nominal fuel cost is available for this leg.";

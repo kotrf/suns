@@ -82,7 +82,9 @@ unsupported lines can still be paused, released or deleted.
 
 Each deployed installation consumes **1 mg/year**, at the start of the year
 after ordinary onboard generation, starting the year after deployment. A fitted
-fuel generator can support that upkeep. At zero fuel, or 100% hull damage, depot,
+fuel generator can support that upkeep. Upkeep spends available whole 0.1 mg
+containers and preserves any smaller remainder. With less than one usable
+container, or 100% hull damage, depot,
 relay and scanning services stop; the installation remains in place. Exhaustion
 queues one dated warning rather than repeating every year. Ordinary emergency
 radio/report propagation retains fleet rules; an empty relay adds no mesh field.

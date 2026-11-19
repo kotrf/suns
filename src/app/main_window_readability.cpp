@@ -56,7 +56,7 @@ void MainWindow::installFleetReadabilityPolish()
         if (auto* layout = qobject_cast<QVBoxLayout*>(fleetGroup->layout())) {
             fuelBar = makeFleetGauge(
                 "fleetFuelBar",
-                "Fuel aboard versus the fitted ship design's tank capacity.",
+                "Fuel aboard versus tank capacity. Each opened 0.1 mg container is spent in full.",
                 fleetGroup);
             cargoBar = makeFleetGauge(
                 "fleetCargoBar",

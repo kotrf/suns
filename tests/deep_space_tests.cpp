@@ -250,6 +250,25 @@ void armed_platforms_have_no_tactical_movement()
 }
 int main()
 {
+    {
+        auto state = world();
+        add(state).task = FleetTask::DeployOutpost;
+        deploy_outposts(state, state.turn);
+        state.fleets.front().fuel = 0.36;
+        maintain_outposts(state, state.turn + 1);
+        assert(near(state.fleets.front().fuel, 0.06) && !outpost_online(state.fleets.front()));
+        const auto& reports = state.players.front().pendingPlayerReports;
+        const auto exhaustedReports = [&] {
+            return std::count_if(reports.begin(), reports.end(),
+                [](const auto& report) { return report.kind == PlayerReportKind::OutpostFuelExhausted; });
+        };
+        assert(exhaustedReports() == 1);
+        maintain_outposts(state, state.turn + 2);
+        assert(near(state.fleets.front().fuel, 0.06) && exhaustedReports() == 1);
+        auto& tanker = add(state, kScoutDesignId);
+        tanker.fuel = 0.04;
+        assert(near(supply_outpost(state, tanker, 0), 0.04) && outpost_online(state.fleets.front()));
+    }
     sensor_arrays_are_paid_anchored_and_need_power();
     deployment_is_physical_paid_and_permanent(); validation_and_arbitration_do_not_depend_on_storage_order();
     fuel_is_finite_owned_and_conserved(); route_stops_replenish_and_draw_from_the_reservoir();

@@ -27,8 +27,8 @@ For mean density `d` along each movement leg:
 | Ram scoop | × `(1 - 0.10d)` | × `(1 + 0.75d)` |
 
 Costs remain mass/cargo/engine dependent. Reference engines round the integrated
-effective consumption distance, then retain the existing per-stack whole-mg
-billing. Collection is rounded after aggregation. Each year's movement and each
+effective consumption distance. Each stack's resulting cost rounds up to a
+whole 0.1 mg container. Collection is rounded after aggregation. Each year's movement and each
 actual leg are billed separately. Mixed fleets apply the appropriate effect to
 each fitted engine; future collection cannot finance the earlier consuming part
 of a leg. New medium-enabled legacy mixed fleets also separate gross consumption

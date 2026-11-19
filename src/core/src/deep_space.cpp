@@ -1,6 +1,7 @@
 #include "suns/deep_space.hpp"
 #include "suns/communications.hpp"
 #include "suns/orbital_bases.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/stations.hpp"
 #include "suns/player_knowledge.hpp"
 #include <algorithm>
@@ -30,7 +31,7 @@ OutpostKind fleet_construction_kit(const GameState& state, const Fleet& fleet)
 bool outpost_online(const Fleet& fleet)
 {
     return fleet.outpost != OutpostKind::None && fleet.damagePercent < 100
-        && std::isfinite(fleet.fuel) && fleet.fuel > 0;
+        && std::isfinite(fleet.fuel) && fuel_in_complete_containers(fleet.fuel) > 0.0;
 }
 std::string outpost_kind_name(OutpostKind kind)
 {
@@ -98,9 +99,11 @@ std::vector<Fleet> known_outposts(const GameState& state, PlayerId owner)
 void maintain_outposts(GameState& state, std::uint64_t turn)
 {
     std::vector<FleetId> exhausted;
-    for (auto& fleet : state.fleets) if (fleet.outpost != OutpostKind::None && fleet.outpost != OutpostKind::OrbitalShipyard && fleet.fuel > 0) {
-        fleet.fuel = std::max(0.0, fleet.fuel - kOutpostUpkeepMg);
-        if (fleet.fuel == 0) exhausted.push_back(fleet.id);
+    for (auto& fleet : state.fleets) if (fleet.outpost != OutpostKind::None && fleet.outpost != OutpostKind::OrbitalShipyard) {
+        const auto burn = std::min(kOutpostUpkeepMg, fuel_in_complete_containers(fleet.fuel));
+        if (burn <= 0.0) continue;
+        fleet.fuel = std::max(0.0, fleet.fuel - burn);
+        if (fuel_in_complete_containers(fleet.fuel) == 0.0) exhausted.push_back(fleet.id);
     }
     // Every service observes the same post-upkeep network. Queueing during
     // deduction could route an earlier warning through a later exhausted node.
@@ -155,7 +158,7 @@ double refuel_from_outpost(GameState& state, Fleet& visitor)
     if (!depot || !outpost_online(*depot)) return 0;
     const auto amount = transfer(*depot, visitor, std::min(std::max(0.0, depot->fuel - (depot->outpost == OutpostKind::OrbitalShipyard ? depot->mobileBase.fuelReserve : 0.0)),
         std::max(0.0, fleet_fuel_capacity(state, visitor) - visitor.fuel)));
-    if (amount > 0 && depot->fuel == 0) queue_player_report(state, depot->owner, PlayerReportKind::OutpostFuelExhausted,
+    if (amount > 0 && !outpost_online(*depot)) queue_player_report(state, depot->owner, PlayerReportKind::OutpostFuelExhausted,
         depot->position, state.turn + 1, 0, 0, depot->id, 0, ProductionKind::ColonyShip, std::uint32_t(depot->outpost));
     return amount;
 }

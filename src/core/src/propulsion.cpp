@@ -6,6 +6,24 @@
 
 namespace suns {
 
+namespace {
+constexpr double kFuelContainersPerMg = 10.0;
+constexpr double kFuelRoundingToleranceMg = 1e-9;
+}
+
+double fuel_container_cost(double requiredMg)
+{
+    if (!(requiredMg > 0.0)) return 0.0;
+    const auto containers = std::ceil((requiredMg - kFuelRoundingToleranceMg) * kFuelContainersPerMg);
+    return std::max(1.0, containers) / kFuelContainersPerMg;
+}
+
+double fuel_in_complete_containers(double storedMg)
+{
+    const auto containers = std::floor((std::max(0.0, storedMg) + kFuelRoundingToleranceMg) * kFuelContainersPerMg);
+    return containers / kFuelContainersPerMg;
+}
+
 // Stars! Technical Reference Guide, p11, and Player's Guide, B-6 (PDF p246).
 // Thrust and deterministic hull damage belong to Suns!.
 std::span<const PropulsionTechnology> propulsion_technologies()

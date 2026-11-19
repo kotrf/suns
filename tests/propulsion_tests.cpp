@@ -23,9 +23,9 @@ void verify_starting_scout_range()
     assert(fleet_gross_mass(state, scout) == 17);
     assert(fleet_fuel_capacity(state, scout) == 50);
     scout.warp = 8;
-    assert(fleet_fuel_consumption_for_distance(state, scout, 64) == 44);
+    assert(near(fleet_fuel_consumption_for_distance(state, scout, 64), 43.6));
     scout.warp = 5;
-    assert(fleet_fuel_consumption_for_distance(state, scout, 25) == 3);
+    assert(near(fleet_fuel_consumption_for_distance(state, scout, 25), 2.2));
 
     // A generated fleet must already choose the economical engine speed.
     assert(state.fleets.front().warp == 5);
@@ -35,10 +35,10 @@ void verify_starting_scout_range()
     state.fleets.front().destination = Position{2000, 1000};
     const auto manualFastRoute = state;
     const TurnProcessor processor;
-    for (int turn = 1; turn <= 16; ++turn) {
+    for (int turn = 1; turn <= 22; ++turn) {
         state = processor.process(state, {});
         assert(near(state.fleets.front().position.x, 1000 + turn * 25));
-        assert(near(state.fleets.front().fuel, 50 - turn * 3));
+        assert(near(state.fleets.front().fuel, 50 - turn * 2.2));
         assert(state.fleets.front().warp == 5);
     }
 
@@ -48,13 +48,13 @@ void verify_starting_scout_range()
     const auto next = processor.process(fast, {});
     assert(next.fleets.front().warp == 8);
     assert(next.fleets.front().position.x == 1064);
-    assert(next.fleets.front().fuel == 6);
+    assert(near(next.fleets.front().fuel, 6.4));
 
     const auto campaign = generate_campaign(GalaxyConfig{},
         {{"Terrans", RacePreset::Terran}, {"Ice", RacePreset::Cryophile}});
     for (const auto& fleet : campaign.fleets) {
         assert(fleet.warp == 5 && fleet.telemetry.warp == 5);
-        assert(fleet_fuel_consumption_for_distance(campaign, fleet, 25) == 3);
+        assert(near(fleet_fuel_consumption_for_distance(campaign, fleet, 25), 2.2));
     }
 }
 
@@ -119,7 +119,7 @@ void verify_movement_accounting_survives_arrival_refuelling()
     const auto movement = std::find_if(result.movementFuel.begin(), result.movementFuel.end(),
         [id](const auto& entry) { return entry.fleet == id; });
     assert(movement != result.movementFuel.end());
-    assert(near(movement->consumed, 3) && near(movement->remaining, 27));
+    assert(near(movement->consumed, 2.2) && near(movement->remaining, 27.8));
     assert(!movement->fuelLimited);
     const auto arrived = std::find_if(result.state.fleets.begin(), result.state.fleets.end(),
         [id](const auto& entry) { return entry.id == id; });
@@ -222,7 +222,7 @@ void verify_original_fuel_tables_and_rounding()
     state.players.front().race.improvedFuelEfficiency = true;
     assert(fleet_fuel_consumption_for_distance(state, fleet, 100) == 306);
     assert(fleet_fuel_consumption_for_distance(state, fleet, 0) == 0);
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 1.01) == 7);
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 1.01), 6.2));
     fleet.fuel = 6;
     assert(near(fleet_fuel_affordable_distance(state, fleet, 81), 1));
 
@@ -274,16 +274,16 @@ void verify_mixed_fleet_cargo_and_fuel_collection()
     Fleet fleet{1, 1, "Convoy", FleetRole::Scout, 10, {0, 0}, Position{100, 0}, 9, 600, 0};
     fleet.ships = {{10, 1}, {11, 1}};
     fleet.minerals.ironium = 100;
-    // All 100 kt cargo is on the freighter: ceil(918.5) + ceil(7.1).
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 927);
+    // All 100 kt of cargo is on the freighter. The two stacks cost 918.6 and 7.2 mg.
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 81), 925.8));
     std::reverse(fleet.ships.begin(), fleet.ships.end());
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 927);
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 81), 925.8));
     state.shipDesigns.front().components.assign(3, ShipComponentType::GalaxyScoop);
     fleet.warp = 9;
     fleet.fuel = 0;
     // The scoop's future collection cannot finance the escort's initial burn.
     assert(fleet_fuel_change_for_distance(state, fleet, 81) < 0);
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 8);
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 81), 7.2));
     assert(fleet_fuel_affordable_distance(state, fleet, 81) < 81);
     assert(fleet_free_warp(state, fleet) == 1);
 }
@@ -309,9 +309,10 @@ void verify_reference_fuel_exhaustion_and_free_speed()
     state.fleets.front().fuel = 5;
     state.fleets.front().warp = 10;
     next = TurnProcessor{}.process(state, {});
-    assert(near(next.fleets.front().position.x, 7 + 16 * .93));
-    assert(near(next.fleets.front().damagePercent, 18 * .07));
-    assert(next.fleets.front().fuel == 14);
+    // Seven ly now costs 5.1 mg, so the fleet buys six ly and coasts at W4.
+    assert(near(next.fleets.front().position.x, 6 + 16 * .94));
+    assert(near(next.fleets.front().damagePercent, 18 * .06));
+    assert(near(next.fleets.front().fuel, 15.6));
 
     state.shipDesigns.front().components.front() = ShipComponentType::QuickJump5;
     state.fleets.front().warp = 9;
@@ -382,24 +383,37 @@ void verify_researched_warp_ten_drive()
 
 void verify_fuel_limits_actual_travel()
 {
+    using namespace suns;
+    assert(fuel_container_cost(0.0) == 0.0);
+    assert(near(fuel_container_cost(1e-6), 0.1));
+    assert(near(fuel_container_cost(0.1 + 0.2), 0.3));
+    assert(near(fuel_container_cost(1.001), 1.1));
+    assert(fuel_in_complete_containers(0.099) == 0.0);
+    assert(near(fuel_in_complete_containers(1.086), 1.0));
+
     auto state = suns::make_demo_game();
     state.planets.clear();
     auto& scout = state.fleets.front();
     scout.position = {0.0, 0.0};
     scout.destination.reset();
     scout.warp = 8;
-    scout.fuel = 10.0;
+    scout.fuel = 10.036;
 
     suns::PlayerOrders orders{1, {}};
     orders.orders.emplace_back(suns::MoveFleetOrder{scout.id, {64.0, 0.0}, 8});
 
     const suns::TurnProcessor processor;
-    const auto next = processor.process(state, {orders});
-    const auto& moved = next.fleets.front();
+    const auto result = processor.process_with_events(state, {orders});
+    const auto& moved = result.state.fleets.front();
     assert(moved.position.x > 0.0);
     assert(moved.position.x < 64.0);
-    assert(near(moved.fuel, 0.0));
+    assert(near(moved.fuel, 0.036));
     assert(moved.destination.has_value());
+    assert(result.movementFuel.size() == 1 && near(result.movementFuel.front().consumed, 10.0));
+
+    const auto stalled = processor.process(result.state, {});
+    assert(stalled.fleets.front().position == moved.position && stalled.fleets.front().fuelStalled);
+    assert(near(stalled.fleets.front().fuel, 0.036));
 }
 
 void verify_ram_scoop_can_generate_fuel_in_flight()

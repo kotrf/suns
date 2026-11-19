@@ -1299,6 +1299,9 @@ FleetFuelAmounts fleet_fuel_amounts(
     double density=0, int bound=0, bool separateLegacy=false)
 {
     if (distance <= 0.0 || fleet.warp == 0 || fleet.warp > kMaxWarp) return {};
+    const auto charge = [rounded](double amount) {
+        return rounded ? fuel_container_cost(amount) : amount;
+    };
     // Keep the prototype's mass-weighted signed curve for legacy-only fleets.
     if (!has_reference_engine(state, fleet)) {
         double weightedRate = 0.0;
@@ -1319,9 +1322,9 @@ FleetFuelAmounts fleet_fuel_amounts(
             ? weightedRate / dryMass * fleet_gross_mass(state, fleet) / 100.0 * distance : 0.0;
         if (separateLegacy && dryMass>0) {
             const auto scale=fleet_gross_mass(state,fleet)/dryMass/100.0*distance;
-            return {positiveRate*scale,negativeRate*scale};
+            return {charge(positiveRate * scale), negativeRate * scale};
         }
-        return {std::max(0.0, change), std::max(0.0, -change)};
+        return {charge(std::max(0.0, change)), std::max(0.0, -change)};
     }
 
     FleetFuelAmounts result;
@@ -1346,18 +1349,15 @@ FleetFuelAmounts fleet_fuel_amounts(
         if (const auto* reference = propulsion_technology(engine->type)) {
             const auto baseEfficiency = reference->fuelEfficiency[fleet.warp];
             const auto efficiency = ife ? (baseEfficiency * 85 + 99) / 100 : baseEfficiency;
-            const auto roundedDistance=std::ceil(std::max(0.0,distance*consumption-1e-9));
-            // Stars-compatible whole-mg billing per design stack and movement
-            // leg: round distance up, retain one decimal, then round fuel up.
-            const auto cost = rounded
-                ? std::ceil(std::floor(mass * efficiency * roundedDistance / 2000.0 + 1e-9) / 10.0 - 1e-9)
-                : mass * efficiency * distance * consumption / 20000.0;
-            result.consumed += std::max(0.0, cost);
+            const auto effectiveDistance = distance * consumption;
+            const auto billedDistance = rounded ? std::ceil(std::max(0.0, effectiveDistance - 1e-9)) : effectiveDistance;
+            // The distance and fuel bill are calculated for each design stack.
+            result.consumed += charge(mass * efficiency * billedDistance / 20000.0);
             result.collected += engine->fuelCollectedPerEngineLy[fleet.warp]
                 * ship_design_engine_slots_used(*design) * stack.count * distance * collection;
         } else {
             const auto change = engine->fuelPer100MassLy[fleet.warp] * mass / 100.0 * distance;
-            result.consumed += std::max(0.0, change)*consumption;
+            result.consumed += charge(std::max(0.0, change) * consumption);
             result.collected += std::max(0.0, -change)*collection;
         }
     }
@@ -1388,18 +1388,19 @@ double fleet_fuel_consumption_for_distance(const GameState& state, const Fleet& 
 double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet, double maximumDistance)
 {
     if (maximumDistance <= 0.0) return 0.0;
+    const auto available = fuel_in_complete_containers(fleet.fuel);
     if (!has_reference_engine(state, fleet)) {
-        const auto rate = fleet_fuel_consumption_for_distance(state, fleet, 1.0);
-        return rate > 0.0 ? std::min(maximumDistance, fleet.fuel / rate) : maximumDistance;
+        const auto rate = fleet_fuel_amounts(state, fleet, 1.0, false).consumed;
+        return rate > 0.0 ? std::min(maximumDistance, available / rate) : maximumDistance;
     }
-    if (fleet_fuel_consumption_for_distance(state, fleet, maximumDistance) <= fleet.fuel + 1e-9)
+    if (fleet_fuel_consumption_for_distance(state, fleet, maximumDistance) <= available + 1e-9)
         return maximumDistance;
     // Rounded consumption is monotone. Do not spend fuel that a different
     // engine will collect later in the same movement leg.
     double lo = 0.0, hi = maximumDistance;
     for (int iteration = 0; iteration < 56; ++iteration) {
         const auto middle = (lo + hi) / 2.0;
-        if (fleet_fuel_consumption_for_distance(state, fleet, middle) <= fleet.fuel + 1e-9) lo = middle;
+        if (fleet_fuel_consumption_for_distance(state, fleet, middle) <= available + 1e-9) lo = middle;
         else hi = middle;
     }
     return lo < 1e-8 ? 0.0 : lo;
@@ -1422,12 +1423,13 @@ double fleet_fuel_affordable_segment_distance(const GameState& state,const Fleet
     const auto full=distance_between(fleet.position,end);
     const auto limit=std::min(full,std::max(0.0,maximumDistance));
     if (full<=0 || limit<=0) return 0;
+    const auto available = fuel_in_complete_containers(fleet.fuel);
     const auto position=[&](double d) { return Position{fleet.position.x+(end.x-fleet.position.x)*d/full,
         fleet.position.y+(end.y-fleet.position.y)*d/full}; };
-    if (fleet_fuel_consumption_for_segment(state,fleet,position(limit))<=fleet.fuel+1e-9) return limit;
+    if (fleet_fuel_consumption_for_segment(state,fleet,position(limit))<=available+1e-9) return limit;
     double lo=0,hi=limit;
     for (int i=0;i<56;++i) { const auto mid=(lo+hi)*0.5;
-        if (fleet_fuel_consumption_for_segment(state,fleet,position(mid))<=fleet.fuel+1e-9) lo=mid; else hi=mid; }
+        if (fleet_fuel_consumption_for_segment(state,fleet,position(mid))<=available+1e-9) lo=mid; else hi=mid; }
     return lo<1e-8?0:lo;
 }
 SegmentFuelBounds fleet_segment_fuel_bounds(const GameState& state,const Fleet& fleet,double distance)

@@ -4,6 +4,7 @@
 #include "suns/mobile_base.hpp"
 #include "suns/stations.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/campaign.hpp"
 #include <algorithm>
 #include <cmath>
@@ -290,9 +291,13 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
             continue;
         }
         if (!f.colonists) { if (previouslySupported) report(2); continue; }
-        if (f.damagePercent < 100 && f.fuel >= 1 && pay(f, {1, 1, 1})) {
-            f.fuel -= 1; b.supported = true;
-            if (b.reserveYears < 3 && f.fuel >= 1 && pay(f, {1, 1, 1})) { f.fuel -= 1; ++b.reserveYears; }
+        if (f.damagePercent < 100 && fuel_in_complete_containers(f.fuel) >= 1.0 && pay(f, {1, 1, 1})) {
+            f.fuel = std::max(0.0, f.fuel - 1.0);
+            b.supported = true;
+            if (b.reserveYears < 3 && fuel_in_complete_containers(f.fuel) >= 1.0 && pay(f, {1, 1, 1})) {
+                f.fuel = std::max(0.0, f.fuel - 1.0);
+                ++b.reserveYears;
+            }
         } else if (b.reserveYears) --b.reserveYears;
         else { b.populationLost = f.colonists / 10 + (f.colonists % 10 != 0); f.colonists -= b.populationLost; }
         const auto radiation = orbital_radiation_losses(s, f);
