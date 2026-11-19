@@ -26,6 +26,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -34,6 +35,8 @@ namespace suns {
 namespace {
 
 constexpr int kMineralScale = 100;
+constexpr double kMineralStep = 1.0 / kMineralScale;
+constexpr double kFuelStep = 0.1;
 constexpr double kEpsilon = 0.000001;
 
 struct CargoEndpointView {
@@ -45,10 +48,67 @@ struct CargoEndpointView {
     std::uint64_t housingCapacity{kOrbitalPopulationCapacity};
 };
 
-struct MineralControl {
+struct CargoTrack {
     QSlider* slider{};
-    QDoubleSpinBox* spin{};
+    double amountPerTick{1.0};
+
+    [[nodiscard]] int tick(double amount) const
+    {
+        constexpr double limit = std::numeric_limits<int>::max() / 2;
+        return static_cast<int>(std::round(std::clamp(amount / amountPerTick, -limit, limit)));
+    }
+
+    [[nodiscard]] double amount(int position) const { return position * amountPerTick; }
+
+    void show(double minimum, double maximum, double value, double step)
+    {
+        constexpr double limit = std::numeric_limits<int>::max() / 2;
+        amountPerTick = std::max(step, std::max(-minimum, maximum) / limit);
+        const QSignalBlocker block(slider);
+        slider->setRange(tick(minimum), tick(maximum));
+        slider->setValue(tick(std::clamp(value, minimum, maximum)));
+    }
+
+    void showStock(double capacity, double stock, double step)
+    {
+        if (capacity > 0.0) show(0, capacity, stock, std::min(step, capacity));
+        else show(0, step, stock > 0.0 ? step : 0.0, step);
+    }
 };
+
+struct MineralControl {
+    CargoTrack transfer;
+    QDoubleSpinBox* spin{};
+    CargoTrack destination;
+    QLabel* stock{};
+};
+
+double transferScale(double receivingCapacity, double sendingCapacity, double available)
+{
+    if (std::isfinite(receivingCapacity)) return receivingCapacity;
+    return std::isfinite(sendingCapacity) ? sendingCapacity : available;
+}
+
+double displayedFuelLimit(double amount)
+{
+    return amount > 0.0 ? std::max(kFuelStep, std::round(amount * 10.0) * kFuelStep) : 0.0;
+}
+
+double exactFuelDelta(double request, double limit)
+{
+    if (request <= 0.0) return 0.0;
+    return request >= displayedFuelLimit(limit) - kEpsilon ? limit : std::min(request, limit);
+}
+
+void reserveStockWidth(QLabel* label, QString largest)
+{
+    const auto metrics = label->fontMetrics();
+    QChar widest = '0';
+    for (QChar digit : QStringLiteral("123456789"))
+        if (metrics.horizontalAdvance(digit) > metrics.horizontalAdvance(widest)) widest = digit;
+    for (auto& ch : largest) if (ch.isDigit()) ch = widest;
+    label->setFixedWidth(metrics.horizontalAdvance(largest) + 2);
+}
 
 double mineralValue(const MineralCargo& minerals, int index)
 {
@@ -311,9 +371,10 @@ void MainWindow::openCargoManifestDialog()
     transferGrid->addWidget(new QLabel("Colonists", &dialog), 1, 0);
     transferGrid->addWidget(colonistSlider, 1, 1);
     transferGrid->addWidget(colonistSpin, 1, 2);
+    CargoTrack colonistTrack{colonistSlider};
 
     const char* mineralNames[] = {"Ironium", "Boranium", "Germanium"};
-    std::vector<MineralControl> mineralControls;
+    std::array<MineralControl, 3> mineralControls{};
     for (int index = 0; index < 3; ++index) {
         auto* slider = new QSlider(Qt::Horizontal, &dialog);
         auto* spin = new QDoubleSpinBox(&dialog);
@@ -324,34 +385,48 @@ void MainWindow::openCargoManifestDialog()
         transferGrid->addWidget(new QLabel(mineralNames[index], &dialog), index + 2, 0);
         transferGrid->addWidget(slider, index + 2, 1);
         transferGrid->addWidget(spin, index + 2, 2);
-        mineralControls.push_back({slider, spin});
+        mineralControls[index].transfer.slider = slider;
+        mineralControls[index].spin = spin;
     }
     auto* fuelSlider = new QSlider(Qt::Horizontal, &dialog);
     auto* fuelSpin = new QDoubleSpinBox(&dialog);
     fuelSlider->setObjectName("cargoFuelSlider"); fuelSpin->setObjectName("cargoFuelSpin");
-    fuelSpin->setDecimals(2); fuelSpin->setSingleStep(1.0); fuelSpin->setSuffix(" mg");
+    fuelSpin->setDecimals(1); fuelSpin->setSingleStep(kFuelStep); fuelSpin->setSuffix(" mg");
     transferGrid->addWidget(new QLabel("Fuel", &dialog), 5, 0);
     transferGrid->addWidget(fuelSlider, 5, 1); transferGrid->addWidget(fuelSpin, 5, 2);
+    CargoTrack fuelTrack{fuelSlider};
     sourceLayout->addLayout(transferGrid);
     auto* receivingGrid = new QGridLayout;
-    receivingGrid->addWidget(new QLabel("Cargo after order", destinationGroup), 0, 0);
-    receivingGrid->addWidget(new QLabel("Destination stock", destinationGroup), 0, 1);
+    receivingGrid->addWidget(new QLabel("Cargo", destinationGroup), 0, 0);
+    receivingGrid->addWidget(new QLabel("Destination stock after transfer", destinationGroup), 0, 1, 1, 2);
+    receivingGrid->setColumnStretch(1, 1);
+    const auto stockLabel = [&](int row, const QString& name) {
+        auto* label = new QLabel(destinationGroup);
+        label->setObjectName(name);
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        receivingGrid->addWidget(label, row, 2, Qt::AlignRight);
+        return label;
+    };
     auto* receivedColonists = new QSlider(Qt::Horizontal, destinationGroup);
     receivedColonists->setObjectName("cargoDestinationColonistSlider");
     receivingGrid->addWidget(new QLabel("Colonists", destinationGroup), 1, 0);
     receivingGrid->addWidget(receivedColonists, 1, 1);
-    std::vector<QSlider*> receivedMinerals;
+    CargoTrack destinationPeopleTrack{receivedColonists};
+    auto* colonistStock = stockLabel(1, "cargoDestinationColonistStock");
     for (int index = 0; index < 3; ++index) {
         auto* slider = new QSlider(Qt::Horizontal, destinationGroup);
         slider->setObjectName(QString("cargoDestinationMineralSlider%1").arg(index));
         receivingGrid->addWidget(new QLabel(mineralNames[index], destinationGroup), index + 2, 0);
         receivingGrid->addWidget(slider, index + 2, 1);
-        receivedMinerals.push_back(slider);
+        mineralControls[index].destination.slider = slider;
+        mineralControls[index].stock = stockLabel(index + 2, QString("cargoDestinationMineralStock%1").arg(index));
     }
     auto* receivedFuel = new QSlider(Qt::Horizontal, destinationGroup);
     receivedFuel->setObjectName("cargoDestinationFuelSlider");
     receivingGrid->addWidget(new QLabel("Fuel", destinationGroup), 5, 0);
     receivingGrid->addWidget(receivedFuel, 5, 1);
+    CargoTrack destinationFuelTrack{receivedFuel};
+    auto* fuelStock = stockLabel(5, "cargoDestinationFuelStock");
     destinationLayout->addLayout(receivingGrid);
 
     auto* sourceBefore = new QLabel(&dialog);
@@ -407,7 +482,10 @@ void MainWindow::openCargoManifestDialog()
     std::vector<TransferCargoOrder> draftTransfers;
     std::optional<TransferFleetFuelOrder> draftFuel;
     std::optional<GameState> baseServicePlan;
-    const auto refresh = [&] {
+    std::uint64_t beforePeople{};
+    MineralCargo beforeMinerals;
+    double beforeFuel{}, forwardFuel{}, backFuel{};
+    const auto refresh = [&](bool endpointsChanged = false) {
         if (sourceCombo->currentIndex() < 0 || destinationCombo->currentIndex() < 0) return;
         const auto sourceIndex = sourceCombo->currentData().toInt();
         const auto destinationIndex = destinationCombo->currentData().toInt();
@@ -430,30 +508,44 @@ void MainWindow::openCargoManifestDialog()
             || (destination.endpoint.orbital && !destination.nativeOrbit);
         const bool fuelAvailable = source.fleet && destination.fleet
             && !mobile_base_hulls(planned, *source.fleet) && !mobile_base_hulls(planned, *destination.fleet);
+        const double sourceTank = source.fleet ? fleet_fuel_capacity(planned, *source.fleet) : 0.0;
+        const double destinationTank = destination.fleet ? fleet_fuel_capacity(planned, *destination.fleet) : 0.0;
+        beforeFuel = destination.fleet ? destination.fleet->fuel : 0.0;
+        forwardFuel = fuelAvailable ? std::min(source.fleet->fuel, std::max(0.0, destinationTank - beforeFuel)) : 0.0;
+        backFuel = fuelAvailable ? std::min(beforeFuel, std::max(0.0, sourceTank - source.fleet->fuel)) : 0.0;
+        double fuelRequest;
         {
-            const QSignalBlocker sliderBlock(fuelSlider), spinBlock(fuelSpin), receivedBlock(receivedFuel);
-            const auto forward = fuelAvailable ? std::min(source.fleet->fuel,
-                std::max(0.0, fleet_fuel_capacity(planned, *destination.fleet) - destination.fleet->fuel)) : 0.0;
-            const auto back = fuelAvailable ? std::min(destination.fleet->fuel,
-                std::max(0.0, fleet_fuel_capacity(planned, *source.fleet) - source.fleet->fuel)) : 0.0;
-            fuelSpin->setRange(-back, forward);
-            fuelSlider->setRange(-sliderMaximum(back), sliderMaximum(forward));
-            fuelSlider->setValue(fuelSpin->value() < 0 ? -sliderMaximum(-fuelSpin->value()) : sliderMaximum(fuelSpin->value()));
-            const auto before = destination.fleet ? destination.fleet->fuel : 0.0;
-            receivedFuel->setRange(sliderMaximum(before - back), sliderMaximum(before + forward));
-            receivedFuel->setValue(sliderMaximum(before + fuelSpin->value()));
-            for (auto* control : std::vector<QWidget*>{fuelSlider, fuelSpin, receivedFuel}) {
-                control->setEnabled(fuelAvailable);
-                control->setToolTip(fuelAvailable ? "Transfer fuel between the selected fleets. Negative returns fuel; tank space limits the amount."
-                    : "Choose two ordinary friendly fleets for fuel. Mobile bases use their dedicated service panel.");
-            }
+            const QSignalBlocker block(fuelSpin);
+            fuelSpin->setRange(-displayedFuelLimit(backFuel), displayedFuelLimit(forwardFuel));
+            fuelRequest = fuelSpin->value();
         }
-        const auto fuelDelta = fuelSpin->value();
+        const double fuelDelta = fuelRequest < 0.0
+            ? -exactFuelDelta(-fuelRequest, backFuel) : exactFuelDelta(fuelRequest, forwardFuel);
+        fuelTrack.show(fuelAvailable ? -sourceTank : 0.0, fuelAvailable ? destinationTank : 0.0, fuelRequest, kFuelStep);
+        // A finer stock scale keeps the empty and full stops reachable near rounded display values.
+        destinationFuelTrack.showStock(destinationTank, beforeFuel + fuelDelta, kFuelStep / 100.0);
+        receivedFuel->setSingleStep(std::max(1, destinationFuelTrack.tick(kFuelStep)));
+        receivedFuel->setPageStep(std::max(1, destinationFuelTrack.tick(1.0)));
+        fuelSlider->setEnabled(fuelAvailable);
+        fuelSpin->setEnabled(fuelAvailable);
+        receivedFuel->setEnabled(fuelAvailable && destinationTank > 0.0);
+        const auto fuelHelp = fuelAvailable
+            ? "Transfer fuel in tenths of a mg. The final available step transfers the exact amount allowed by donor stock and tank space."
+            : "Choose two ordinary friendly fleets for fuel. Mobile bases use their dedicated service panel.";
+        fuelSpin->setToolTip(fuelHelp);
+        fuelSlider->setToolTip(QString("Full tank scale. %1").arg(fuelHelp));
+        receivedFuel->setToolTip("Destination fuel after the transfer. 100% is a full tank.");
+        fuelStock->setText(destination.fleet ? QString("%1 mg").arg(beforeFuel + fuelDelta, 0, 'f', 1) : QString("—"));
+
+        const auto sourcePeople = endpointColonists(source), destinationPeople = endpointColonists(destination);
+        const auto sourceStock = endpointMinerals(source), destinationStock = endpointMinerals(destination);
+        beforePeople = destinationPeople;
+        beforeMinerals = destinationStock;
+        const double sourceHold = source.fleet ? fleet_cargo_capacity(planned, *source.fleet) : std::numeric_limits<double>::infinity();
+        const double destinationHold = destination.fleet ? fleet_cargo_capacity(planned, *destination.fleet) : std::numeric_limits<double>::infinity();
         const auto mass = [](const MineralCargo& m) { return m.ironium + m.boranium + m.germanium; };
-        const auto room = [&](const CargoEndpointView& endpoint) {
-            return endpoint.fleet ? std::max(0.0, fleet_cargo_capacity(planned, *endpoint.fleet)
-                - fleet_cargo_used(planned, *endpoint.fleet)) : std::numeric_limits<double>::infinity();
-        };
+        const double sourceRoom = source.fleet ? std::max(0.0, sourceHold - fleet_cargo_used(planned, *source.fleet)) : sourceHold;
+        const double destinationRoom = destination.fleet ? std::max(0.0, destinationHold - fleet_cargo_used(planned, *destination.fleet)) : destinationHold;
         const auto peopleAvailable = [&](const CargoEndpointView& from, const CargoEndpointView& to) {
             if((from.fleet && from.fleet->outpost==OutpostKind::CargoCache)
                 || (to.fleet && to.fleet->outpost==OutpostKind::CargoCache))return std::uint64_t{0};
@@ -484,49 +576,46 @@ void MainWindow::openCargoManifestDialog()
                 std::floor(std::max(0.0, hold) * kColonistsPerCargoUnit + kEpsilon),
                 double(std::numeric_limits<int>::max())}));
         };
-        const double sourceRoom = room(source), destinationRoom = room(destination);
         const auto mineralDelta = mass(transferMinerals());
         const int forwardPeople = peopleLimit(peopleAvailable(source, destination), destinationRoom - mineralDelta);
         const int backPeople = invasion ? 0 : peopleLimit(peopleAvailable(destination, source), sourceRoom + mineralDelta);
+        const double sourcePeopleCapacity = source.endpoint.orbital ? double(source.housingCapacity) : sourceHold * kColonistsPerCargoUnit;
+        const double destinationPeopleCapacity = destination.endpoint.orbital ? double(destination.housingCapacity) : destinationHold * kColonistsPerCargoUnit;
         {
-            const QSignalBlocker sliderBlock(colonistSlider), spinBlock(colonistSpin);
+            const QSignalBlocker spinBlock(colonistSpin);
             colonistSpin->setRange(-backPeople, forwardPeople);
-            const auto holdScale = destination.fleet ? destinationRoom
-                : source.fleet ? fleet_cargo_capacity(planned, *source.fleet) : colonist_cargo_mass(kOrbitalPopulationCapacity);
-            const int forwardScale = std::max(forwardPeople, peopleLimit(std::numeric_limits<std::uint64_t>::max(), holdScale - mineralDelta));
-            colonistSlider->setRange(-backPeople, forwardScale);
-            colonistSlider->setValue(colonistSpin->value());
-            colonistSlider->setToolTip("Positive loads the destination; negative returns colonists to the source.");
+            const double forwardScale = transferScale(destinationPeopleCapacity, sourcePeopleCapacity, double(sourcePeople));
+            const double backScale = invasion ? 0.0 : transferScale(sourcePeopleCapacity, destinationPeopleCapacity, double(destinationPeople));
+            colonistTrack.show(-backScale, forwardScale, colonistSpin->value(), 1.0);
+            colonistSlider->setToolTip("Positive loads the destination. Negative returns colonists to the source. The scale uses the full hold or housing capacity where available.");
         }
         for (int index = 0; index < 3; ++index) {
             const auto selected = transferMinerals();
             const double otherCargo = double(colonistSpin->value()) / kColonistsPerCargoUnit
                 + mass(selected) - mineralValue(selected, index);
             const int forward = invasion || residentOnly ? 0 : sliderMaximum(std::min(
-                mineralValue(endpointMinerals(source), index), std::max(0.0, destinationRoom - otherCargo)));
+                mineralValue(sourceStock, index), std::max(0.0, destinationRoom - otherCargo)));
             const int back = invasion || residentOnly ? 0 : sliderMaximum(std::min(
-                mineralValue(endpointMinerals(destination), index), std::max(0.0, sourceRoom + otherCargo)));
-            const auto& control = mineralControls[index];
-            const QSignalBlocker sliderBlock(control.slider), spinBlock(control.spin);
+                mineralValue(destinationStock, index), std::max(0.0, sourceRoom + otherCargo)));
+            auto& control = mineralControls[index];
+            const QSignalBlocker spinBlock(control.spin);
             control.spin->setRange(-double(back) / kMineralScale, double(forward) / kMineralScale);
-            const auto holdScale = destination.fleet ? destinationRoom
-                : source.fleet ? fleet_cargo_capacity(planned, *source.fleet) : colonist_cargo_mass(kOrbitalPopulationCapacity);
-            control.slider->setRange(-back, invasion || residentOnly ? 0
-                : std::max(forward, sliderMaximum(std::max(0.0, holdScale - otherCargo))));
-            control.slider->setValue(int(std::lround(control.spin->value() * kMineralScale)));
-            control.slider->setEnabled(!invasion && !residentOnly);
-            control.spin->setEnabled(!invasion && !residentOnly);
-            control.slider->setToolTip("Positive loads the destination; negative returns minerals to the source.");
+            const bool adjustable = !invasion && !residentOnly;
+            const double forwardScale = adjustable ? transferScale(destinationHold, sourceHold, mineralValue(sourceStock, index)) : 0.0;
+            const double backScale = adjustable ? transferScale(sourceHold, destinationHold, mineralValue(destinationStock, index)) : 0.0;
+            control.transfer.show(-backScale, forwardScale, control.spin->value(), kMineralStep);
+            control.transfer.slider->setEnabled(adjustable);
+            control.spin->setEnabled(adjustable);
+            control.transfer.slider->setToolTip("Positive loads the destination. Negative returns minerals to the source. The scale uses the full hold where available.");
         }
         const bool materialCache=(source.fleet && source.fleet->outpost==OutpostKind::CargoCache)
             || (destination.fleet && destination.fleet->outpost==OutpostKind::CargoCache);
-        for(auto* control:std::vector<QWidget*>{colonistSpin,colonistSlider,receivedColonists})control->setEnabled(!materialCache);
+        colonistSpin->setEnabled(!materialCache);
+        colonistSlider->setEnabled(!materialCache);
         colonistSpin->setToolTip(materialCache ? "Cargo caches store material cargo only; no population."
             : "People. 100 colonists occupy 1 kt of cargo (10,000 kg per person).");
         const auto colonists = std::int64_t(colonistSpin->value());
         const auto minerals = transferMinerals();
-        const auto sourcePeople = endpointColonists(source), destinationPeople = endpointColonists(destination);
-        const auto sourceStock = endpointMinerals(source), destinationStock = endpointMinerals(destination);
         const auto peopleAfter = [](std::uint64_t before, std::int64_t delta) {
             return delta >= 0 ? before + std::uint64_t(delta) : before - std::uint64_t(-delta);
         };
@@ -536,31 +625,41 @@ void MainWindow::openCargoManifestDialog()
             sourceStock.boranium - minerals.boranium, sourceStock.germanium - minerals.germanium};
         const MineralCargo destinationAfterStock{destinationStock.ironium + minerals.ironium,
             destinationStock.boranium + minerals.boranium, destinationStock.germanium + minerals.germanium};
-        const auto boundedPeople = [](std::uint64_t n) { return int(std::min<std::uint64_t>(n, std::numeric_limits<int>::max())); };
-        {
-            const QSignalBlocker blocker(receivedColonists);
-            receivedColonists->setRange(boundedPeople(destinationPeople - backPeople), boundedPeople(destinationPeople + forwardPeople));
-            receivedColonists->setValue(boundedPeople(destinationAfterPeople));
-            receivedColonists->setToolTip("Destination population after this transfer; drag left to return colonists.");
-        }
+        const double peopleScale = std::isfinite(destinationPeopleCapacity) ? destinationPeopleCapacity : double(destinationPeople);
+        destinationPeopleTrack.showStock(peopleScale, double(destinationAfterPeople), 1.0);
+        receivedColonists->setEnabled(!materialCache && peopleScale > 0.0);
+        receivedColonists->setToolTip(destination.fleet ? "Destination population after transfer. 100% is the full hold at 100 colonists per kt."
+            : destination.endpoint.orbital ? "Destination population after transfer. 100% is the housing capacity."
+            : "Destination population after transfer. 100% is the population before this transfer. Use the amount field to add above that level.");
+        colonistStock->setText(QString::number(qulonglong(destinationAfterPeople)));
         for (int index = 0; index < 3; ++index) {
-            const double before = mineralValue(destinationStock, index);
-            const auto& control = mineralControls[index];
-            const QSignalBlocker blocker(receivedMinerals[index]);
-            receivedMinerals[index]->setRange(sliderMaximum(before + control.spin->minimum()),
-                sliderMaximum(before + control.spin->maximum()));
-            receivedMinerals[index]->setValue(sliderMaximum(before + control.spin->value()));
-            receivedMinerals[index]->setEnabled(!invasion && !residentOnly);
-            receivedMinerals[index]->setToolTip("Destination stock after this transfer; drag left to return minerals.");
+            const double capacity = destination.fleet ? destinationHold : mineralValue(destinationStock, index);
+            const double stock = mineralValue(destinationAfterStock, index);
+            auto& control = mineralControls[index];
+            control.destination.showStock(capacity, stock, kMineralStep);
+            control.destination.slider->setEnabled(!invasion && !residentOnly && capacity > 0.0);
+            control.destination.slider->setToolTip(destination.fleet
+                ? "Destination stock after transfer. 100% is the full shared hold capacity."
+                : "Destination stock after transfer. 100% is the stock of this mineral before the transfer. Use the amount field to add above that level.");
+            control.stock->setText(QString("%1 kt").arg(stock, 0, 'f', 2));
+        }
+        if (endpointsChanged) {
+            reserveStockWidth(colonistStock, QString::number(double(sourcePeople) + double(destinationPeople), 'f', 0));
+            for (int index = 0; index < 3; ++index) {
+                const double largest = mineralValue(sourceStock, index) + mineralValue(destinationStock, index);
+                reserveStockWidth(mineralControls[index].stock, QString("%1 kt").arg(largest, 0, 'f', 2));
+            }
+            reserveStockWidth(fuelStock, destination.fleet
+                ? QString("%1 mg").arg(std::max(destinationTank, beforeFuel), 0, 'f', 1) : QString("—"));
         }
         const auto when=baseService?"After scheduled base exchanges":"Available now";
         sourceBefore->setText(QString("<b>Source — %1:</b> %2").arg(when,cargoValues(sourcePeople, sourceStock)));
         destinationBefore->setText(QString("<b>Destination — %1:</b> %2").arg(when,cargoValues(destinationPeople, destinationStock)));
         sourceAfter->setText(QString("<b>Source after this transfer:</b> %1 — %2").arg(source.name).arg(cargoValues(sourceAfterPeople, sourceAfterStock)));
         if (source.fleet) {
-            sourceBefore->setText(sourceBefore->text() + QString(" • fuel %1 mg").arg(source.fleet->fuel, 0, 'f', 2));
+            sourceBefore->setText(sourceBefore->text() + QString(" • fuel %1 mg").arg(source.fleet->fuel, 0, 'f', 1));
             sourceAfter->setText(sourceAfter->text() + QString(" • fuel %1 / %2 mg")
-                .arg(source.fleet->fuel - fuelDelta, 0, 'f', 2).arg(fleet_fuel_capacity(planned, *source.fleet), 0, 'f', 2));
+                .arg(source.fleet->fuel - fuelDelta, 0, 'f', 1).arg(sourceTank, 0, 'f', 1));
         }
         if (invasion) {
             destinationAfter->setText(QString(
@@ -572,9 +671,9 @@ void MainWindow::openCargoManifestDialog()
         } else destinationAfter->setText(QString("<b>Destination after this transfer:</b> %1 — %2")
             .arg(destination.name).arg(cargoValues(destinationAfterPeople, destinationAfterStock)));
         if (destination.fleet) {
-            destinationBefore->setText(destinationBefore->text() + QString(" • fuel %1 mg").arg(destination.fleet->fuel, 0, 'f', 2));
+            destinationBefore->setText(destinationBefore->text() + QString(" • fuel %1 mg").arg(beforeFuel, 0, 'f', 1));
             destinationAfter->setText(destinationAfter->text() + QString(" • fuel %1 / %2 mg")
-                .arg(destination.fleet->fuel + fuelDelta, 0, 'f', 2).arg(fleet_fuel_capacity(planned, *destination.fleet), 0, 'f', 2));
+                .arg(beforeFuel + fuelDelta, 0, 'f', 1).arg(destinationTank, 0, 'f', 1));
         }
 
         const auto addedMass = double(colonists) / kColonistsPerCargoUnit + mass(minerals);
@@ -582,7 +681,7 @@ void MainWindow::openCargoManifestDialog()
         if (destination.fleet) {
             capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2&nbsp;kt<br><b>Gross mass:</b> %3&nbsp;kt")
                 .arg(fleet_cargo_used(planned, *destination.fleet) + addedMass, 0, 'f', 2)
-                .arg(fleet_cargo_capacity(planned, *destination.fleet), 0, 'f', 2)
+                .arg(destinationHold, 0, 'f', 2)
                 .arg(fleet_gross_mass(planned, *destination.fleet) + addedMass, 0, 'f', 2));
         } else capacitySummary->setText(destination.endpoint.orbital
             ? QString("<b>Orbital housing:</b> %1 / %2 residents after transfer").arg(qulonglong(destinationAfterPeople)).arg(qulonglong(destination.housingCapacity))
@@ -596,7 +695,7 @@ void MainWindow::openCargoManifestDialog()
         if (colonists > 0 || mass(forwardMinerals) > kEpsilon)
             draftTransfers.push_back({source.endpoint, destination.endpoint, std::uint64_t(std::max<std::int64_t>(0, colonists)), forwardMinerals});
         draftFuel.reset();
-        if (fuelAvailable && std::abs(fuelDelta) > kEpsilon)
+        if (fuelAvailable && fuelDelta != 0.0)
             draftFuel = TransferFleetFuelOrder{fuelDelta > 0 ? source.fleet->id : destination.fleet->id,
                 fuelDelta > 0 ? destination.fleet->id : source.fleet->id, std::abs(fuelDelta), 0};
         const auto matchesPlan = [&] {
@@ -654,60 +753,58 @@ void MainWindow::openCargoManifestDialog()
             colonistSpin->setValue(0);
         }
         for (int index = 0; index < 3; ++index) {
-            const QSignalBlocker blockSlider(mineralControls[index].slider);
+            const QSignalBlocker blockSlider(mineralControls[index].transfer.slider);
             const QSignalBlocker blockSpin(mineralControls[index].spin);
-            mineralControls[index].slider->setValue(0);
+            mineralControls[index].transfer.slider->setValue(0);
             mineralControls[index].spin->setValue(0.0);
         }
-        refresh();
+        refresh(true);
     };
 
-    connect(colonistSlider, &QSlider::valueChanged, &dialog, [=](int value) {
+    const auto setPeopleAmount = [&](double amount) {
         const QSignalBlocker blocker(colonistSpin);
-        colonistSpin->setValue(value);
+        colonistSpin->setValue(int(std::lround(std::clamp(amount,
+            double(colonistSpin->minimum()), double(colonistSpin->maximum())))));
         refresh();
+    };
+    connect(colonistSlider, &QSlider::valueChanged, &dialog, [&](int value) {
+        setPeopleAmount(colonistTrack.amount(value));
     });
-    connect(fuelSlider, &QSlider::valueChanged, &dialog, [&](int value) { fuelSpin->setValue(double(value) / kMineralScale); });
+    const auto setFuelRequest = [&](double amount) {
+        const QSignalBlocker block(fuelSpin);
+        fuelSpin->setValue(amount);
+        refresh();
+    };
+    connect(fuelSlider, &QSlider::valueChanged, &dialog, [&](int value) {
+        setFuelRequest(fuelTrack.amount(value));
+    });
     connect(fuelSpin, &QDoubleSpinBox::valueChanged, &dialog, [&](double) { refresh(); });
     connect(receivedFuel, &QSlider::valueChanged, &dialog, [&](int value) {
-        const auto& destination = endpoints[std::size_t(destinationCombo->currentData().toInt())];
-        if (destination.fleet) fuelSpin->setValue(double(value) / kMineralScale - destination.fleet->fuel);
+        const int before = destinationFuelTrack.tick(beforeFuel);
+        if (value > before && value >= destinationFuelTrack.tick(beforeFuel + forwardFuel))
+            setFuelRequest(fuelSpin->maximum());
+        else if (value < before && value <= destinationFuelTrack.tick(beforeFuel - backFuel))
+            setFuelRequest(fuelSpin->minimum());
+        else setFuelRequest(destinationFuelTrack.amount(value) - beforeFuel);
     });
-    connect(colonistSpin, &QSpinBox::valueChanged, &dialog, [=](int value) {
-        const QSignalBlocker blocker(colonistSlider);
-        colonistSlider->setValue(value);
-        refresh();
-    });
-    for (const auto control : mineralControls) {
-        connect(control.slider, &QSlider::valueChanged, &dialog, [=](int value) {
-            const QSignalBlocker blocker(control.spin);
-            control.spin->setValue(static_cast<double>(value) / kMineralScale);
-            refresh();
-        });
-        connect(control.spin, &QDoubleSpinBox::valueChanged, &dialog, [=](double value) {
-            const QSignalBlocker blocker(control.slider);
-            control.slider->setValue(static_cast<int>(std::lround(value * kMineralScale)));
-            refresh();
-        });
-    }
-    // Signed deltas let either container return already queued cargo without
-    // editing the physical state or requiring a turn to pass.
-    connect(receivedColonists, &QSlider::valueChanged, &dialog, [=](int amount) {
-        const auto destinationIndex = destinationCombo->currentData().toInt();
-        if (destinationIndex < 0) return;
-        const auto current = endpointColonists(endpoints[static_cast<std::size_t>(destinationIndex)]);
-        const auto delta = static_cast<std::int64_t>(amount) - static_cast<std::int64_t>(current);
-        colonistSpin->setValue(static_cast<int>(std::clamp<std::int64_t>(
-            delta, colonistSpin->minimum(), colonistSpin->maximum())));
+    connect(colonistSpin, &QSpinBox::valueChanged, &dialog, [&](int) { refresh(); });
+    // The receiving tracks show post-transfer totals. Editing one requests a
+    // signed change from the effective manifest before the current draft.
+    connect(receivedColonists, &QSlider::valueChanged, &dialog, [&](int value) {
+        setPeopleAmount(destinationPeopleTrack.amount(value) - double(beforePeople));
     });
     for (int index = 0; index < 3; ++index) {
-        connect(receivedMinerals[index], &QSlider::valueChanged, &dialog, [=](int amount) {
-            const auto destinationIndex = destinationCombo->currentData().toInt();
-            if (destinationIndex < 0) return;
-            const auto before = mineralValue(
-                endpointMinerals(endpoints[static_cast<std::size_t>(destinationIndex)]), index);
-            const auto request = static_cast<double>(amount) / kMineralScale - before;
-            mineralControls[index].spin->setValue(request);
+        auto* control = &mineralControls[index];
+        connect(control->transfer.slider, &QSlider::valueChanged, &dialog, [&, control](int value) {
+            const QSignalBlocker blocker(control->spin);
+            control->spin->setValue(control->transfer.amount(value));
+            refresh();
+        });
+        connect(control->spin, &QDoubleSpinBox::valueChanged, &dialog, [&](double) { refresh(); });
+        connect(control->destination.slider, &QSlider::valueChanged, &dialog, [&, control, index](int value) {
+            const QSignalBlocker blocker(control->spin);
+            control->spin->setValue(control->destination.amount(value) - mineralValue(beforeMinerals, index));
+            refresh();
         });
     }
     connect(sourceCombo, &QComboBox::currentIndexChanged, &dialog, [=](int) {
@@ -735,7 +832,7 @@ void MainWindow::openCargoManifestDialog()
             .arg(transfer.minerals.boranium, 0, 'f', 2).arg(transfer.minerals.germanium, 0, 'f', 2));
     }
     if (draftFuel) appendPendingOrder(*draftFuel, QString("Transfer %1 mg fuel from fleet %2 to fleet %3")
-        .arg(draftFuel->amount, 0, 'f', 2).arg(draftFuel->source).arg(draftFuel->destination));
+        .arg(draftFuel->amount, 0, 'f', 1).arg(draftFuel->source).arg(draftFuel->destination));
 }
 
 } // namespace suns
