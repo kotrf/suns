@@ -30,6 +30,16 @@ std::optional<double> ship_refit_fuel_capacity(const GameState& s,const Planet& 
     next.ships.push_back({job.target,1});normalize_fleet_composition(next);
     return fleet_fuel_capacity(s,next);
 }
+std::set<FleetId> fleets_under_refit(const GameState& state)
+{
+    std::set<FleetId> result;
+    for (const auto& planet : state.planets)
+        for (const auto& item : planet.productionQueue)
+            if (item.refit && ship_refit_fuel_capacity(state, planet, *item.refit))
+                result.insert(item.refit->fleet);
+    return result;
+}
+
 bool ship_refit_available(const GameState& s,const Planet& p,const ShipRefitJob& job,std::optional<bool> shipyard) {
     const auto* a=find_ship_design(s,job.source);const auto* b=find_ship_design(s,job.target);
     const auto f=std::find_if(s.fleets.begin(),s.fleets.end(),[&](const auto& f){return f.id==job.fleet;});

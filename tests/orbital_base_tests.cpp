@@ -133,6 +133,49 @@ void ai_received_orders() {
     auto c=world();PlayerOrders deployment{1,{}};plan_orbital_bases(make_player_view(c,1),deployment,memory);
     assert(std::any_of(deployment.orders.begin(),deployment.orders.end(),[](const auto& order){const auto* b=std::get_if<OrbitalBaseOrder>(&order);return b && b->command.action==OrbitalBaseAction::Deploy;}));
 }
+void ai_builds_constructor_at_a_yard_that_fits()
+{
+    auto state = world();
+    state.fleets.clear();
+    state.stars[1].stellarClass = StarClass::Orange;
+    state.stars.push_back({3, "Shipbuilding colony", {20, 0}, StarClass::Orange});
+    state.planets[0].minerals = {4000, 4000, 4000};
+    auto colony = state.planets[0];
+    colony.id = colony.star = 3;
+    colony.name = "Shipbuilding colony";
+    colony.homeworld = false;
+    colony.population = 25'000;
+    state.planets.push_back(colony);
+    state.orbitalStations = {
+        {1, 1, 1, "Home dock", OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard}},
+        {2, 1, 3, "Shipbuilding station", OrbitalStationHullType::Starbase, {OrbitalStationModule::Shipyard}},
+    };
+    state.nextOrbitalStationId = 3;
+    state.players[0].surveyKnowledge.clear();
+    for (const auto& planet : state.planets)
+        set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
+
+    ComputerState memory;
+    PlayerOrders orders{1, {}};
+    plan_orbital_bases(make_player_view(state, 1), orders, memory);
+    assert(orders.orders.size() == 2);
+    const auto& create = std::get<CreateShipDesignOrder>(orders.orders.front());
+    const auto& queue = std::get<QueueShipDesignOrder>(orders.orders.back());
+    assert(queue.colony == colony.id && queue.pendingDesignName == create.name);
+    const auto next = TurnProcessor{}.process(state, {orders});
+    assert(next.planets[0].productionQueue.empty());
+    assert(next.planets.back().productionQueue.size() == 1);
+    const auto* design = find_ship_design(next, next.planets.back().productionQueue.front().shipDesign);
+    assert(design && ship_design_mass(*design) > kOrbitalDockShipMassKt);
+
+    state.orbitalStations.back().hull = OrbitalStationHullType::OrbitalDock;
+    state.players[0].surveyKnowledge.clear();
+    for (const auto& planet : state.planets)
+        set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
+    orders.orders.clear();
+    plan_orbital_bases(make_player_view(state, 1), orders, memory);
+    assert(orders.orders.empty());
+}
 void delayed_cancel_keeps_other_jobs() {
     auto overtaken=world(5000);deploy(overtaken);base(overtaken).orbitalBase.assemblyYears=6;
     assert(submit_orbital_base_command(overtaken,1,1,{OrbitalBaseAction::QueueShip,0,201,100}));
@@ -323,4 +366,4 @@ void retirement_delay_and_silent_handover() {
 }
 
 }
-int main(){retirement_evacuation_and_atomic_recovery();retirement_guards_and_cancellation();rebuild_uses_normal_paid_station_production();retirement_delay_and_silent_handover();assembly_and_build();shortages_cancellation_and_refit();radiation_and_life_support();delivered_transfers_and_commands();orbit_control_and_knowledge();combat_and_surface_founding();ai_received_orders();delayed_cancel_keeps_other_jobs();ai_waits_for_orbital_acknowledgement();std::cout<<"Orbital shipyard tests passed\n";}
+int main(){retirement_evacuation_and_atomic_recovery();retirement_guards_and_cancellation();rebuild_uses_normal_paid_station_production();retirement_delay_and_silent_handover();assembly_and_build();shortages_cancellation_and_refit();radiation_and_life_support();delivered_transfers_and_commands();orbit_control_and_knowledge();combat_and_surface_founding();ai_received_orders();ai_builds_constructor_at_a_yard_that_fits();delayed_cancel_keeps_other_jobs();ai_waits_for_orbital_acknowledgement();std::cout<<"Orbital shipyard tests passed\n";}

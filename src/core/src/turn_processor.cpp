@@ -315,23 +315,8 @@ std::optional<std::uint32_t> complete_production(
         || recovery_kind(item.kind) || item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
         || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense
         || item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar) return FleetId{0};
-    if (item.kind == ProductionKind::OrbitalStation) {
-        if (item.station) {
-            if (!complete_station_construction(state,planet,*item.station)) return std::nullopt;
-            return find_orbital_station_at_planet(state,planet.id)->id;
-        }
-        if (find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state,planet.id)) return std::nullopt;
-        const auto id = state.nextOrbitalStationId++;
-        state.orbitalStations.push_back({
-            id,
-            planet.owner,
-            planet.id,
-            planet.name + " Orbital Dock",
-            OrbitalStationHullType::OrbitalDock,
-            {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
-        });
-        return id;
-    }
+    if (item.kind == ProductionKind::OrbitalStation)
+        return complete_orbital_station_production(state, planet, item.station);
 
     if (item.kind != ProductionKind::ColonyShip) return std::nullopt;
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
@@ -1228,16 +1213,6 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
             return;
         }
     }
-}
-
-std::set<FleetId> fleets_under_refit(const GameState& state)
-{
-    std::set<FleetId> result;
-    for (const auto& planet : state.planets)
-        for (const auto& item : planet.productionQueue)
-            if (item.refit && ship_refit_fuel_capacity(state, planet, *item.refit))
-                result.insert(item.refit->fleet);
-    return result;
 }
 
 void generate_fleet_fuel(GameState& state, bool deployed)

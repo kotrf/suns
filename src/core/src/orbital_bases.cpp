@@ -440,7 +440,7 @@ void plan_orbital_bases(const PlayerView& view, PlayerOrders& orders, ComputerSt
     const auto* owner=find_player(s,view.player);
     if (!star || !owner || (!owner->race.radiationImmune && int(orbital_background(*star))-20>owner->race.habitableRadiation.maximum)) return;
     for (const auto& p:s.planets) if (p.owner==view.player && p.productionQueue.empty()
-        && colony_has_orbital_service(s,p.id,view.player,OrbitalStationModule::Shipyard)
+        && shipyard_can_build(s, p, design)
         && mineral_cargo_sufficient(p.minerals,ship_design_mineral_cost(design))) {
         bool queued=false;
         for (const auto& o:orders.orders) {

@@ -4,6 +4,7 @@
 #include "suns/communications.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/propulsion.hpp"
+#include "suns/ship_refit.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -37,10 +38,11 @@ double estimated_orbital_departure_fuel(const GameState& state, PlanetId colony,
 
     auto remaining = kOrbitalDockAnnualFuelMg;
     auto receivedFuel = fleet.fuel;
+    const auto refitting = fleets_under_refit(state);
     for (const auto& other : state.fleets) {
         if (other.owner != fleet.owner || !same_position(other.position, fleet.position)) continue;
         if (other.id == fleet.id) receivedFuel = other.fuel;
-        if (other.id < fleet.id)
+        if (other.id < fleet.id && !refitting.contains(other.id))
             remaining = fuel_after_change(remaining, -fuel_after_change(fleet_fuel_capacity(state, other), -other.fuel));
     }
     // Several parts of planning may ask about the same departure.

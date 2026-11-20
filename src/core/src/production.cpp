@@ -213,6 +213,23 @@ std::uint32_t colony_research_allocation(const GameState& state, const Planet& p
     return bootstrappingReceiver && output > 0 ? std::min(requested, output - 1) : requested;
 }
 
+std::optional<OrbitalStationId> complete_orbital_station_production(
+    GameState& state, const Planet& planet, const std::optional<StationConstruction>& construction)
+{
+    if (construction) {
+        if (!complete_station_construction(state, planet, *construction)) return std::nullopt;
+        return find_orbital_station_at_planet(state, planet.id)->id;
+    }
+    if (find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state, planet.id))
+        return std::nullopt;
+    const auto id = state.nextOrbitalStationId++;
+    state.orbitalStations.push_back({
+        id, planet.owner, planet.id, planet.name + " Orbital Dock", OrbitalStationHullType::OrbitalDock,
+        {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+    });
+    return id;
+}
+
 ColonyProductionResolution resolve_colony_production(const GameState& state, Planet& planet, bool hasShipyard, std::optional<bool> engineeringSupport)
 {
     ColonyProductionResolution result;

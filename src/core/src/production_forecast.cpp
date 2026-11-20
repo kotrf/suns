@@ -24,7 +24,6 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     simulated.productionQueue = queue;
     std::vector<std::size_t> origins(queue.size());
     std::iota(origins.begin(), origins.end(), 0);
-    bool hasShipyard = colony_has_orbital_service(state, planet.id, planet.owner, OrbitalStationModule::Shipyard);
     bool engineeringSupport=engineering_station_available(state,planet);
     auto simulationState = state;
     const auto exotic = known_xenocrystal(state, planet.owner, planet.id);
@@ -46,10 +45,13 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             simulated.xenocrystal.remaining -= crystals;
             simulated.xenocrystal.surface += crystals;
         }
-        const auto resolved = resolve_colony_production(simulationState, simulated, hasShipyard, engineeringSupport);
-        hasShipyard = resolved.hasShipyard;
+        const auto resolved = resolve_colony_production(simulationState, simulated,
+            colony_has_orbital_service(simulationState, simulated.id, simulated.owner, OrbitalStationModule::Shipyard),
+            engineeringSupport);
         engineeringSupport=resolved.engineeringSupport;
         for (const auto& completion : resolved.completions) {
+            if (completion.item.kind == ProductionKind::OrbitalStation
+                && !complete_orbital_station_production(simulationState, simulated, completion.item.station)) continue;
             const auto original = origins[completion.originalIndex];
             const bool automatic = queue[original].automation != ProductionAutomation::None;
             if ((!automatic && completion.finishedBatch) || (automatic && !result[original].completionTurn))

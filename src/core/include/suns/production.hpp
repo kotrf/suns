@@ -33,6 +33,9 @@ struct ColonyProductionResolution {
 // and orbital stations from the completion list.
 [[nodiscard]] ColonyProductionResolution resolve_colony_production(
     const GameState& state, Planet& planet, bool hasShipyard, std::optional<bool> engineeringSupport = std::nullopt);
+// A completed legacy queue row with no loadout builds a basic dock.
+[[nodiscard]] std::optional<OrbitalStationId> complete_orbital_station_production(
+    GameState&, const Planet&, const std::optional<StationConstruction>&);
 [[nodiscard]] bool production_batch_valid(const QueueProductionBatchOrder& order);
 // Structural racial applicability, independent of research and mineral budgets.
 [[nodiscard]] bool production_kind_applicable(PrimaryRaceTrait, ProductionKind);

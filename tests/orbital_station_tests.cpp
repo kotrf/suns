@@ -1,5 +1,8 @@
 #include "suns/game_state.hpp"
+#include "suns/campaign.hpp"
+#include "suns/communications.hpp"
 #include "suns/production.hpp"
+#include "suns/ship_refit.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/stations.hpp"
 
@@ -224,6 +227,42 @@ void dock_refuels_in_order_and_reuses_the_quota_for_explicit_commands()
     state.orbitalStations.front().hull = OrbitalStationHullType::Starbase;
     const auto advanced = TurnProcessor{}.process(state, {});
     assert(advanced.fleets[0].fuel == capacity && advanced.fleets[1].fuel == capacity);
+}
+
+void dock_budget_skips_fleets_with_a_live_refit()
+{
+    auto state = make_demo_game();
+    auto& colony = state.planets.front();
+    colony.minerals = {};
+    colony.observedConcentration = MineralCargo{};
+    auto& first = state.fleets.front();
+    first.fuel = 0;
+    first.telemetry = {};
+    auto second = first;
+    second.id = state.nextFleetId++;
+    state.fleets.push_back(second);
+    assert(estimated_orbital_departure_fuel(state, colony.id, second) == 0);
+
+    auto design = *find_ship_design(state, kScoutDesignId);
+    design.id = state.nextShipDesignId++;
+    design.name = "Refitted scout";
+    design.components.push_back(ShipComponentType::MoleSkinShield);
+    design.placements.clear();
+    state.shipDesigns.push_back(design);
+    assert(queue_ship_refit(state, 1, {colony.id, 1, kScoutDesignId, design.id}));
+    state.players.front().surveyKnowledge.clear();
+    set_survey_level(state, 1, colony.star, SurveyLevel::DeepSurvey, state.turn);
+    const auto received = make_player_view(state, 1);
+    const auto& receivedFleet = received.state.fleets.back();
+    assert(receivedFleet.id == second.id && !received.state.planets.front().productionQueue.empty());
+    assert(estimated_orbital_departure_fuel(received.state, colony.id, receivedFleet) == kOrbitalDockAnnualFuelMg);
+    assert(projected_orbital_dock_departure_fuel(received.state, {1, {}}, second.id) == kOrbitalDockAnnualFuelMg);
+    const auto next = TurnProcessor{}.process(state, {});
+    assert(!next.planets.front().productionQueue.empty() && next.planets.front().productionQueue.front().refit);
+    assert(next.fleets.front().fuel == 0 && next.fleets.back().fuel == kOrbitalDockAnnualFuelMg);
+
+    state.fleets.front().destination = Position{1, 0};
+    assert(estimated_orbital_departure_fuel(state, colony.id, second) == 0);
 }
 
 void dock_checks_dry_mass_at_admission_and_before_spending()
@@ -458,6 +497,52 @@ void production_forecast_understands_shipyard_dependency()
     assert(sequenced[1].completionTurn == state.turn + 1);
 }
 
+void production_forecast_carries_station_hulls_between_years()
+{
+    auto state = make_demo_game();
+    state.players.front().technology.levels.fill(20);
+    state.players.front().technology.researchActive = false;
+    auto& colony = state.planets.front();
+    colony.population = 75'000;
+    colony.industry = colony.mines = 0;
+    colony.minerals = {10000, 10000, 10000};
+    const ShipDesign heavy{90, 1, "Heavy cruiser", ShipHullType::Cruiser,
+        {ShipComponentType::TransGalacticDrive, ShipComponentType::TransGalacticDrive,
+            ShipComponentType::Tritanium, ShipComponentType::MoleSkinShield}};
+    assert(ship_design_valid(heavy) && ship_design_mass(heavy) == 201);
+    state.shipDesigns.push_back(heavy);
+    state.nextShipDesignId = 91;
+    const ProductionItem ship{ProductionKind::ColonyShip, ship_design_cost(heavy), heavy.id};
+    ProductionItem refit{ProductionKind::OrbitalStation, colony_output(state, colony)};
+    refit.station = StationConstruction{{OrbitalStationHullType::Starbase},
+        state.orbitalStations.front().id};
+    colony.productionQueue = {refit, ship};
+    constexpr unsigned horizon = 12;
+    const auto upgraded = forecast_production_queue(state, colony, colony.productionQueue, horizon);
+    TurnProcessor processor;
+    auto hosted = processor.process(state, {});
+    assert(hosted.orbitalStations.front().hull == OrbitalStationHullType::Starbase);
+    assert(hosted.planets.front().productionQueue.size() == 1);
+    for (unsigned year = 1; year < horizon && !hosted.planets.front().productionQueue.empty(); ++year)
+        hosted = processor.process(hosted, {});
+    assert(hosted.planets.front().productionQueue.empty() && hosted.fleets.back().design == heavy.id);
+    assert(upgraded[1].completionTurn == hosted.turn);
+
+    for (const bool explicitLoadout : {false, true}) {
+        state.orbitalStations.clear();
+        ProductionItem dock{ProductionKind::OrbitalStation, kOrbitalDockCost};
+        if (explicitLoadout) dock.station = StationConstruction{};
+        colony.productionQueue = {dock, ship};
+        const auto forecast = forecast_production_queue(state, colony, colony.productionQueue, horizon);
+        hosted = state;
+        for (unsigned year = 0; year < horizon; ++year) hosted = processor.process(hosted, {});
+        assert(forecast[0].completionTurn && hosted.orbitalStations.front().hull == OrbitalStationHullType::OrbitalDock);
+        assert(hosted.planets.front().productionQueue.size() == 1);
+        assert(hosted.planets.front().productionQueue.front().remainingCost == ship.remainingCost);
+        assert(!forecast[1].completionTurn && forecast[1].beyondForecastHorizon);
+    }
+}
+
 
 void paid_stargates_validate_technology_and_safe_transport()
 {
@@ -541,6 +626,7 @@ int main()
     station_without_refueling_module_does_not_refuel();
     dock_shares_fuel_between_departures_and_arrivals();
     dock_refuels_in_order_and_reuses_the_quota_for_explicit_commands();
+    dock_budget_skips_fleets_with_a_live_refit();
     dock_checks_dry_mass_at_admission_and_before_spending();
     shipyard_repairs_docked_fleets_once_per_year();
     repair_requires_a_friendly_shipyard_at_the_fleet_position();
@@ -549,5 +635,6 @@ int main()
     field_bays_repair_remote_fleets_in_proportion_to_equipped_ships();
     restored_mobility_is_reported_once_and_respects_communications_delay();
     production_forecast_understands_shipyard_dependency();
+    production_forecast_carries_station_hulls_between_years();
     paid_stargates_validate_technology_and_safe_transport();
 }

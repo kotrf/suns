@@ -103,9 +103,7 @@ bool transfer_mobile_base_fuel(GameState& state, PlayerId player, const Transfer
 }
 void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
 {
-    std::set<FleetId> refitting;
-    for(const auto& planet:state.planets)for(const auto& item:planet.productionQueue)
-        if(item.refit && ship_refit_fuel_capacity(state,planet,*item.refit))refitting.insert(item.refit->fleet);
+    const auto refitting = fleets_under_refit(state);
     std::vector<FleetId> bases;
     for (const auto& f : state.fleets) if (mobile_base_dock(state, f)) bases.push_back(f.id);
     std::sort(bases.begin(), bases.end());
