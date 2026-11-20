@@ -654,18 +654,18 @@ void attachRouteProgramDock(MainWindow& window)
             if (auto* model = qobject_cast<QStandardItemModel*>(sourceFleetCombo->model()))
                 model->item(index)->setFlags(Qt::NoItemFlags);
         };
-        const auto addSource = [sourceFleetCombo, &window](FleetId source) {
-            sourceFleetCombo->addItem(window.fleetSourceNameForRouteProgram(source),
+        const auto addSource = [sourceFleetCombo, &window](FleetId source, bool inOrbit) {
+            sourceFleetCombo->addItem(window.fleetSourceNameForRouteProgram(source, inOrbit),
                 static_cast<quint32>(source));
             const auto index = sourceFleetCombo->count() - 1;
             sourceFleetCombo->setItemData(index, sourceFleetCombo->itemText(index), Qt::ToolTipRole);
         };
         addHeading(window.selectedSystemFleetHeading());
-        for (const auto source : localSources) addSource(source);
+        for (const auto source : localSources) addSource(source, true);
         if (!window.routeProgramTargetsAtSelectedSystem().empty() && sources.size() > localSources.size())
             addHeading("Other fleets");
         for (const auto source : sources)
-            if (std::find(localSources.begin(), localSources.end(), source) == localSources.end()) addSource(source);
+            if (std::find(localSources.begin(), localSources.end(), source) == localSources.end()) addSource(source, false);
         sourceFleetCombo->setToolTip(window.selectedSystemFleetHeading()
             + "\nOrbiting fleets appear first. Choosing a system keeps the current source fleet.");
         if (auto* context = window.findChild<QLabel*>("fleetSystemContext"))

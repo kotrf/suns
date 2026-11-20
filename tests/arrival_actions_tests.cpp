@@ -1,7 +1,9 @@
 #include "suns/game_state.hpp"
+#include "suns/stations.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
+#include <algorithm>
 
 namespace {
 
@@ -109,7 +111,7 @@ void verify_unload_and_refuel_actions()
     refuelState.fleets.back().fuel = 10.0;
     refuelState.fleets.back().arrivalAction = suns::FleetArrivalAction{suns::FleetArrivalActionKind::Refuel, 1};
     auto refuelled = processor.process(refuelState, {});
-    assert(fleet(refuelled, 2)->fuel == capacity);
+    assert(fleet(refuelled, 2)->fuel == std::min(capacity, 10.0 + suns::kOrbitalDockAnnualFuelMg));
 }
 
 } // namespace

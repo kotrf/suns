@@ -904,7 +904,7 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
 }
 
 bool execute_arrival_action(GameState& state, Fleet& fleet,
-    std::vector<ColonyFreightDelivery>& freight)
+    std::vector<ColonyFreightDelivery>& freight, OrbitalDepotRefueling& depotFuel)
 {
     if (!fleet.arrivalAction) return false;
 
@@ -1163,13 +1163,9 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         waitForDemand();return false;
     }
     case FleetArrivalActionKind::Refuel: {
-        auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony || !colony_has_orbital_service(
-                state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot)) {
+        const auto* colony = friendly_colony_at_fleet(state, fleet);
+        if (!colony || !depotFuel.refuel(state, colony->id, fleet))
             refuel_from_outpost(state, fleet);
-            return false;
-        }
-        fleet.fuel = fleet_fuel_capacity(state, fleet);
         return false;
     }
     case FleetArrivalActionKind::Colonize: {
@@ -1259,23 +1255,20 @@ void generate_fleet_fuel(GameState& state, bool deployed)
     }
 }
 
-void refuel_fleet_at_orbital_service(GameState& state, Fleet& fleet)
-{
-    const auto* colony = friendly_colony_at_fleet(state, fleet);
-    if (colony && colony_has_orbital_service(
-            state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot))
-        fleet.fuel = fleet_fuel_capacity(state, fleet);
-}
-
-void refuel_fleets_at_orbital_services(GameState& state)
+void refuel_fleets_at_orbital_services(GameState& state, OrbitalDepotRefueling& depotFuel)
 {
     const auto refitting = fleets_under_refit(state);
+    std::vector<Fleet*> fleets;
+    fleets.reserve(state.fleets.size());
     for (auto& fleet : state.fleets) {
         // Preserve fuel already aboard while a refit can proceed. Filling the
         // old tanks could invalidate an accepted reduction in tank capacity.
-        if (refitting.contains(fleet.id)) continue;
-        refuel_fleet_at_orbital_service(state, fleet);
+        if (!refitting.contains(fleet.id)) fleets.push_back(&fleet);
     }
+    std::sort(fleets.begin(), fleets.end(), [](const auto* a, const auto* b) { return a->id < b->id; });
+    for (auto* fleet : fleets)
+        if (const auto* colony = friendly_colony_at_fleet(state, *fleet))
+            depotFuel.refuel(state, colony->id, *fleet);
 }
 
 double fleet_field_repair_rate(const GameState& state, const Fleet& fleet)
@@ -1589,7 +1582,7 @@ void queue_fleet_movement_report(
 }
 
 bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets,
-    std::vector<ColonyFreightDelivery>& freight)
+    std::vector<ColonyFreightDelivery>& freight, OrbitalDepotRefueling& depotFuel)
 {
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
     fleet.fuelStalled = false;
@@ -1620,7 +1613,7 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
             return false;
         }
         const bool transferred = transfer_fleet_through_stargate(state, fleet.owner, fleet.id,
-            action.gateSource, action.gateDestination, action.gateResonant, true);
+            action.gateSource, action.gateDestination, action.gateResonant, true, &depotFuel);
         const auto* planet = find_planet(state, transferred ? action.gateDestination : action.gateSource);
         queue_player_report(state, fleet.owner, transferred ? PlayerReportKind::StargateTransit
                 : PlayerReportKind::StargateTransitFailed, fleet.position, state.turn + 1,
@@ -1635,7 +1628,7 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
         }
         fleet.arrivalAction.reset();
     }
-    if (execute_arrival_action(state, fleet, freight)) {
+    if (execute_arrival_action(state, fleet, freight, depotFuel)) {
         queue_fleet_movement_report(state, fleet, PlayerReportKind::RouteCompleted, state.turn + 1);
         consumedFleets.push_back(fleet.id);
         return true;
@@ -1769,7 +1762,8 @@ bool resolve_fleet_target_arrival(
     GameState& state,
     Fleet& fleet,
     std::vector<FleetId>& consumedFleets,
-    std::vector<ColonyFreightDelivery>& freight)
+    std::vector<ColonyFreightDelivery>& freight,
+    OrbitalDepotRefueling& depotFuel)
 {
     if (fleet.targetFleet == 0) return false;
     auto* target = friendly_fleet(state, fleet.owner, fleet.targetFleet);
@@ -1795,7 +1789,7 @@ bool resolve_fleet_target_arrival(
         fleet.arrivalAction.reset();
     }
 
-    (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
+    (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel);
     return true;
 }
 
@@ -1933,7 +1927,8 @@ void continue_merged_fleet_route(
     std::vector<FleetId>& consumedFleets,
     std::vector<ColonyFreightDelivery>& freight,
     std::vector<FleetMovementFuel>& movementFuel,
-    RadiationExposure& exposure)
+    RadiationExposure& exposure,
+    OrbitalDepotRefueling& depotFuel)
 {
     constexpr double epsilon = 0.000001;
     if (remainingTurnFraction <= epsilon) return;
@@ -1944,7 +1939,7 @@ void continue_merged_fleet_route(
     if (routeDistance <= epsilon) {
         if (fleet.targetFleet == 0) {
             fleet.destination.reset();
-            (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
+            (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel);
         }
         return;
     }
@@ -1979,12 +1974,12 @@ void continue_merged_fleet_route(
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
         fleet.destination.reset();
-        (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
+        (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel);
     }
 }
 
 void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freight,
-    std::vector<FleetMovementFuel>& movementFuel)
+    std::vector<FleetMovementFuel>& movementFuel, OrbitalDepotRefueling& depotFuel)
 {
     constexpr double epsilon = 0.000001;
     std::vector<FleetId> consumedFleets;
@@ -2006,7 +2001,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             || !fleet->arrivalAction || (fleet->arrivalAction->kind != FleetArrivalActionKind::TransitStargate
                 && fleet->arrivalAction->kind != FleetArrivalActionKind::ScrapFleet)) continue;
         fleet->destination.reset();
-        (void)finish_fleet_arrival(state,*fleet,consumedFleets,freight);
+        (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight, depotFuel);
         skipMovement.push_back(id);
     }
     for (const auto id : fleetIds) {
@@ -2019,7 +2014,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             continue;
         }
         if (same_position(fleet->position, target->position)) {
-            resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight);
+            resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight, depotFuel);
             skipMovement.push_back(id);
         }
     }
@@ -2322,7 +2317,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         auto* fleet = fleet_by_id(state, id);
         if (!fleet || !fleet->destination || fleet_id_list_contains(consumedFleets, id)) continue;
         fleet->destination.reset();
-        (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight);
+        (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight, depotFuel);
     }
 
     for (const auto id : fleetIds) {
@@ -2341,7 +2336,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         const auto* beforeMerge = fleet_by_id(state, targetId);
         const auto exposed = std::min(exposure[id], fleet->colonists)
             + (beforeMerge ? std::min(exposure[targetId], beforeMerge->colonists) : 0);
-        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight);
+        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight, depotFuel);
         if (action.kind == FleetArrivalActionKind::MergeWithFleet
             && fleet_id_list_contains(consumedFleets, id)) exposure[targetId] = exposed;
         if (!resolved || encounter == resolvedEncounters.end()
@@ -2364,7 +2359,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             *merged,
             encounter->targetDestination,
             1.0 - encounter->timeFraction,
-            consumedFleets, freight, movementFuel, exposure);
+            consumedFleets, freight, movementFuel, exposure, depotFuel);
     }
 
     if (!consumedFleets.empty()) {
@@ -2498,7 +2493,7 @@ void refresh_projected_manifest(GameState& state, PlayerId player, FleetId id, s
 // Command phase only: share validation and receipt semantics with forecasts.
 // No movement, annual work, combat or report delivery is simulated here.
 bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& order, std::set<FleetId>& gated,
-    bool projection = false)
+    OrbitalDepotRefueling& depotFuel, bool projection = false)
 {
     bool handled = true;
     if(const auto fleet=transport_manual_override(order))release_transport_assignment(state,player,*fleet);
@@ -2539,12 +2534,7 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
             });
             if (planet == state.planets.end() || fleet == state.fleets.end()) return;
             if (!fleet_at_planet(state, *fleet, *planet)) return;
-            if (!colony_has_orbital_service(
-                    state, planet->id, player,
-                    OrbitalStationModule::RefuelingDepot)) {
-                return;
-            }
-            fleet->fuel = fleet_fuel_capacity(state, *fleet);
+            depotFuel.refuel(state, planet->id, *fleet);
         } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
             const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
                 return candidate.id == value.planet;
@@ -2648,13 +2638,15 @@ std::optional<PlannedBaseCargoTransfer> capture_base_transfer(const GameState& s
 GameState project_order_boundary(GameState projected, const PlayerOrders& pending,
     std::vector<PlannedSplitReference>* splits = nullptr,
     const detail::PlanningOrderPreview& beforeOrder = {},
-    std::vector<PlannedBaseCargoTransfer>* deferred = nullptr)
+    std::vector<PlannedBaseCargoTransfer>* deferred = nullptr,
+    OrbitalDepotRefueling* projectedDepotFuel = nullptr)
 {
     if(deferred)deferred->clear();
     for (auto& p : projected.planets)
         p.xenocrystal = known_xenocrystal(projected, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
+    OrbitalDepotRefueling depotFuel;
     CreatedDesigns created;
     const auto defer=[&](const auto& cargo) {
         auto record=capture_base_transfer(projected,pending.player,cargo,deferred!=nullptr);
@@ -2670,14 +2662,14 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
         if(!bind_created_design(order,projected,pending.player,created))continue;
         const auto nextFleet = projected.nextFleetId;
         const auto nextDesign = projected.nextShipDesignId;
-        if (apply_fleet_command_order(projected, pending.player, order, gated, true)) {
+        if (apply_fleet_command_order(projected, pending.player, order, gated, depotFuel, true)) {
             record_created_design(order,nextDesign,projected,created);
             if (splits && std::holds_alternative<SplitFleetOrder>(order) && projected.nextFleetId != nextFleet)
                 splits->push_back({index, nextFleet});
             continue;
         }
         if (const auto* gate = std::get_if<GateFleetOrder>(&order)) {
-            if (!gated.contains(gate->fleet) && preview_stargate_transfer(projected, pending.player, *gate))
+            if (!gated.contains(gate->fleet) && preview_stargate_transfer(projected, pending.player, *gate, &depotFuel))
                 gated.insert(gate->fleet);
         } else if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
             (void)preview_science_sample_transfer(projected, pending.player, *sample);
@@ -2713,6 +2705,7 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
                 apply_cargo_order(projected, pending.player, order, unusedFreight);
         }
     }
+    if (projectedDepotFuel) *projectedDepotFuel = std::move(depotFuel);
     return projected;
 }
 
@@ -2759,6 +2752,23 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
     std::vector<PlannedBaseCargoTransfer>* deferred)
 {
     return project_order_boundary(current,pending,nullptr,{},deferred);
+}
+
+std::optional<double> projected_orbital_dock_departure_fuel(
+    const GameState& received, const PlayerOrders& pending, FleetId id)
+{
+    OrbitalDepotRefueling depotFuel;
+    auto projected = project_order_boundary(received, pending, nullptr, {}, nullptr, &depotFuel);
+    const auto* fleet = friendly_fleet(projected, pending.player, id);
+    if (!fleet) return std::nullopt;
+    const auto* colony = friendly_colony_at_fleet(projected, *fleet);
+    const auto* station = colony ? find_orbital_station_at_planet(projected, colony->id) : nullptr;
+    if (!station || station->owner != fleet->owner || station->hull != OrbitalStationHullType::OrbitalDock
+        || !orbital_station_has_module(*station, OrbitalStationModule::RefuelingDepot)) return std::nullopt;
+
+    generate_fleet_fuel(projected, false);
+    refuel_fleets_at_orbital_services(projected, depotFuel);
+    return fleet->fuel;
 }
 
 GameState projected_cargo_service_state(GameState projected,const std::vector<PlannedBaseCargoTransfer>& deferred)
@@ -2899,6 +2909,7 @@ TurnResult TurnProcessor::process_with_events(
     };
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
+    OrbitalDepotRefueling depotFuel;
     for (const auto& submission : submitted_orders) {
         CreatedDesigns created;
         std::optional<detail::ProductionQueueIdentity> queueIdentity;
@@ -2960,7 +2971,7 @@ TurnResult TurnProcessor::process_with_events(
             }
             const auto allocated = next.nextFleetId;
             const auto allocatedDesign = next.nextShipDesignId;
-            if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn)) {
+            if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn, depotFuel)) {
                 record_created_design(order,allocatedDesign,next,created);
                 if (std::holds_alternative<SplitFleetOrder>(order)) {
                     const auto reference = std::find_if(splits.begin(), splits.end(), [&](const auto& split) { return split.order == index; });
@@ -2989,14 +3000,9 @@ TurnResult TurnProcessor::process_with_events(
                             }
                             return;
                         }
-                        // Gate commands move immediately, before the ordinary
-                        // pre-movement service phase. Supply this departing
-                        // fleet at its source without filling other refit ships.
-                        if (stargate_transfer_valid(next, submission.player, concreteOrder.fleet,
-                                concreteOrder.source, concreteOrder.destination, concreteOrder.resonant))
-                            refuel_fleet_at_orbital_service(next, *fleet);
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
-                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination, concreteOrder.resonant);
+                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination,
+                            concreteOrder.resonant, false, &depotFuel);
                         if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }
                         const auto target = transferred ? concreteOrder.destination : concreteOrder.source;
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
@@ -3063,11 +3069,10 @@ TurnResult TurnProcessor::process_with_events(
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
                         } else if (concreteOrder.kind == ProductionKind::ColonyShip) {
-                            if (!colony_has_orbital_service(next, planet->id, submission.player,
-                                    OrbitalStationModule::Shipyard)) return;
                             const auto design = std::find_if(next.shipDesigns.begin(), next.shipDesigns.end(),
                                 [&](const ShipDesign& candidate) {
-                                    return candidate.owner == submission.player && ship_design_can_colonize(candidate);
+                                    return !candidate.retired && candidate.owner == submission.player
+                                        && ship_design_can_colonize(candidate) && shipyard_can_build(next, *planet, candidate);
                                 });
                             if (design != next.shipDesigns.end())
                                 planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
@@ -3117,8 +3122,7 @@ TurnResult TurnProcessor::process_with_events(
                         });
                         const auto* design = resolve_ship_design_order(next, submission.player, concreteOrder);
                         if (planet == next.planets.end() || !design || design->owner != submission.player
-                            || !colony_has_orbital_service(next, planet->id, submission.player,
-                                OrbitalStationModule::Shipyard)
+                            || !shipyard_can_build(next, *planet, *design)
                             || !ship_design_valid(*design)) return;
                         planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                     } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
@@ -3183,7 +3187,7 @@ TurnResult TurnProcessor::process_with_events(
     // Admit commands against the fuel already aboard, as in the received
     // planning state. Other docked fleets still top up before movement; refit
     // fleets resume ordinary depot service after their job has completed.
-    refuel_fleets_at_orbital_services(next);
+    refuel_fleets_at_orbital_services(next, depotFuel);
 
     for(auto& planet:next.planets) decay_planet_contamination(planet);
     // Mine and queue source-bound reports before movement/combat can remove
@@ -3196,7 +3200,7 @@ TurnResult TurnProcessor::process_with_events(
     prepare_visitor_navigation(next);
     advance_unknown_objects(next);
     prepare_science_sample_recovery(next,next.turn+1);
-    advance_fleets(next, freight, movementFuel);
+    advance_fleets(next, freight, movementFuel, depotFuel);
     advance_visitors(next);
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
@@ -3226,10 +3230,9 @@ TurnResult TurnProcessor::process_with_events(
     for (const auto& [player, points] : researchByPlayer) {
         apply_research_points(next, player, points, next.turn + 1, events);
     }
-    // Fleets which reach a serviced colony finish the year with full tanks.
-    // Running this after production also activates a newly completed depot at
-    // the planning boundary, without requiring a separate Refuel order.
-    refuel_fleets_at_orbital_services(next);
+    // Arrivals use the balance left by earlier services. A newly completed
+    // depot can also serve fleets at this boundary.
+    refuel_fleets_at_orbital_services(next, depotFuel);
     // Service validation uses the post-movement world, in receipt order.
     for (const auto& transfer : baseTransfers) {
         if (transfer.commandReceiver) {

@@ -191,6 +191,11 @@ received-state output after an unseen station loss. Formats stay v118/v49/v3;
 no new serialized startup allowance is introduced. These prepared-host fixtures
 do not substitute for the actual Human/Computer campaign acceptance below.
 
+With the Mini-5 Orbital Dock mass limit, the original 324 kt fit requires an
+upgraded yard. Orbital civilizations can fit the existing Robo-Midget Miner
+from the start and build a 164 kt replacement with the same hull and engine.
+The light fit costs 103 work and 42 / 0 / 11 kt.
+
 ## Implementation stage 4: paid orbital founding (merged #286)
 
 The existing `OrbitalConstructionModule` now provides native orbital founding

@@ -37,12 +37,17 @@ bool pending_fleet_order(const Order& order, FleetId fleet)
 
 // Catalog programmes fly directly. Unlike general expansion routing, a safe
 // bypass found by navigation_leg cannot be credited without storing its stops.
-std::optional<std::uint8_t> shuttle_warp(const GameState& s, Fleet fleet, Position source, Position destination)
+std::optional<std::uint8_t> shuttle_warp(const GameState& s, Fleet fleet, const Planet& colony,
+    Position source, Position destination)
 {
     const auto capacity = fleet_fuel_capacity(s, fleet);
+    const auto* station = find_orbital_station_at_planet(s, colony.id);
+    const auto cycleBudget = station && station->hull == OrbitalStationHullType::OrbitalDock
+        ? std::min(capacity, kOrbitalDockAnnualFuelMg) : capacity;
     // Budget the heaviest possible load on every leg, without crediting source
-    // production, unloading or scooping. Received depots make a repeatable
-    // tank-funded cycle possible; the initial approach uses received fuel.
+    // production, unloading or scooping. The full cycle has to fit the tank
+    // and the annual supply at the source.
+    budget_initial_depot_service(s, fleet);
     fleet.minerals.ironium += std::max(0.0, fleet_cargo_capacity(s, fleet) - fleet_cargo_used(s, fleet));
     auto cruise = fleet_max_warp(s, fleet);
     for (const auto& stack : fleet_ship_stacks(fleet))
@@ -58,7 +63,7 @@ std::optional<std::uint8_t> shuttle_warp(const GameState& s, Fleet fleet, Positi
         const auto outbound = leg_fuel(s, fleet, destination);
         fleet.position = destination;
         if (fleet_segment_damage(s, fleet, source) > 1e-6) continue;
-        if (outbound + leg_fuel(s, fleet, source) <= capacity + 1e-6) return fleet.warp;
+        if (outbound + leg_fuel(s, fleet, source) <= cycleBudget + 1e-6) return fleet.warp;
     }
     return {};
 }
@@ -123,7 +128,7 @@ void plan_transport_lines(const PlayerView& view, ComputerTurnPlan& plan, std::s
                 const Score score{stock(*destination, cargo), distance_between(fleet.position, from->position)
                     + 2 * distance_between(from->position, to->position), source->id, destination->id, cargo, fleet.id};
                 if (best && score >= *best) continue;
-                const auto warp = shuttle_warp(s, fleet, from->position, to->position);
+                const auto warp = shuttle_warp(s, fleet, *source, from->position, to->position);
                 if (!warp) continue;
                 TransportLineSpec spec{player.lastTransportLineId + 1, 1,
                     "AI supply " + std::to_string(source->id) + " to " + std::to_string(destination->id)

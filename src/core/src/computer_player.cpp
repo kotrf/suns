@@ -53,7 +53,7 @@ const Planet* colony_at(const GameState& state, PlayerId player, Position positi
     return nullptr;
 }
 
-// Host depot service happens before orders, including active programmes.
+// Budget the host depot service before movement, including active programmes.
 // Credit only received service at the confirmed initial position, never a
 // projected future arrival. An active programme needs fresh telemetry; an
 // acknowledged idle fleet retains its established stationary-depot treatment.
@@ -61,9 +61,8 @@ void budget_initial_depot_service(const GameState& received,Fleet& fleet)
 {
     if (!fleet.telemetry.observedTurn || !same_position(fleet.position,fleet.telemetry.position)
         || (fleet.telemetry.observedTurn!=received.turn && !confirmed_idle(fleet,0))) return;
-    if (const auto* local=colony_at(received,fleet.owner,fleet.position);
-        local && colony_has_orbital_service(received,local->id,fleet.owner,OrbitalStationModule::RefuelingDepot))
-        fleet.fuel=fleet_fuel_capacity(received,fleet);
+    if (const auto* local = colony_at(received, fleet.owner, fleet.position))
+        fleet.fuel = estimated_orbital_departure_fuel(received, local->id, fleet);
 }
 
 std::optional<GateFleetOrder> gate_staging_order(
@@ -491,7 +490,7 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
     if (design.id && std::any_of(homes.begin(), homes.end(), [&](const auto* p) {
         return std::any_of(p->productionQueue.begin(), p->productionQueue.end(), [&](const auto& item) { return item.shipDesign == design.id; });
     })) return;
-    for (const auto* p : homes) if (p->productionQueue.empty() && colony_has_orbital_service(s, p->id, view.player, OrbitalStationModule::Shipyard)
+    for (const auto* p : homes) if (p->productionQueue.empty() && shipyard_can_build(s, *p, design)
         && mineral_cargo_sufficient(p->minerals, ship_design_mineral_cost(design))) {
         if (!design.id) plan.orders.orders.push_back(CreateShipDesignOrder{design.name, design.hull, design.components, design.placements});
         plan.orders.orders.push_back(QueueShipDesignOrder{p->id, design.id, design.id ? std::string{} : design.name}); break;
@@ -891,8 +890,10 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         }
         const bool yard = colony_has_orbital_service(state, colony->id, view.player, OrbitalStationModule::Shipyard);
         const ShipDesign* ship = nullptr;
-        if (yard && colony->population / 4 >= kMinimumSettlers && colonyDesign && settlers < std::min<std::size_t>(2, sites)) ship = &*colonyDesign;
-        else if (yard && scoutDesign && unexplored && scouts < scoutsWanted) ship = &*scoutDesign;
+        if (colony->population / 4 >= kMinimumSettlers && colonyDesign && settlers < std::min<std::size_t>(2, sites)
+            && shipyard_can_build(state, *colony, *colonyDesign)) ship = &*colonyDesign;
+        else if (scoutDesign && unexplored && scouts < scoutsWanted
+            && shipyard_can_build(state, *colony, *scoutDesign)) ship = &*scoutDesign;
         // Do not spend the future ship's Germanium on endless population-scaled
         // factory batches. Basic mines are mineral-free and can fund its bill.
         if (ship && !mineral_cargo_sufficient(colony->minerals, ship_design_mineral_cost(*ship))) {
@@ -1057,7 +1058,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
         }
         if (!queued && ship_design_available_to_player(view.state, view.player, design)) {
             for (const auto& p : view.state.planets) if (p.owner == view.player && p.productionQueue.empty()
-                && colony_has_orbital_service(view.state, p.id, view.player, OrbitalStationModule::Shipyard)
+                && shipyard_can_build(view.state, p, design)
                 && p.minerals.ironium >= ship_design_mineral_cost(design).ironium
                 && p.minerals.boranium >= ship_design_mineral_cost(design).boranium
                 && p.minerals.germanium >= ship_design_mineral_cost(design).germanium) {
@@ -1070,6 +1071,8 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
                     existing = std::find_if(view.state.shipDesigns.begin(), view.state.shipDesigns.end(),
                         [&](const auto& d) { return !d.retired && d.owner == view.player && d.name == design.name; });
                 }
+                if (existing != view.state.shipDesigns.end() && !shipyard_can_build(view.state, p, *existing))
+                    continue;
                 if (existing == view.state.shipDesigns.end()) {
                     plan.orders.orders.push_back(CreateShipDesignOrder{design.name, design.hull, design.components});
                     plan.orders.orders.push_back(QueueShipDesignOrder{p.id, 0, design.name});

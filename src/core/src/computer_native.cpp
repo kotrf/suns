@@ -164,6 +164,14 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
     const auto needed_rate=[&](const Planet& p) {
         return (std::ceil(double(p.nativeOrbit.population)/25000.0)+0.25)*100/support_concentration(p);
     };
+    const auto can_spare_miner = [&] {
+        return std::any_of(state.fleets.begin(), state.fleets.end(), [&](const auto& fleet) {
+            if (fleet.owner != view.player || fleet.task != FleetTask::RemoteMining || fleet.destination
+                || fleet.telemetry.observedTurn != state.turn || reserved(fleet.id)) return false;
+            const auto* local = colony_at(state, view.player, fleet.position);
+            return local && assigned_rate(*local) - mining_rate(state, fleet) >= needed_rate(*local);
+        });
+    };
     for(const auto& original:state.fleets) {
         if(original.owner!=view.player || original.outpost!=OutpostKind::None || reserved(original.id))continue;
         const bool mining=original.task==FleetTask::RemoteMining && original.telemetry.task==FleetTask::RemoteMining
@@ -210,14 +218,15 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
     for(const auto& order:plan.orders.orders)if(const auto* move=std::get_if<MoveFleetOrder>(&order))departing.insert(move->fleet);
     const ShipDesign miner{state.nextShipDesignId,view.player,"Orbital Miner Pair",ShipHullType::MiniMiner,
         {ShipComponentType::QuickJump5,ShipComponentType::RoboMiniMiner,ShipComponentType::RoboMiniMiner}};
-    const ShipDesign singleMiner{state.nextShipDesignId,view.player,"Orbital Miner",ShipHullType::MiniMiner,
-        {ShipComponentType::QuickJump5,ShipComponentType::RoboMiniMiner}};
+    const ShipDesign lightMiner{state.nextShipDesignId,view.player,"Light Orbital Miner",ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5,ShipComponentType::RoboMidgetMiner}};
     const ShipDesign scout{state.nextShipDesignId,view.player,"Orbital Surveyor",ShipHullType::StarsScout,
         {ShipComponentType::QuickJump5,ShipComponentType::RhinoScanner}};
     const ShipDesign founder{state.nextShipDesignId,view.player,"Orbital Settler",ShipHullType::ColonyShip,
         {ShipComponentType::QuickJump5,ShipComponentType::OrbitalConstructionModule}};
     const auto build=[&](const Planet& p,const ShipDesign& design,MineralCargo reserve=MineralCargo{}) {
-        if(!ship_design_valid(design) || !ship_design_available_to_player(state,view.player,design))return false;
+        if(!shipyard_can_build(state,p,design) || !ship_design_valid(design)
+            || !ship_design_available_to_player(state,view.player,design))return false;
         const auto quote=native_orbital_support_quote(state,p);auto stock=p.minerals;
         stock.ironium-=quote.mineralUnitsPaid;stock.boranium-=quote.mineralUnitsPaid;stock.germanium-=quote.mineralUnitsPaid;
         if(!quote.output)return false;
@@ -263,9 +272,10 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             // Otherwise protect exploration before growth absorbs that income.
             const auto* habitat=native_orbital_station(state,*p);
             const auto fullBill=double((native_orbital_capacity(habitat->hull)+kNativeSupportPopulationPerUnit-1)/kNativeSupportPopulationPerUnit);
-            const bool canFundLater=(assigned_rate(*p)+ship_design_remote_mining_rate(miner))*support_concentration(*p)/100>fullBill;
+            const auto& replacement = shipyard_can_build(state, *p, miner) ? miner : lightMiner;
+            const bool canFundLater=(assigned_rate(*p)+ship_design_remote_mining_rate(replacement))*support_concentration(*p)/100>fullBill;
             const auto exploration=scouts || canFundLater ? MineralCargo{} : ship_design_mineral_cost(scout);
-            if(build(*p,miner,exploration) || build(*p,singleMiner,exploration)){++miners;continue;}
+            if(build(*p,miner,exploration) || build(*p,lightMiner,exploration)){++miners;continue;}
         }
         if(!scouts && build(*p,scout)){++scouts;continue;}
         if(!founders && !shortage && !pendingMiner) {
@@ -276,7 +286,12 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
                 return owner && !*owner && dose && !dose->annualLoss && !occupied(t.star,ComputerFleetGoalKind::Colonize);
             });
             if(target) {
-                if(build(*p,founder))++founders;
+                // A new orbital colony needs a real miner before its support stock runs out.
+                if (can_spare_miner()) {
+                    if (build(*p, founder)) ++founders;
+                } else if (build(*p, miner) || build(*p, lightMiner)) {
+                    ++miners;
+                }
                 continue; // Save for the first settler before discretionary refits.
             }
         }

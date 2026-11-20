@@ -78,9 +78,23 @@ its index for Remove/Move up/Move down. Earlier cargo still changes admission.
 
 Shipyard service permits ship production and repairs docked friendly fleets by
 20 damage percentage points per year. It does not automatically repair the
-station itself. Refueling service supports dockside and arrival refueling.
-Destroying a station immediately removes both physical services. Surface cargo
-transfer remains a colony operation.
+station itself. An Orbital Dock builds ships with a dry design mass of up to
+200 kt each, including fitted components. Orders for heavier ships require a
+larger shipyard. Work already queued waits without using resources or minerals
+if the current shipyard cannot build the design.
+
+Orbital civilizations can build a light replacement miner from the start.
+The Mini-Miner with a Quick Jump 5 and Robo-Midget Miner weighs 164 kt.
+The prepaid starter fleet keeps its original fit. Reproducing that heavier
+fit requires a larger shipyard.
+
+An Orbital Dock with a Refueling Depot supplies up to 200 mg per game year,
+shared by its orbiting fleets. Explicit Refuel and direct gate orders use the
+available supply in command order. The automatic pass before departure serves
+fleets in Fleet ID order. Waypoint Refuel and the automatic pass after arrival
+draw from the same supply. Any unused quota expires at the end of the year.
+Larger stations retain full depot service. Destroying a station immediately
+removes both services. Surface cargo transfer remains a colony operation.
 
 Any hostile station blocks colonist landing and colony founding, even without
 weapons. It must be destroyed before a ground invasion; station ownership is

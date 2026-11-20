@@ -149,21 +149,10 @@ void removePendingMiningTask(PlayerOrders& pending, QStringList& descriptions, F
     }
 }
 
-MoveFleetOrder* pendingMove(PlayerOrders& pending, FleetId fleet)
-{
-    bool transportAfter = false;
-    for (auto it = pending.orders.rbegin(); it != pending.orders.rend(); ++it) {
-        transportAfter |= std::holds_alternative<SetTransportLineOrder>(*it) || std::holds_alternative<AssignTransportLineOrder>(*it);
-        if (auto* move = std::get_if<MoveFleetOrder>(&*it); move && move->fleet == fleet)
-            return transportAfter ? nullptr : move;
-    }
-    return nullptr;
-}
-
 const MoveFleetOrder* pendingMove(const PlayerOrders& pending, FleetId fleet)
 {
-    for (const auto& order : pending.orders) {
-        if (const auto* move = std::get_if<MoveFleetOrder>(&order); move && move->fleet == fleet) return move;
+    for (auto it = pending.orders.rbegin(); it != pending.orders.rend(); ++it) {
+        if (const auto* move = std::get_if<MoveFleetOrder>(&*it); move && move->fleet == fleet) return move;
     }
     return nullptr;
 }
@@ -358,18 +347,41 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
 
 QString MainWindow::selectedFleetRouteProgramEstimate() const
 {
-    if (!selectedFleet()) return "Select a fleet first.";
+    const auto* fleet = selectedFleet();
+    if (!fleet) return "Select a fleet first.";
     const auto rows = selectedFleetRouteProgramRows();
     if (rows.empty()) return "No route to estimate.";
     QStringList lines;
     lines << "<b>Nominal travel time and fuel</b>"
           << "Distance / Warp², rounded up for each leg. Uses received information and the planned route. "
              "Command delivery, fuel, refuelling, clouds and arrival actions can change actual timing.";
+    const auto& received = receivedPlayerState();
+    const auto visibleFleet = fleet_player_view(state_, *fleet);
+    const auto route = effectiveRoute(state_, pendingOrders_, visibleFleet);
+    const auto legs = route ? routeLegs(*route) : std::vector<FleetWaypoint>{};
+    const auto departureFuel = projected_orbital_dock_departure_fuel(received, pendingOrders_, fleet->id);
+    if (departureFuel) {
+        auto summary = QString("Departure fuel after dock service ≈ %1 mg. Orbital Dock shares %2 mg per year.")
+            .arg(*departureFuel, 0, 'f', 1).arg(kOrbitalDockAnnualFuelMg);
+        if (rows.front().nominalFuelCost && *departureFuel < *rows.front().nominalFuelCost)
+            summary += " The nominal first leg costs more than this departure supply.";
+        lines << summary;
+    }
     for (std::size_t index = 0; index < rows.size(); ++index) {
         const auto& row = rows[index];
         lines << QString("%1. %2 — %3 years, W%4 • Fuel %5 mg<br>%6")
             .arg(qulonglong(index + 1)).arg(row.destination.toHtmlEscaped(), row.eta)
             .arg(row.warp).arg(row.fuel, row.arrivalAction.toHtmlEscaped());
+        if (index < legs.size() && !legs[index].targetFleet) {
+            const auto* star = findStarAtPosition(received, legs[index].destination);
+            const auto* colony = star ? find_planet_at_star(received, star->id) : nullptr;
+            const auto* depot = colony ? find_orbital_station_at_planet(received, colony->id) : nullptr;
+            if (depot && depot->owner == fleet->owner && depot->hull == OrbitalStationHullType::OrbitalDock
+                && orbital_station_has_module(*depot, OrbitalStationModule::RefuelingDepot)) {
+                lines.back() += QString("<br>Orbital Dock can add up to %1 mg from its shared annual supply.")
+                    .arg(kOrbitalDockAnnualFuelMg);
+            }
+        }
     }
     lines << "Fuel is the approximate cost of each straight-line leg at its Warp, with the current received/planned ships and cargo. "
              "It assumes open space and does not predict future scooping, regeneration, fuel remaining or shortages. "
@@ -440,19 +452,21 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
         }
         QString fuel = "—";
         auto fuelTooltip = fuelNote;
+        std::optional<double> nominalFuelCost;
         if (knownFuel) {
             fuelFleet.warp = leg.warp;
             const auto cost = fleet_fuel_consumption_for_distance(planned, fuelFleet, distance);
-            if (std::isfinite(distance) && std::isfinite(cost) && leg.warp > 0 && leg.warp <= kMaxWarp)
+            if (std::isfinite(distance) && std::isfinite(cost) && leg.warp > 0 && leg.warp <= kMaxWarp) {
+                nominalFuelCost = cost;
                 fuel = QString("≈%1").arg(cost, 0, 'f', 1);
-            else {
+            } else {
                 knownFuel = false;
                 fuelUncertainty = "No nominal fuel cost is available for this leg.";
             }
         }
         if (!knownFuel) fuelTooltip += "\n" + fuelUncertainty;
         rows.push_back({destinationName, actionName(receivedPlayerState(), leg.arrivalAction), leg.warp, index == 0,
-            knownTime ? QString("≈%1").arg(qulonglong(elapsed)) : QString("—"), note, fuel, fuelTooltip});
+            knownTime ? QString("≈%1").arg(qulonglong(elapsed)) : QString("—"), note, fuel, fuelTooltip, nominalFuelCost});
         departure = destination;
         if (leg.targetFleet || leg.arrivalAction.kind != FleetArrivalActionKind::None) {
             knownTime = false;
@@ -535,16 +549,23 @@ std::vector<FleetId> MainWindow::ownedFleetsAtSelectedSystem() const
     return fleets;
 }
 
-QString MainWindow::fleetSourceNameForRouteProgram(FleetId id) const
+QString MainWindow::fleetSourceNameForRouteProgram(FleetId id, bool markProgram) const
 {
     const auto* fleet = findFleet(fleetPlanningState(), id);
     if (!fleet || unreported_orbital_ship(state_,*fleet)) return fleetTargetNameForRouteProgram(id);
-    auto name = fleetTargetNameForRouteProgram(id);
+    auto fleetName = QString::fromStdString(fleet->name);
     for (const auto& order : pendingOrders_.orders) {
         if (const auto* rename = std::get_if<RenameFleetOrder>(&order); rename && rename->fleet == id)
-            name = QString("%1 (Fleet %2)").arg(QString::fromStdString(rename->name)).arg(id);
+            fleetName = QString::fromStdString(rename->name);
     }
-    const auto location = fleetLocationName(fleet_player_view(state_, *fleet).position);
+    const auto visible = fleet_player_view(state_, *fleet);
+    if (markProgram) {
+        if (const auto route = effectiveRoute(state_, pendingOrders_, visible);
+            route && !routeIsClearIntent(visible, *route))
+            fleetName += '*';
+    }
+    const auto name = QString("%1 (Fleet %2)").arg(fleetName).arg(id);
+    const auto location = fleetLocationName(visible.position);
     const auto age = fleet_telemetry_age(state_, *fleet);
     if (const auto radar = fleet_radar_position(state_, *fleet))
         return QString("%1 — Radar: %2 • position %3 turn(s) old • uncertainty %4 ly")
@@ -1017,56 +1038,49 @@ bool MainWindow::appendRouteWaypoint(
         return false;
     }
 
-    if (const auto existing = effectiveRoute(state_, pendingOrders_, *fleet)) {
-        const auto& finalAction = existing->queuedWaypoints.empty()
-            ? existing->arrivalAction
-            : existing->queuedWaypoints.back().arrivalAction;
+    auto route = effectiveRoute(state_, pendingOrders_, *fleet);
+    if (route && !routeIsClearIntent(*fleet, *route)) {
+        const auto& finalAction = route->queuedWaypoints.empty()
+            ? route->arrivalAction
+            : route->queuedWaypoints.back().arrivalAction;
         if (terminal_arrival_action(finalAction.kind)) {
             statusBar()->showMessage("The current terminal action must be cleared before adding another waypoint", 3000);
             return false;
         }
-        if (existing->repeatOrders
-            && (terminal_arrival_action(arrivalAction.kind))) {
+        if (route->repeatOrders && terminal_arrival_action(arrivalAction.kind)) {
             statusBar()->showMessage("Disable Repeat Orders before adding a terminal action", 3000);
             return false;
         }
+        route->queuedWaypoints.push_back({destination, warp, arrivalAction, targetFleet});
+    } else {
+        route = MoveFleetOrder{fleet->id, destination, warp, arrivalAction, {}, false, targetFleet};
     }
-
-    if (auto* move = pendingMove(pendingOrders_, fleet->id)) {
-        if (routeIsClearIntent(*fleet, *move)) {
-            move->clearRoute = false;
-            move->destination = destination;
-            move->targetFleet = targetFleet;
-            move->warp = warp;
-            move->arrivalAction = arrivalAction;
-            move->queuedWaypoints.clear();
-        } else {
-            move->queuedWaypoints.push_back({destination, warp, arrivalAction, targetFleet});
-        }
-
-        for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-            if (const auto* candidate = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
-                candidate && candidate->fleet == fleet->id) {
-                pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, *candidate);
-                break;
-            }
-        }
-        rebuildSceneForOrderEdit(fleet->id);
-        statusBar()->showMessage("Waypoint appended to pending fleet program");
-        return true;
-    }
-
-    if (auto existing = effectiveRoute(state_,pendingOrders_,*fleet); existing && !routeIsClearIntent(*fleet,*existing)) {
-        // The latest sent programme remains editable while its command travels
-        // to an idle remote fleet, including an unacknowledged gate step.
-        existing->queuedWaypoints.push_back({destination,warp,arrivalAction,targetFleet});
-        appendPendingOrder(*existing,routeDescription(state_,*fleet,*existing));
-        return true;
-    }
-
-    MoveFleetOrder route{fleet->id, destination, warp, arrivalAction, {}, false, targetFleet};
-    appendPendingOrder(route, routeDescription(state_, *fleet, route));
+    const auto description = routeDescription(state_, *fleet, *route);
+    stageFleetMove(std::move(*route), description);
     return true;
+}
+
+void MainWindow::stageFleetMove(MoveFleetOrder route, const QString& description)
+{
+    const auto id = route.fleet;
+    auto& orders = pendingOrders_.orders;
+    for (std::size_t index = orders.size(); index-- > 0;) {
+        const auto& order = orders[index];
+        // Keep the route state that earlier commands relied on, including
+        // the stop that made a fleet eligible for a split.
+        if (const auto* split = std::get_if<SplitFleetOrder>(&order); split && split->source == id) break;
+        if (std::holds_alternative<SetTransportLineOrder>(order)
+            || std::holds_alternative<AssignTransportLineOrder>(order)) break;
+        if (const auto* move = std::get_if<MoveFleetOrder>(&order); move && move->fleet == id) {
+            orders[index] = std::move(route);
+            if (index < static_cast<std::size_t>(pendingDescriptions_.size()))
+                pendingDescriptions_[static_cast<int>(index)] = description;
+            rebuildSceneForOrderEdit(id);
+            statusBar()->showMessage(description);
+            return;
+        }
+    }
+    appendPendingOrder(std::move(route), description);
 }
 
 bool MainWindow::stageSelectedFleetRoute(
@@ -1082,21 +1096,8 @@ bool MainWindow::stageSelectedFleetRoute(
     if(!bound) {
         statusBar()->showMessage("Specimen recovery requires one received studied object, a fitted scanner and 5 kt of cargo capacity.",5000);return false;
     }
-    if (auto* pending = pendingMove(pendingOrders_, fleet.id)) {
-        *pending = std::move(route);
-        for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-            const auto* candidate = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
-            if (!candidate || candidate->fleet != fleet.id) continue;
-            if (index < static_cast<std::size_t>(pendingDescriptions_.size())) {
-                pendingDescriptions_[static_cast<int>(index)] =
-                    routeDescription(state_, fleet, *candidate);
-            }
-            break;
-        }
-        rebuildSceneForOrderEdit(fleet.id);
-    } else {
-        appendPendingOrder(route, routeDescription(state_, fleet, route));
-    }
+    const auto description = routeDescription(state_, fleet, route);
+    stageFleetMove(std::move(route), description);
     statusBar()->showMessage(statusMessage, 2500);
     return true;
 }
@@ -1330,19 +1331,8 @@ bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
     }
 
     route->repeatOrders = enabled;
-    if (auto* pending = pendingMove(pendingOrders_, fleet->id)) {
-        *pending = *route;
-        for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-            if (const auto* candidate = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
-                candidate && candidate->fleet == fleet->id) {
-                pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, *route);
-                break;
-            }
-        }
-        rebuildSceneForOrderEdit(fleet->id);
-    } else {
-        appendPendingOrder(*route, routeDescription(state_, *fleet, *route));
-    }
+    const auto description = routeDescription(state_, *fleet, *route);
+    stageFleetMove(std::move(*route), description);
     statusBar()->showMessage(enabled ? "Repeat Orders enabled" : "Repeat Orders disabled");
     return true;
 }
@@ -1372,18 +1362,8 @@ bool MainWindow::clearSelectedFleetRouteProgram()
     };
 
     clear.clearRoute = true;
-    for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-        if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
-            move && move->fleet == fleet->id) {
-            pendingOrders_.orders[index] = clear;
-            pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, clear);
-            rebuildSceneForOrderEdit(fleet->id);
-            statusBar()->showMessage("Fleet route program cleared for End Turn");
-            return true;
-        }
-    }
-
-    appendPendingOrder(clear, routeDescription(state_, *fleet, clear));
+    const auto description = routeDescription(state_, *fleet, clear);
+    stageFleetMove(std::move(clear), description);
     statusBar()->showMessage("Stop queued; the fleet cancels its program when the command arrives", 4000);
     return true;
 }

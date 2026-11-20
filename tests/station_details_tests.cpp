@@ -93,6 +93,7 @@ void hullsAndCells(bool capture, QWidget* parent)
         const auto hull=hullInfo.hull;
         auto station = fixture().orbitalStations.front();
         station.hull = hull;
+        station.modules.push_back(OrbitalStationModule::RefuelingDepot);
         const auto& spec = station_hull_spec(hull);
         if (hull != OrbitalStationHullType::OrbitalDock) station.components.push_back(
             hull == OrbitalStationHullType::Fortress ? ShipComponentType::InfinityStargate : ShipComponentType::JumpGate);
@@ -101,6 +102,10 @@ void hullsAndCells(bool capture, QWidget* parent)
         assert(dialog.findChild<QLabel*>("stationDetailsName")->text() == "Earth <Station>");
         assert(dialog.findChild<QLabel*>("stationDetailsName")->textFormat() == Qt::PlainText);
         assert(dialog.findChild<QLabel*>("stationDetailsSummary")->text().contains("Damage 12.5%"));
+        const auto services = dialog.findChild<QLabel*>("stationDetailsServices")->text();
+        const bool basic = hull == OrbitalStationHullType::OrbitalDock;
+        assert(services.contains("200 mg/year shared by all fleets") == basic);
+        assert(services.contains("200 kt dry mass per ship") == basic);
         assert(dialog.findChild<QGroupBox*>("stationFitGroup0")->findChildren<QFrame*>(QRegularExpression("^stationFitCell")).size() == spec.weapons);
         assert(dialog.findChild<QGroupBox*>("stationFitGroup1")->findChildren<QFrame*>(QRegularExpression("^stationFitCell")).size() == spec.defenses);
         assert(dialog.findChild<QGroupBox*>("stationFitGroup2")->findChildren<QFrame*>(QRegularExpression("^stationFitCell")).size() == spec.electronics);
@@ -161,7 +166,7 @@ int main(int argc, char** argv)
         assert(dialog->findChild<QLabel*>("stationDetailsSummary")->text().startsWith("Orbital Dock"));
         assert(equipment(dialog, 0, 0) == "Laser"); // Queued Fortress/X-Ray fit is not operational.
         assert(dialog->findChild<QLabel*>("stationDetailsServices")->text()
-            == "Shipyard / fleet repair: Fitted • Refueling depot: Not fitted");
+            == "Shipyard / fleet repair: up to 200 kt dry mass per ship • Refueling depot: Not fitted");
         assert(dialog->findChild<QLabel*>("stationDetailsKnowledge")->text().contains("turn 10"));
     });
     assert(MainWindowTestAccess::orderCount(window) == 1);

@@ -249,6 +249,11 @@ void MainWindow::installColonyWorkspace()
     buildShipButton_->setToolTip("Queue the selected ship design at this colony");
     ships->addWidget(buildShipButton_);
     builderLayout->addLayout(ships);
+    auto* shipyardLimit = new QLabel(builders);
+    shipyardLimit->setObjectName("shipyardMassLimit");
+    shipyardLimit->setWordWrap(true);
+    shipyardLimit->hide();
+    builderLayout->addWidget(shipyardLimit);
     auto* structures = new QHBoxLayout;
     structures->setSpacing(3);
     buildFactoryButton_->setText("Factory");

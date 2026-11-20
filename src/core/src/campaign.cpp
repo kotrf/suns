@@ -262,7 +262,9 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
         && (!unlock.terraforming || (owner->race.environmentBased
             && !(owner->race.radiationImmune && unlock.extraLevels[static_cast<std::size_t>(ResearchField::Weapons)] != 0)))
         && engine_access_available(owner->race, unlock.engineAccess)
-        && (!miner || ((!miner->advancedRemoteMining || owner->race.advancedRemoteMining)
+        && (!miner || ((!miner->advancedRemoteMining || owner->race.advancedRemoteMining
+                || (owner->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization
+                    && !owner->race.basicRemoteMining && unlock.component == ShipComponentType::RoboMidgetMiner))
             && (!miner->excludesBasicRemoteMining || !owner->race.basicRemoteMining)))
         && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines)
         && (!unlock.requiresSuperStealth || owner->race.hullAccess == HullAccess::SuperStealth)
@@ -274,10 +276,10 @@ bool research_unlock_available(const GameState& state, PlayerId player, const Re
 {
     if (!research_unlock_applicable(state, player, unlock)) return false;
     if (native_orbital_race(state, player) && unlock.component == ShipComponentType::BulkRadiationScreen) return true;
-    // A native economy has no surface mines. Its basic replacement miner is
-    // an explicit racial access grant, not extra Construction/Electronics levels.
+    // Orbital economies need a replacement miner that fits their first dock.
     if (native_orbital_race(state, player) && !find_player(state, player)->race.basicRemoteMining
-        && (unlock.component == ShipComponentType::RoboMiniMiner || unlock.hull == ShipHullType::MiniMiner)) return true;
+        && (unlock.component == ShipComponentType::RoboMiniMiner || unlock.component == ShipComponentType::RoboMidgetMiner
+            || unlock.hull == ShipHullType::MiniMiner)) return true;
     if (technology_level(state, player, unlock.field) < unlock.level) return false;
     for (std::size_t field = 0; field < kResearchFieldCount; ++field)
         if (technology_level(state, player, static_cast<ResearchField>(field)) < unlock.extraLevels[field])

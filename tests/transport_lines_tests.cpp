@@ -150,8 +150,11 @@ void computer_supplies_and_conserves() {
     auto freight=computer_transport_world(),control=freight;
     tick(freight,orders);tick(control);
     assert(freight.fleets[0].fuel<fleet_fuel_capacity(freight,freight.fleets[0]));
-    for(int i=0;i<12;++i){tick(freight);tick(control);assert(std::abs(ironium(freight)-ironium(control))<1e-6);}
-    assert(freight.planets[0].minerals.ironium>=800 && freight.planets[1].minerals.ironium==200);
+    const auto delivered = [&] { return freight.planets[0].minerals.ironium - control.planets[0].minerals.ironium; };
+    for(int i=0;i<40 && delivered()<800;++i){
+        tick(freight);tick(control);assert(std::abs(ironium(freight)-ironium(control))<1e-6);
+    }
+    assert(delivered()>=800 && freight.planets[1].minerals.ironium>=200);
 }
 void computer_delayed_intent_and_reservation() {
     auto s=computer_transport_world(5100);s.fleets[0].position={5100,0};

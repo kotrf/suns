@@ -85,7 +85,17 @@ FleetRouteProgram transport_line_program(const TransportLine& line) {
     return p;
 }
 std::optional<MoveFleetOrder> pending_transport_route(const GameState& host,const PlayerOrders& orders,FleetId fleet) {
-    if(std::none_of(orders.orders.begin(),orders.orders.end(),[](const auto& o){return std::holds_alternative<SetTransportLineOrder>(o) || std::holds_alternative<AssignTransportLineOrder>(o);}))return {};
+    const auto* player = find_player(host, orders.player);
+    if (std::none_of(orders.orders.begin(), orders.orders.end(), [&](const auto& order) {
+        if (const auto* assign = std::get_if<AssignTransportLineOrder>(&order))
+            return assign->fleet == fleet;
+        const auto* set = std::get_if<SetTransportLineOrder>(&order);
+        return set && player && std::any_of(player->transportLines.begin(), player->transportLines.end(),
+            [&](const auto& line) {
+                return line.spec.id == set->value.id && std::any_of(line.assignments.begin(), line.assignments.end(),
+                    [&](const auto& assignment) { return assignment.fleet == fleet; });
+            });
+    })) return {};
     auto view=make_player_view(host,orders.player);std::optional<MoveFleetOrder> result;
     const auto remember=[&](const TransportLine& line,bool stop) {
         auto snapshot=line;if(stop)snapshot.spec.active=false;const auto p=transport_line_program(snapshot);

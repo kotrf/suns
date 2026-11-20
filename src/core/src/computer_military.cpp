@@ -293,8 +293,7 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         if (!confirmed_idle(fleet, 0) || !idle(fleet) || fleet.damagePercent >= 100) continue;
         fleet.position = fleet.telemetry.position;
         const auto* local = colony_at(state, view.player, fleet.position);
-        if (local && colony_has_orbital_service(state, local->id, view.player, OrbitalStationModule::RefuelingDepot))
-            fleet.fuel = fleet_fuel_capacity(state, fleet);
+        budget_initial_depot_service(state, fleet);
         if (fleet.damagePercent > 40) {
             if (!local) (void)emit(fleet, rally->star, ComputerFleetGoalKind::Resupply, {FleetArrivalActionKind::Refuel});
             continue;
@@ -382,7 +381,7 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         const ShipDesign* design = guards < wantedGuards && guardDesign ? &*guardDesign
             : target && bombers < 1 && bombDesign ? &*bombDesign
             : target && transports < 2 && assaultDesign ? &*assaultDesign : nullptr;
-        if (!design) continue;
+        if (!design || !shipyard_can_build(state, *colony, *design)) continue;
         // Preserve the strategic mineral budget through an ordinary paid queue
         // entry. Continuous factory expansion must not starve a selected ship;
         // existing staffed mines replenish its materials while work waits.

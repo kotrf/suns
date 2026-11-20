@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
+#include "suns/stations.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
@@ -112,7 +113,7 @@ void merge_preserves_destination_id_and_all_stacks()
     assert(fleet_ship_count(*fleet) == 3);
     assert(fleet_ship_count(*fleet, kScoutDesignId) == 2);
     assert(fleet_ship_count(*fleet, kColonyShipDesignId) == 1);
-    assert(close(fleet->fuel, fleet_fuel_capacity(merged, *fleet)));
+    assert(close(fleet->fuel, state.fleets[0].fuel + state.fleets[1].fuel + kOrbitalDockAnnualFuelMg));
     assert(fleet->colonists == 300);
     assert(close(fleet->minerals.ironium, 0.3));
     assert(close(fleet->minerals.boranium, 0.3));

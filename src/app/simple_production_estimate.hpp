@@ -18,7 +18,7 @@ namespace suns {
 enum class SimpleProductionStatus {
     Approximate, AnnualRule, Nonlinear, Unavailable, NoProduction,
     MissingMinerals, MissingShipyard, EarlierUncertain, Overflow,
-    Skipped, InactiveAnnualRule, HousingTooSmall,
+    Skipped, InactiveAnnualRule, HousingTooSmall, ShipTooHeavy,
 };
 
 struct SimpleProductionEstimate {
@@ -48,8 +48,9 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
     auto radar = planet.radar;
     auto factories = std::uint64_t(planet.industry), mines = std::uint64_t(planet.mines);
     auto advancedFactories = std::uint64_t(planet.advancedFactories), advancedMines = std::uint64_t(planet.advancedMines);
-    bool stationExists = shipyardAvailable || find_orbital_station_at_planet(state, planet.id)
-        || orbital_base_at(state, planet.id);
+    const auto* station = find_orbital_station_at_planet(state, planet.id);
+    auto shipyardHull = station ? std::optional{station->hull} : std::nullopt;
+    bool stationExists = shipyardAvailable || station || orbital_base_at(state, planet.id);
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
     const auto* owner = find_player(state, planet.owner);
     for (const auto& item : queue) {
@@ -133,6 +134,8 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
             estimate.status = SimpleProductionStatus::Unavailable;
         else if (item.kind == ProductionKind::ColonyShip && !shipyardAvailable)
             estimate.status = SimpleProductionStatus::MissingShipyard;
+        else if (design && shipyardHull && !ship_fits_shipyard(*shipyardHull, *design))
+            estimate.status = SimpleProductionStatus::ShipTooHeavy;
         else if (!prefixKnown) estimate.status = SimpleProductionStatus::EarlierUncertain;
         else if (!productionPerYear) estimate.status = SimpleProductionStatus::NoProduction;
         else if (!validCost || !mineral_cargo_sufficient(availableMinerals, batchCost))
@@ -150,9 +153,11 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
                 availableMinerals.ironium -= batchCost.ironium;
                 availableMinerals.boranium -= batchCost.boranium;
                 availableMinerals.germanium -= batchCost.germanium;
-                if (item.kind == ProductionKind::OrbitalStation)
+                if (item.kind == ProductionKind::OrbitalStation) {
                     shipyardAvailable = !item.station || item.station->loadout.shipyard;
-                if (item.kind == ProductionKind::OrbitalStation) stationExists = true;
+                    shipyardHull = item.station ? item.station->loadout.hull : OrbitalStationHullType::OrbitalDock;
+                    stationExists = true;
+                }
                 if (item.kind == ProductionKind::ColonyDefense) defenses += effective;
                 if (item.kind == ProductionKind::LocalRadar) radar = std::max(radar, PlanetaryRadarLevel::Local);
                 if (item.kind == ProductionKind::PlanetaryRadar) radar = PlanetaryRadarLevel::Full;
@@ -178,6 +183,7 @@ inline const char* simple_production_estimate_reason(SimpleProductionStatus stat
     case SimpleProductionStatus::NoProduction: return "No current production remains after research and upkeep.";
     case SimpleProductionStatus::MissingMinerals: return "The received mineral budget does not cover this batch; future mining/deliveries are not predicted.";
     case SimpleProductionStatus::MissingShipyard: return "A shipyard is required.";
+    case SimpleProductionStatus::ShipTooHeavy: return "The ship design exceeds the dock’s dry mass limit.";
     case SimpleProductionStatus::EarlierUncertain: return "Earlier work has no simple completion estimate.";
     case SimpleProductionStatus::Overflow: return "Completion exceeds the supported date range.";
     case SimpleProductionStatus::Skipped: return "Currently skipped without spending work or minerals under this civilization's rules and received technology, cap, radar or station conditions.";

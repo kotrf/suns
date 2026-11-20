@@ -158,7 +158,7 @@ void refit_preserves_fuel_while_waiting_for_minerals() {
         next = TurnProcessor{}.process(next, {});
         assert(next.planets.front().productionQueue.empty());
         assert(fleet_ship_count(next.fleets.front(), target) == 1);
-        assert(std::abs(next.fleets.front().fuel - capacity) < 1e-6);
+        assert(std::abs(next.fleets.front().fuel - std::min(capacity, initialFuel + kOrbitalDockAnnualFuelMg)) < 1e-6);
 
         // Actual excess fuel must still block a smaller tank; never discard it.
         s.fleets.front().fuel = capacity + 1;

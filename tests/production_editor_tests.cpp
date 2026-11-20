@@ -77,6 +77,47 @@ struct MainWindowTestAccess {
     }
     static void queueDesign(MainWindow& w) { assert(w.buildShipButton_->isEnabled()); w.queueShipDesign(); w.refreshProductionQueue(); }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void dockMassLimit(MainWindow& w)
+    {
+        w.state_ = make_demo_game();
+        w.state_.players.front().technology.levels.fill(20);
+        ShipDesign exact{90, 1, "Dock cruiser", ShipHullType::Cruiser,
+            {ShipComponentType::TransGalacticDrive, ShipComponentType::TransGalacticDrive,
+                ShipComponentType::Tritanium}};
+        auto heavy = exact;
+        heavy.id = 91;
+        heavy.name = "Heavy cruiser";
+        heavy.components.push_back(ShipComponentType::MoleSkinShield);
+        assert(ship_design_mass(exact) == 200 && ship_design_mass(heavy) == 201);
+        w.state_.shipDesigns.push_back(exact);
+        w.state_.shipDesigns.push_back(heavy);
+        w.state_.nextShipDesignId = 92;
+        w.pendingOrders_ = {1, {}};
+        w.pendingDescriptions_.clear();
+        w.selection_.star = w.state_.planets.front().star;
+        w.rebuildScene();
+        w.refreshShipDesignChoices();
+        auto* limit = w.findChild<QLabel*>("shipyardMassLimit");
+        assert(limit);
+        w.shipDesignCombo_->setCurrentIndex(w.shipDesignCombo_->findData(heavy.id));
+        assert(!w.buildShipButton_->isEnabled() && !limit->isHidden());
+        assert(limit->text().contains("201 kt") && limit->text().contains("200 kt"));
+        w.buildShipButton_->click();
+        w.queueShipDesign();
+        assert(w.pendingOrders_.orders.empty());
+        w.shipDesignCombo_->setCurrentIndex(w.shipDesignCombo_->findData(exact.id));
+        assert(w.buildShipButton_->isEnabled() && limit->isHidden());
+        w.buildShipButton_->click();
+        w.buildShipButton_->click();
+        assert(w.pendingOrders_.orders.size() == 2);
+        assert(std::get<QueueShipDesignOrder>(w.pendingOrders_.orders.front()).design == exact.id);
+        w.state_.orbitalStations.front().hull = OrbitalStationHullType::Starbase;
+        ++w.state_.turn;
+        set_survey_level(w.state_, 1, w.state_.planets.front().star, SurveyLevel::DeepSurvey, w.state_.turn);
+        w.rebuildScene();
+        w.shipDesignCombo_->setCurrentIndex(w.shipDesignCombo_->findData(heavy.id));
+        assert(w.buildShipButton_->isEnabled() && limit->isHidden());
+    }
     static void terraformingFixture(MainWindow& w)
     {
         w.state_ = make_demo_game();
@@ -164,6 +205,13 @@ struct MainWindowTestAccess {
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    {
+        suns::MainWindow dock;
+        dock.installUiPolish();
+        dock.installProductionQueue();
+        dock.installPanelLayoutFixes();
+        suns::MainWindowTestAccess::dockMassLimit(dock);
+    }
     suns::MainWindow window;
     window.installUiPolish();
     window.installProductionQueue();

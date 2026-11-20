@@ -98,7 +98,7 @@ void paid_orders_need_normal_service_even_without_remaining_work()
         planet.nativeOrbit.reserveUnits = scenario == 0 ? 2 : 0;
         if (scenario == 2) planet.nativeOrbit.population = 0;
         planet.minerals = {100, 0, 100};
-        planet.productionQueue = {{ProductionKind::ColonyShip, 0, state.shipDesigns.front().id}};
+        planet.productionQueue = {{ProductionKind::ColonyShip, 0, test::add_light_native_miner(state)}};
         const auto paid = planet.productionQueue;
         const auto stopped = resolve_colony_production(state, planet, true);
         assert(stopped.completions.empty() && stopped.researchPoints == 0 && planet.productionQueue == paid);

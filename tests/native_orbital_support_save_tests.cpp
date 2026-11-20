@@ -25,7 +25,7 @@ void paid_manufacture_waits_for_resupply_after_host_reload()
     const auto& waiting = host.state.planets.front();
     assert(host.state.turn == 5 && waiting.productionQueue.size() == 1);
     assert(waiting.productionQueue.front().remainingCost == 0 && waiting.productionWaitingForMinerals);
-    assert(waiting.minerals.ironium == 42 && waiting.nativeOrbit.reserveUnits == 6);
+    assert(waiting.minerals.ironium == 26 && waiting.nativeOrbit.reserveUnits == 6);
     const auto paidQueue = waiting.productionQueue;
     const auto boranium = waiting.minerals.boranium;
     QTemporaryDir dir; QString error; SaveGameData loaded;
@@ -40,7 +40,7 @@ void paid_manufacture_waits_for_resupply_after_host_reload()
     const auto paused = TurnProcessor{}.process_with_events(host.state, {decoded.orders});
     const auto& p = paused.state.planets.front();
     assert(p.nativeOrbit.service == HabitatService::Reserve && p.nativeOrbit.productionAvailable == 0);
-    assert(p.nativeOrbit.reserveUnits == 4 && p.minerals.ironium == 62);
+    assert(p.nativeOrbit.reserveUnits == 4 && p.minerals.ironium == 46);
     assert(p.productionQueue == paidQueue && paused.state.fleets.size() == 2);
     const auto completed = [&](const auto& result) {
         return std::count_if(result.events.begin(), result.events.end(), [&](const auto& e) {

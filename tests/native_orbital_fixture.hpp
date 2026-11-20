@@ -74,10 +74,21 @@ inline GameState native_orbital_founding_fixture()
     state.players.front().history.clear(); record_empire_turn_statistics(state);
     return state;
 }
+inline ShipDesign light_native_miner(PlayerId owner, ShipDesignId id = 0)
+{
+    return {id, owner, "Light Orbital Miner", ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5, ShipComponentType::RoboMidgetMiner}};
+}
+inline ShipDesignId add_light_native_miner(GameState& state, PlayerId owner = 1)
+{
+    const auto id = state.nextShipDesignId++;
+    state.shipDesigns.push_back(light_native_miner(owner, id));
+    return id;
+}
 inline GameState native_miner_waiting_for_ironium_fixture()
 {
     auto state = empty_native_orbital_start();
-    auto budget = native_orbital_start_budget(); budget.minerals.ironium -= 45;
+    auto budget = native_orbital_start_budget(); budget.minerals.ironium -= 61;
     const auto started = initialize_native_orbital_start(state, 1, state.planets.front().id, budget);
     assert(started);
     state.players.front().technology.researchActive = false;
@@ -93,12 +104,13 @@ inline GameState native_miner_waiting_for_ironium_fixture()
     transport.fuel = fleet_fuel_capacity(state, transport);
     transport.telemetry = confirmed_fleet_telemetry(state, transport);
     state.fleets.push_back(transport);
+    const auto replacement = add_light_native_miner(state);
     const PlayerOrders build{1, {SetRemoteMiningOrder{started->minerFleet, false},
-        QueueShipDesignOrder{home, started->minerDesign}}};
+        QueueShipDesignOrder{home, replacement}}};
     for (unsigned year = 0; year < 4; ++year)
         state = TurnProcessor{}.process(state, year ? std::vector<PlayerOrders>{} : std::vector<PlayerOrders>{build});
     assert(state.turn == 5 && state.planets.front().productionQueue.size() == 1);
-    assert(state.planets.front().productionQueue.front().remainingCost == 0 && state.planets.front().minerals.ironium == 42);
+    assert(state.planets.front().productionQueue.front().remainingCost == 0 && state.planets.front().minerals.ironium == 26);
     return state;
 }
 inline GameState native_orbital_miner_fixture()

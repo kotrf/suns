@@ -365,7 +365,8 @@ void native_surface_rows_preserve_fixed_estimates_and_row_indices()
     auto state = test::empty_native_orbital_start();
     assert(initialize_native_orbital_start(state,1,state.planets.front().id,native_orbital_start_budget()));
     const auto& planet = state.planets.front();
-    const ProductionItem miner{ProductionKind::ColonyShip,153,state.shipDesigns.front().id};
+    const auto design = test::add_light_native_miner(state);
+    const ProductionItem miner{ProductionKind::ColonyShip,ship_design_cost(*find_ship_design(state, design)),design};
     for (const auto kind : {ProductionKind::Factory,ProductionKind::Mine,ProductionKind::AdvancedFactory,
         ProductionKind::AdvancedMine,ProductionKind::UpgradeFactory,ProductionKind::UpgradeMine,
         ProductionKind::ReconstructFactory,ProductionKind::ReconstructMine}) {
@@ -376,7 +377,7 @@ void native_surface_rows_preserve_fixed_estimates_and_row_indices()
             assert(estimates.size() == queue.size());
             assert(estimates[0].status == SimpleProductionStatus::Skipped && estimates[0].remainingWork == 0);
             assert(estimates[0].effectiveQuantity == 0 && estimates[0].skippedQuantity == 1000);
-            assert(estimates[1].status == SimpleProductionStatus::Approximate && estimates[1].completionTurn == state.turn+4);
+            assert(estimates[1].status == SimpleProductionStatus::Approximate && estimates[1].completionTurn == state.turn+3);
         }
     }
     const auto uncertain = simple_production_estimates(state,planet,

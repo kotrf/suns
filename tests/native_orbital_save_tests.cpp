@@ -331,8 +331,10 @@ void paid_start_and_replacement_survive_host_and_pbem()
     assert(loaded.state.players.front().history.front().productionOutput == 50);
     assert(ship_design_available_to_player(loaded.state, 1, loaded.state.shipDesigns.front()));
     const auto ordersPath = directory.filePath("replacement.sunsorders");
+    const auto lightMiner = test::light_native_miner(1);
     TurnOrderFileData packet{host.campaignId, state.turn, host.turnToken,
-        {1, {QueueShipDesignOrder{home, receipt->minerDesign}}}, {"Build replacement"}};
+        {1, {CreateShipDesignOrder{lightMiner.name, lightMiner.hull, lightMiner.components},
+            QueueShipDesignOrder{home, 0, lightMiner.name}}}, {"Design replacement", "Build replacement"}};
     assert(write_turn_order_file(ordersPath, packet, error)); TurnOrderFileData decoded;
     assert(read_turn_order_file(ordersPath, decoded, error));
     auto uninterrupted = state;
@@ -350,7 +352,7 @@ void paid_start_and_replacement_survive_host_and_pbem()
         state = loaded.state;
     }
     assert(state.turn == 5 && state.fleets.size() == 2 && state.planets.front().productionQueue.empty());
-    assert(same_minerals(state.planets.front().minerals, {58.0-supportPaid, 108.0-supportPaid, 90.0-supportPaid}));
+    assert(same_minerals(state.planets.front().minerals, {74.0-supportPaid, 108.0-supportPaid, 93.0-supportPaid}));
     // A rejected repeat must leave even serialized host evidence unchanged.
     assert(write_save_game_file(path, envelope(state), error));
     QFile beforeFile(path); assert(beforeFile.open(QIODevice::ReadOnly)); const auto before = beforeFile.readAll(); beforeFile.close();

@@ -14,6 +14,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStatusBar>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -97,14 +98,19 @@ void MainWindow::installSurveyProbes()
     });
     connect(build, &QPushButton::clicked, this, [this, colony] {
         const auto view = make_player_view(state_, pendingOrders_.player).state;
+        const auto* yard = find_planet(view, colony->currentData().toUInt());
         auto design = basic_survey_probe_design(pendingOrders_.player, view.nextShipDesignId);
-        if (!colony->currentData().toUInt() || !ship_design_available_to_player(view, pendingOrders_.player, design)) return;
+        if (!yard || !ship_design_available_to_player(view, pendingOrders_.player, design)) return;
         auto existing = std::find_if(view.shipDesigns.begin(), view.shipDesigns.end(), [&](const auto& d) { return !d.retired && d.owner==pendingOrders_.player && d.name == design.name; });
         for (int suffix = 2; existing != view.shipDesigns.end(); ++suffix) {
             Fleet candidate; candidate.owner = pendingOrders_.player; candidate.design = existing->id;
             if (probe_capable(view, candidate) && ship_design_available_to_player(view, pendingOrders_.player, *existing)) break;
             design.name = "Autonomous Survey Probe " + std::to_string(suffix);
             existing = std::find_if(view.shipDesigns.begin(), view.shipDesigns.end(), [&](const auto& d) { return !d.retired && d.owner==pendingOrders_.player && d.name == design.name; });
+        }
+        if (!shipyard_can_build(view, *yard, existing == view.shipDesigns.end() ? design : *existing)) {
+            statusBar()->showMessage("The selected shipyard cannot build this probe design.", 4000);
+            return;
         }
         if (existing != view.shipDesigns.end() && existing->hull == ShipHullType::SurveyProbe) {
             appendPendingOrder(QueueShipDesignOrder{colony->currentData().toUInt(), existing->id}, "Build survey probe");
