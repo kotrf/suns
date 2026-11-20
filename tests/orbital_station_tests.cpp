@@ -265,6 +265,52 @@ void dock_budget_skips_fleets_with_a_live_refit()
     assert(estimated_orbital_departure_fuel(state, colony.id, second) == 0);
 }
 
+void dock_budget_uses_fuel_after_onboard_generation()
+{
+    auto state = make_demo_game();
+    const auto colony = state.planets.front().id;
+    const auto tankerDesign = state.nextShipDesignId++;
+    state.shipDesigns.push_back({tankerDesign, 1, "Tanker", ShipHullType::SuperFuelXport,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5}});
+    auto scout = state.fleets.front();
+    scout.id = state.nextFleetId++;
+    scout.fuel = 0;
+    scout.warp = 5;
+    state.fleets.front().design = tankerDesign;
+    state.fleets.front().ships = {{tankerDesign, 1}};
+    state.fleets.push_back(scout);
+    assert(fleet_fuel_capacity(state, state.fleets.front()) == 2250);
+    assert(fleet_fuel_generation(state, state.fleets.front()) == 200);
+
+    const struct {
+        double tankerBefore, tankerAfter, scoutAfter;
+    } cases[] = {{2050, 2250, 200}, {1950, 2250, 100}, {1000, 1400, 0}};
+    for (const auto& [tankerBefore, tankerAfter, scoutAfter] : cases) {
+        state.fleets.front().fuel = tankerBefore;
+        for (auto& fleet : state.fleets) {
+            fleet.telemetry = {};
+            fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+        }
+        const auto received = make_player_view(state, 1);
+        const auto& view = received.state;
+        assert(estimated_orbital_departure_fuel(view, colony, view.fleets.back()) == scoutAfter);
+        assert(projected_orbital_dock_departure_fuel(view, {1, {}}, scout.id) == scoutAfter);
+        auto tanker = view.fleets.front();
+        assert(estimated_orbital_departure_fuel(view, colony, tanker) == tankerAfter);
+        tanker.fuel = tankerAfter;
+        assert(estimated_orbital_departure_fuel(view, colony, tanker) == tankerAfter);
+        const auto next = TurnProcessor{}.process(state, {});
+        assert(next.fleets.front().fuel == tankerAfter && next.fleets.back().fuel == scoutAfter);
+    }
+
+    state.fleets.front().fuel = 2050;
+    const Position destination{25, 0};
+    const auto underway = TurnProcessor{}.process(state, {{1, {MoveFleetOrder{scout.id, destination, 5}}}});
+    assert(same_position(underway.fleets.back().position, destination));
+    assert(std::abs(underway.fleets.back().fuel - (200.0
+        - fleet_fuel_consumption_for_distance(state, scout, 25))) < 1e-8);
+}
+
 void dock_checks_dry_mass_at_admission_and_before_spending()
 {
     auto state = make_demo_game();
@@ -627,6 +673,7 @@ int main()
     dock_shares_fuel_between_departures_and_arrivals();
     dock_refuels_in_order_and_reuses_the_quota_for_explicit_commands();
     dock_budget_skips_fleets_with_a_live_refit();
+    dock_budget_uses_fuel_after_onboard_generation();
     dock_checks_dry_mass_at_admission_and_before_spending();
     shipyard_repairs_docked_fleets_once_per_year();
     repair_requires_a_friendly_shipyard_at_the_fleet_position();

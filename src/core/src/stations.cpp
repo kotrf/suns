@@ -37,16 +37,20 @@ double estimated_orbital_departure_fuel(const GameState& state, PlanetId colony,
     if (station->hull != OrbitalStationHullType::OrbitalDock) return capacity;
 
     auto remaining = kOrbitalDockAnnualFuelMg;
-    auto receivedFuel = fleet.fuel;
+    auto departureFuel = fleet.fuel;
     const auto refitting = fleets_under_refit(state);
     for (const auto& other : state.fleets) {
-        if (other.owner != fleet.owner || !same_position(other.position, fleet.position)) continue;
-        if (other.id == fleet.id) receivedFuel = other.fuel;
-        if (other.id < fleet.id && !refitting.contains(other.id))
-            remaining = fuel_after_change(remaining, -fuel_after_change(fleet_fuel_capacity(state, other), -other.fuel));
+        if (other.id > fleet.id || other.owner != fleet.owner || !same_position(other.position, fleet.position)) continue;
+        const bool departing = other.id == fleet.id;
+        if (!departing && refitting.contains(other.id)) continue;
+        const auto tank = departing ? capacity : fleet_fuel_capacity(state, other);
+        const auto generated = other.outpost == OutpostKind::None ? fleet_fuel_generation(state, other) : 0.0;
+        const auto fuel = std::min(tank, fuel_after_change(other.fuel, generated));
+        if (departing) departureFuel = fuel;
+        else remaining = fuel_after_change(remaining, -fuel_after_change(tank, -fuel));
     }
-    // Several parts of planning may ask about the same departure.
-    return std::min(capacity, std::max(fleet.fuel, fuel_after_change(receivedFuel, remaining)));
+    // Use the received tank as the starting point when planning asks again.
+    return std::min(capacity, std::max(fleet.fuel, fuel_after_change(departureFuel, remaining)));
 }
 
 bool ship_fits_shipyard(OrbitalStationHullType hull, const ShipDesign& design)

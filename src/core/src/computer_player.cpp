@@ -168,7 +168,7 @@ std::optional<std::uint8_t> route_warp(
             needed += leg->fuel;
             position = destination;
         }
-        // Conservative: collected/generated fuel is a reserve, not advance credit.
+        // The route must fit its departure supply. Fuel gained en route is a reserve.
         if (needed <= fleet.fuel + 1e-6) return fleet.warp;
     }
     return std::nullopt;
