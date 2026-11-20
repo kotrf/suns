@@ -2,6 +2,7 @@
 #include "route_program_dock.hpp"
 #include "save_game.hpp"
 #include "suns/communications.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/reconnaissance.hpp"
 #include "native_orbital_fixture.hpp"
 
@@ -14,6 +15,7 @@
 #include <QEventLoop>
 #include <QGroupBox>
 #include <QLabel>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -23,9 +25,11 @@
 #include <QTemporaryDir>
 #include <QTextDocument>
 #include <QTimer>
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -106,6 +110,33 @@ struct MainWindowTestAccess {
         set_survey_level(w.state_, 1, 1, SurveyLevel::OrbitalSurvey, w.state_.turn);
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
+        w.rebuildScene();
+    }
+    static void installScaledTransfer(MainWindow& w)
+    {
+        installFullTransport(w, 20);
+        w.state_.planets.front().minerals = {5000, 5000, 0};
+        auto& fleet = w.state_.fleets.front();
+        fleet.minerals = {10, 0, 1};
+        fleet.telemetry = {};
+        fleet.telemetry = confirmed_fleet_telemetry(w.state_, fleet);
+        set_survey_level(w.state_, 1, 1, SurveyLevel::DeepSurvey, w.state_.turn);
+        w.rebuildScene();
+    }
+    static void installFuelPair(MainWindow& w, double receiverRoom, double donorFuel)
+    {
+        install(w);
+        auto& receiver = w.state_.fleets[0];
+        auto& donor = w.state_.fleets[1];
+        donor.ships.front().count = 2;
+        receiver.fuel = fleet_fuel_capacity(w.state_, receiver) - receiverRoom;
+        donor.fuel = donorFuel;
+        for (auto& fleet : w.state_.fleets) {
+            fleet.position = w.state_.stars.front().position;
+            fleet.position.x += 1.0;
+            fleet.telemetry = {};
+            fleet.telemetry = confirmed_fleet_telemetry(w.state_, fleet);
+        }
         w.rebuildScene();
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
@@ -323,6 +354,130 @@ static void cargo_manifest_overflow_can_be_scrolled()
     assert(suns::MainWindowTestAccess::orders(window).orders.empty());
 }
 
+static void cargo_tracks_show_full_hold_and_surface_stock()
+{
+    suns::MainWindow window;
+    suns::MainWindowTestAccess::installScaledTransfer(window);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+        auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+        auto* iron = dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0");
+        auto* boron = dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin1");
+        auto* germanium = dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin2");
+        auto* stockIron = dialog->findChild<QSlider*>("cargoDestinationMineralSlider0");
+        auto* stockBoron = dialog->findChild<QSlider*>("cargoDestinationMineralSlider1");
+        auto* stockGermanium = dialog->findChild<QSlider*>("cargoDestinationMineralSlider2");
+        const auto* ironValue = dialog->findChild<QLabel*>("cargoDestinationMineralStock0");
+        const auto* germaniumValue = dialog->findChild<QLabel*>("cargoDestinationMineralStock2");
+        const auto* transferIron = dialog->findChild<QSlider*>("cargoMineralSlider0");
+        const auto* surfaceIron = dialog->findChild<QProgressBar*>("cargoSurfaceMineralStockBar0");
+        const auto* surfaceGermanium = dialog->findChild<QProgressBar*>("cargoSurfaceMineralStockBar2");
+        assert(source && destination && iron && boron && germanium && stockIron && stockBoron && stockGermanium);
+        assert(ironValue && germaniumValue && transferIron);
+
+        germanium->setValue(-1);
+        iron->setValue(40);
+        boron->setValue(50);
+        assert(stockIron->maximum() == 10'000 && stockBoron->maximum() == 10'000);
+        assert(stockIron->value() == 5'000 && stockBoron->value() == 5'000);
+        assert(ironValue->text() == "50.00 kt" && transferIron->maximum() == 10'000);
+        assert(surfaceIron && surfaceGermanium && surfaceIron->isHidden() && surfaceGermanium->isHidden());
+
+        source->setCurrentIndex(source->findData(1));
+        destination->setCurrentIndex(destination->findData(0));
+        assert(stockIron->isEnabled() && stockGermanium->isEnabled());
+        assert(stockIron->value() == 0 && stockIron->maximum() > 0 && stockGermanium->maximum() > 0);
+        assert(ironValue->text() == "5000.00 kt" && transferIron->maximum() == 10'000);
+        assert(surfaceIron->isVisible() && surfaceIron->value() == surfaceIron->maximum());
+        assert(surfaceGermanium->isVisible() && surfaceGermanium->value() == 0 && germaniumValue->text() == "0.00 kt");
+        stockIron->triggerAction(QSlider::SliderToMaximum);
+        stockGermanium->triggerAction(QSlider::SliderToMaximum);
+        assert(iron->value() == 10 && germanium->value() == 1);
+        assert(surfaceIron->value() == surfaceIron->maximum() && ironValue->text() == "5010.00 kt");
+        assert(surfaceGermanium->value() == surfaceGermanium->maximum() && germaniumValue->text() == "1.00 kt");
+        stockIron->setValue(int(std::lround(-stockIron->maximum() / iron->maximum())));
+        assert(iron->value() == -1 && ironValue->text() == "4999.00 kt");
+        assert(surfaceIron->value() < surfaceIron->maximum() && transferIron->maximum() == 10'000);
+        stockIron->triggerAction(QSlider::SliderToMaximum);
+        auto* apply = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        assert(apply->isEnabled());
+        apply->click();
+    });
+    window.openCargoManifestDialog();
+    const auto& orders = suns::MainWindowTestAccess::orders(window);
+    const auto& state = suns::MainWindowTestAccess::state(window);
+    assert(orders.orders.size() == 1);
+    const auto& transfer = std::get<suns::TransferCargoOrder>(orders.orders.front());
+    assert(transfer.source.fleet == state.fleets.front().id && transfer.destination.planet == state.planets.front().id);
+    assert(transfer.minerals.ironium == 10 && transfer.minerals.germanium == 1);
+    const auto planned = suns::projected_cargo_order_state(state, orders);
+    assert(planned.planets.front().minerals.ironium == 5010 && planned.planets.front().minerals.germanium == 1);
+    const auto resolved = suns::TurnProcessor{}.process(state, {orders});
+    assert(resolved.fleets.front().minerals.ironium == 0 && resolved.fleets.front().minerals.germanium == 0);
+}
+
+static void cargo_fuel_preserves_exact_limits()
+{
+    enum class Input { Exact, Amount, Stock };
+    struct Case { Input input; bool forward; double room; double donor; double visibleLimit; std::optional<double> request{}; };
+    const Case cases[]{{Input::Exact, false, 1.086, 20.0, 1.09}, {Input::Amount, true, 1.04, 20.0, 1.04},
+        {Input::Stock, false, 2.0, 0.034, 0.04}, {Input::Stock, true, 0.034, 20.0, 0.04},
+        {Input::Exact, true, 399.94, 0.14, 0.14, 0.04}, {Input::Exact, false, 2.0, 0.034, 0.04, 0.03}};
+    suns::MainWindow window;
+    for (const auto& test : cases) {
+        suns::MainWindowTestAccess::installFuelPair(window, test.room, test.donor);
+        const auto& state = suns::MainWindowTestAccess::state(window);
+        const auto& receiver = state.fleets[0];
+        const auto& donor = state.fleets[1];
+        const double receiverTank = suns::fleet_fuel_capacity(state, receiver);
+        const double donorTank = suns::fleet_fuel_capacity(state, donor);
+        const double sent = test.request.value_or(std::min(test.room, test.donor));
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            assert(dialog);
+            auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+            auto* exact = dialog->findChild<QDoubleSpinBox*>("cargoFuelSpin");
+            auto* amount = dialog->findChild<QSlider*>("cargoFuelSlider");
+            auto* stock = dialog->findChild<QSlider*>("cargoDestinationFuelSlider");
+            const auto* stockValue = dialog->findChild<QLabel*>("cargoDestinationFuelStock");
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            assert(source && exact && amount && stock && stockValue && buttons);
+            if (test.forward) source->setCurrentIndex(source->findData(1));
+            const double sourceTank = test.forward ? donorTank : receiverTank;
+            const double destinationTank = test.forward ? receiverTank : donorTank;
+            assert(exact->isEnabled() && stock->isEnabled() && exact->decimals() == 2);
+            assert(amount->minimum() == -std::lround(sourceTank * 100) && amount->maximum() == std::lround(destinationTank * 100));
+            assert(std::abs((test.forward ? exact->maximum() : -exact->minimum()) - test.visibleLimit) < 1e-9);
+            if (test.input == Input::Exact) exact->setValue((test.forward ? 1 : -1) * test.request.value_or(test.visibleLimit));
+            else if (test.input == Input::Amount) amount->setValue(test.forward ? amount->maximum() : amount->minimum());
+            else stock->setValue(test.forward ? stock->maximum() : stock->minimum());
+            const double after = test.forward ? receiver.fuel + sent : donor.fuel - sent;
+            assert(stockValue->text() == QString("%1 mg").arg(after, 0, 'f', 2));
+            assert(std::abs(double(stock->value()) / stock->maximum() - after / destinationTank) < 1e-5);
+            auto* apply = buttons->button(QDialogButtonBox::Ok);
+            assert(apply->isEnabled());
+            apply->click();
+        });
+        window.openCargoManifestDialog();
+        const auto& orders = suns::MainWindowTestAccess::orders(window);
+        assert(orders.orders.size() == 1);
+        const auto& fuel = std::get<suns::TransferFleetFuelOrder>(orders.orders.front());
+        assert(fuel.source == donor.id && fuel.destination == receiver.id && std::abs(fuel.amount - sent) < 1e-9);
+        const auto projected = suns::projected_cargo_order_state(state, orders);
+        assert(std::abs(projected.fleets[0].fuel - (receiver.fuel + sent)) < 1e-9);
+        assert(std::abs(projected.fleets[1].fuel - (donor.fuel - sent)) < 1e-9);
+        const auto resolved = suns::TurnProcessor{}.process(state, {orders});
+        assert(std::abs(resolved.fleets[0].fuel - projected.fleets[0].fuel) < 1e-9);
+        assert(std::abs(resolved.fleets[1].fuel - projected.fleets[1].fuel) < 1e-9);
+        if (test.request == 0.04) {
+            assert(suns::fuel_in_complete_containers(resolved.fleets[0].fuel) == 0.1);
+            assert(suns::fuel_in_complete_containers(resolved.fleets[1].fuel) == 0.1);
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
@@ -420,8 +575,9 @@ int main(int argc, char** argv)
         auto* iron = dialog->findChild<QSlider*>("cargoMineralSlider0");
         auto* boron = dialog->findChild<QSlider*>("cargoMineralSlider1");
         auto* exactIron = dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0");
+        auto* exactBoron = dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin1");
         auto* buttons = dialog->findChild<QDialogButtonBox*>();
-        assert(source && destination && people && exactPeople && iron && boron && exactIron && buttons);
+        assert(source && destination && people && exactPeople && iron && boron && exactIron && exactBoron && buttons);
         const auto distinct = [&] {
             assert(destination->findData(source->currentData()) == -1);
             assert(destination->currentData() != source->currentData());
@@ -436,20 +592,20 @@ int main(int argc, char** argv)
         assert(dialog->findChild<QGroupBox*>("cargoSourceContainer"));
         assert(dialog->findChild<QGroupBox*>("cargoDestinationContainer"));
         const auto* destinationPeople = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
-        assert(destinationPeople && destinationPeople->value() == 100);
-        assert(people->maximum() == 300); // 5 kt hold, 2 kt already aboard
-        assert(iron->maximum() == 300 && boron->maximum() == 300);
+        assert(destinationPeople && destinationPeople->value() == 100 && destinationPeople->maximum() == 500);
+        assert(people->maximum() == 500 && exactPeople->maximum() == 300); // 2 kt already aboard
+        assert(iron->maximum() == 500 && boron->maximum() == 500);
         boron->setValue(boron->maximum());
-        assert(boron->value() == 25 && boron->maximum() == 300); // stock limits handle, not scale
+        assert(boron->value() == 25 && boron->maximum() == 500);
         boron->setValue(0);
         iron->setValue(iron->maximum());
-        assert(exactIron->value() == 3 && people->maximum() == 0 && boron->maximum() == 0);
+        assert(exactIron->value() == 3 && exactPeople->maximum() == 0 && exactBoron->maximum() == 0);
         exactIron->setValue(1);
-        assert(people->maximum() == 200);
+        assert(people->maximum() == 500 && exactPeople->maximum() == 200);
         people->setValue(people->maximum());
-        assert(exactPeople->value() == 200 && boron->maximum() == 0);
+        assert(people->value() == 200 && exactPeople->value() == 200 && exactBoron->maximum() == 0);
         exactPeople->setValue(100);
-        assert(iron->maximum() == 200 && boron->maximum() == 100);
+        assert(iron->maximum() == 500 && boron->maximum() == 500 && exactIron->maximum() == 2);
 
         // Selecting the old destination as source rebuilds the destination list.
         source->setCurrentIndex(source->findData(1));
@@ -512,7 +668,8 @@ int main(int argc, char** argv)
         auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
         auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
         assert(source->currentData().toInt() == 0 && destination->currentData().toInt() == 1);
-        assert(people->maximum() == 100 && iron->maximum() == 100);
+        assert(people->maximum() == 500 && iron->maximum() == 500);
+        assert(dialog->findChild<QSpinBox*>("cargoColonistSpin")->maximum() == 100);
         const auto* destinationPeople = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
         const auto* surfaceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
         const auto* manifestAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
@@ -538,6 +695,8 @@ int main(int argc, char** argv)
 
     cargo_summary_stays_in_place(app.arguments().contains("--capture"));
     cargo_manifest_overflow_can_be_scrolled();
+    cargo_tracks_show_full_hold_and_surface_stock();
+    cargo_fuel_preserves_exact_limits();
 
     // Full-hold scenario: exactly 2500 colonists must remain visibly aboard
     // when the transfer dialog opens for the second time, without growing

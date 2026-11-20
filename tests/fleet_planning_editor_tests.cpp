@@ -134,7 +134,7 @@ static void rename(MainWindow& window, const QString& name)
     QTimer::singleShot(0, [name] { auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue(name); dialog->accept(); });
     window.openRenameFleetDialog();
 }
-static void fuel(MainWindow& window, double amount, bool accept = true, bool receivingSlider = false, bool capture = false)
+static void fuel(MainWindow& window, FleetId receiver, double amount, bool accept = true, bool receivingSlider = false, bool capture = false)
 {
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->objectName() == "cargoTransferDialog");
@@ -142,8 +142,14 @@ static void fuel(MainWindow& window, double amount, bool accept = true, bool rec
         auto* to = dialog->findChild<QComboBox*>("cargoDestinationCombo");
         from->setCurrentIndex(named(from, "Fuel truck")); to->setCurrentIndex(named(to, "Scout"));
         auto* spin = dialog->findChild<QDoubleSpinBox*>("cargoFuelSpin"); assert(spin && spin->isEnabled());
-        if (receivingSlider) dialog->findChild<QSlider*>("cargoDestinationFuelSlider")->setValue(int(amount * 100));
-        else spin->setValue(amount);
+        if (receivingSlider) {
+            const auto& planned = MainWindowTestAccess::plan(window);
+            const auto capacity = fleet_fuel_capacity(planned, fleet(planned, receiver));
+            auto* stock = dialog->findChild<QSlider*>("cargoDestinationFuelSlider");
+            assert(stock && stock->minimum() == 0 && capacity > 0.0);
+            stock->setValue(int(std::lround(amount / capacity * stock->maximum())));
+            assert(near(spin->value(), amount - fleet(planned, receiver).fuel));
+        } else spin->setValue(amount);
         auto* buttons = dialog->findChild<QDialogButtonBox*>(); assert(buttons->button(QDialogButtonBox::Ok)->isEnabled());
         assert(dialog->findChild<QLabel*>("cargoDestinationAfterLabel")->text().contains("fuel"));
         if (capture) dialog->grab().save("/tmp/suns-fleet-fuel-transfer.png");
@@ -183,15 +189,15 @@ int main(int argc, char** argv)
         assert(action->text() == (action->data().toUInt() == child ? "Scout" : "Fuel truck"));
     }
     assert(choices == 2); menu->close(); app.processEvents();
-    fuel(window, 40, true, false, app.arguments().contains("--capture"));
+    fuel(window, child, 40, true, false, app.arguments().contains("--capture"));
     assert(near(fleet(MainWindowTestAccess::plan(window), 1).fuel, 20));
     assert(near(fleet(MainWindowTestAccess::plan(window), child).fuel, 100));
     assert(near(fleet(MainWindowTestAccess::raw(window), 1).fuel, 120));
-    fuel(window, 60, true, true); // Return the planned 40 mg through the receiving slider.
+    fuel(window, child, 60, true, true); // Return the planned 40 mg through the receiving slider.
     assert(near(fleet(MainWindowTestAccess::plan(window), child).fuel, 60));
     const auto count = MainWindowTestAccess::orders(window).orders.size();
-    fuel(window, 40, false); assert(MainWindowTestAccess::orders(window).orders.size() == count);
-    fuel(window, 40);
+    fuel(window, child, 40, false); assert(MainWindowTestAccess::orders(window).orders.size() == count);
+    fuel(window, child, 40);
     assert(window.selectFleetForRouteProgram(child));
     assert(window.appendCoordinateWaypoint({25, 0}, 5, {}));
     assert(!window.selectedFleetRouteProgramRows().empty());
@@ -236,7 +242,7 @@ int main(int argc, char** argv)
     assert(fleet(MainWindowTestAccess::raw(window), 2).fuel > 0);
 
     MainWindowTestAccess::deepSpaceSetup(window);
-    fuel(window, 40);
+    fuel(window, 2, 40);
     assert(near(fleet(MainWindowTestAccess::plan(window), 1).fuel, 160));
     assert(near(fleet(MainWindowTestAccess::plan(window), 2).fuel, 40));
 
