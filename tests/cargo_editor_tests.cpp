@@ -2,6 +2,7 @@
 #include "route_program_dock.hpp"
 #include "save_game.hpp"
 #include "suns/communications.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/reconnaissance.hpp"
 #include "native_orbital_fixture.hpp"
 
@@ -14,6 +15,7 @@
 #include <QEventLoop>
 #include <QGroupBox>
 #include <QLabel>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -27,6 +29,7 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -369,6 +372,8 @@ static void cargo_tracks_show_full_hold_and_surface_stock()
         const auto* ironValue = dialog->findChild<QLabel*>("cargoDestinationMineralStock0");
         const auto* germaniumValue = dialog->findChild<QLabel*>("cargoDestinationMineralStock2");
         const auto* transferIron = dialog->findChild<QSlider*>("cargoMineralSlider0");
+        const auto* surfaceIron = dialog->findChild<QProgressBar*>("cargoSurfaceMineralStockBar0");
+        const auto* surfaceGermanium = dialog->findChild<QProgressBar*>("cargoSurfaceMineralStockBar2");
         assert(source && destination && iron && boron && germanium && stockIron && stockBoron && stockGermanium);
         assert(ironValue && germaniumValue && transferIron);
 
@@ -378,31 +383,48 @@ static void cargo_tracks_show_full_hold_and_surface_stock()
         assert(stockIron->maximum() == 10'000 && stockBoron->maximum() == 10'000);
         assert(stockIron->value() == 5'000 && stockBoron->value() == 5'000);
         assert(ironValue->text() == "50.00 kt" && transferIron->maximum() == 10'000);
+        assert(surfaceIron && surfaceGermanium && surfaceIron->isHidden() && surfaceGermanium->isHidden());
 
         source->setCurrentIndex(source->findData(1));
         destination->setCurrentIndex(destination->findData(0));
-        assert(stockIron->maximum() == 500'000 && stockIron->value() == 500'000);
+        assert(stockIron->isEnabled() && stockGermanium->isEnabled());
+        assert(stockIron->value() == 0 && stockIron->maximum() > 0 && stockGermanium->maximum() > 0);
         assert(ironValue->text() == "5000.00 kt" && transferIron->maximum() == 10'000);
-        assert(stockGermanium->value() == 0 && germaniumValue->text() == "0.00 kt");
-        iron->setValue(10);
-        germanium->setValue(1);
-        assert(stockIron->value() == stockIron->maximum() && ironValue->text() == "5010.00 kt");
-        assert(stockGermanium->value() == stockGermanium->maximum() && germaniumValue->text() == "1.00 kt");
-        stockIron->setValue(499'900);
+        assert(surfaceIron->isVisible() && surfaceIron->value() == surfaceIron->maximum());
+        assert(surfaceGermanium->isVisible() && surfaceGermanium->value() == 0 && germaniumValue->text() == "0.00 kt");
+        stockIron->triggerAction(QSlider::SliderToMaximum);
+        stockGermanium->triggerAction(QSlider::SliderToMaximum);
+        assert(iron->value() == 10 && germanium->value() == 1);
+        assert(surfaceIron->value() == surfaceIron->maximum() && ironValue->text() == "5010.00 kt");
+        assert(surfaceGermanium->value() == surfaceGermanium->maximum() && germaniumValue->text() == "1.00 kt");
+        stockIron->setValue(int(std::lround(-stockIron->maximum() / iron->maximum())));
         assert(iron->value() == -1 && ironValue->text() == "4999.00 kt");
-        assert(stockIron->maximum() == 500'000 && transferIron->maximum() == 10'000);
-        dialog->reject();
+        assert(surfaceIron->value() < surfaceIron->maximum() && transferIron->maximum() == 10'000);
+        stockIron->triggerAction(QSlider::SliderToMaximum);
+        auto* apply = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        assert(apply->isEnabled());
+        apply->click();
     });
     window.openCargoManifestDialog();
-    assert(suns::MainWindowTestAccess::orders(window).orders.empty());
+    const auto& orders = suns::MainWindowTestAccess::orders(window);
+    const auto& state = suns::MainWindowTestAccess::state(window);
+    assert(orders.orders.size() == 1);
+    const auto& transfer = std::get<suns::TransferCargoOrder>(orders.orders.front());
+    assert(transfer.source.fleet == state.fleets.front().id && transfer.destination.planet == state.planets.front().id);
+    assert(transfer.minerals.ironium == 10 && transfer.minerals.germanium == 1);
+    const auto planned = suns::projected_cargo_order_state(state, orders);
+    assert(planned.planets.front().minerals.ironium == 5010 && planned.planets.front().minerals.germanium == 1);
+    const auto resolved = suns::TurnProcessor{}.process(state, {orders});
+    assert(resolved.fleets.front().minerals.ironium == 0 && resolved.fleets.front().minerals.germanium == 0);
 }
 
 static void cargo_fuel_preserves_exact_limits()
 {
     enum class Input { Exact, Amount, Stock };
-    struct Case { Input input; bool forward; double room; double donor; };
-    const Case cases[]{{Input::Exact, false, 1.086, 20.0}, {Input::Amount, true, 1.04, 20.0},
-        {Input::Stock, false, 2.0, 0.034}, {Input::Stock, true, 0.034, 20.0}};
+    struct Case { Input input; bool forward; double room; double donor; double visibleLimit; std::optional<double> request{}; };
+    const Case cases[]{{Input::Exact, false, 1.086, 20.0, 1.09}, {Input::Amount, true, 1.04, 20.0, 1.04},
+        {Input::Stock, false, 2.0, 0.034, 0.04}, {Input::Stock, true, 0.034, 20.0, 0.04},
+        {Input::Exact, true, 399.94, 0.14, 0.14, 0.04}, {Input::Exact, false, 2.0, 0.034, 0.04, 0.03}};
     suns::MainWindow window;
     for (const auto& test : cases) {
         suns::MainWindowTestAccess::installFuelPair(window, test.room, test.donor);
@@ -411,7 +433,7 @@ static void cargo_fuel_preserves_exact_limits()
         const auto& donor = state.fleets[1];
         const double receiverTank = suns::fleet_fuel_capacity(state, receiver);
         const double donorTank = suns::fleet_fuel_capacity(state, donor);
-        const double sent = std::min(test.room, test.donor);
+        const double sent = test.request.value_or(std::min(test.room, test.donor));
         QTimer::singleShot(0, [&] {
             auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
             assert(dialog);
@@ -425,15 +447,14 @@ static void cargo_fuel_preserves_exact_limits()
             if (test.forward) source->setCurrentIndex(source->findData(1));
             const double sourceTank = test.forward ? donorTank : receiverTank;
             const double destinationTank = test.forward ? receiverTank : donorTank;
-            assert(exact->isEnabled() && stock->isEnabled() && exact->decimals() == 1);
-            assert(amount->minimum() == -std::lround(sourceTank * 10) && amount->maximum() == std::lround(destinationTank * 10));
-            const double visibleLimit = std::max(0.1, std::round(sent * 10) / 10);
-            assert(std::abs((test.forward ? exact->maximum() : -exact->minimum()) - visibleLimit) < 1e-9);
-            if (test.input == Input::Exact) exact->setValue(test.forward ? visibleLimit : -visibleLimit);
+            assert(exact->isEnabled() && stock->isEnabled() && exact->decimals() == 2);
+            assert(amount->minimum() == -std::lround(sourceTank * 100) && amount->maximum() == std::lround(destinationTank * 100));
+            assert(std::abs((test.forward ? exact->maximum() : -exact->minimum()) - test.visibleLimit) < 1e-9);
+            if (test.input == Input::Exact) exact->setValue((test.forward ? 1 : -1) * test.request.value_or(test.visibleLimit));
             else if (test.input == Input::Amount) amount->setValue(test.forward ? amount->maximum() : amount->minimum());
             else stock->setValue(test.forward ? stock->maximum() : stock->minimum());
             const double after = test.forward ? receiver.fuel + sent : donor.fuel - sent;
-            assert(stockValue->text() == QString("%1 mg").arg(after, 0, 'f', 1));
+            assert(stockValue->text() == QString("%1 mg").arg(after, 0, 'f', 2));
             assert(std::abs(double(stock->value()) / stock->maximum() - after / destinationTank) < 1e-5);
             auto* apply = buttons->button(QDialogButtonBox::Ok);
             assert(apply->isEnabled());
@@ -450,6 +471,10 @@ static void cargo_fuel_preserves_exact_limits()
         const auto resolved = suns::TurnProcessor{}.process(state, {orders});
         assert(std::abs(resolved.fleets[0].fuel - projected.fleets[0].fuel) < 1e-9);
         assert(std::abs(resolved.fleets[1].fuel - projected.fleets[1].fuel) < 1e-9);
+        if (test.request == 0.04) {
+            assert(suns::fuel_in_complete_containers(resolved.fleets[0].fuel) == 0.1);
+            assert(suns::fuel_in_complete_containers(resolved.fleets[1].fuel) == 0.1);
+        }
     }
 }
 

@@ -52,21 +52,22 @@ merging. See [Moving fleet targets](moving-fleet-targets.md).
 
 The player-facing **Transfer cargo** dialog builds on those rules with explicit source and destination endpoints. At a selected system it lists the planetary surface and every co-located friendly fleet. An enemy colony is destination-only and is highlighted as such. The source is excluded from the destination list. A single atomic order may move Colonists, Ironium, Boranium and Germanium planet → fleet, fleet → planet or fleet → fleet. Sliders and exact numeric fields show the source remainder, destination result, shared hold usage and gross mass live. The cargo amount sliders use the full ship hold in each direction. They use the sending ship's hold when delivering to a surface. Supply and remaining shared capacity limit how far a handle can move, and the exact fields enforce the same limit. Transfer cargo replaces the separate Load to capacity and Unload colonists buttons. Peaceful population transfer requires a friendly colony, and loading from one leaves at least one colonist behind except during a committed [radical transformation](radical-transformation.md). Sheltered residents may evacuate completely; returning residents are limited to the places paid at commitment. Unloading population onto an enemy colony starts a ground invasion; minerals cannot be included in that atomic invasion order. Minerals may be deposited on or collected from an uncolonized surface stockpile.
 
-The destination sliders show projected stock with the actual amounts beside
-them. A fleet's bars use its full shared hold capacity, with colonists counted
-at 100 per kt. A surface bar uses the amount of that cargo type before the
+Fleet destination sliders show projected stock on the full shared hold scale,
+with colonists counted at 100 per kt. The numbers beside them show the actual
+amounts. A surface stock bar uses the amount of that cargo type before the
 current transfer as 100%, including earlier accepted transfers. Delivery above
 that baseline keeps the bar full and increases the amount shown. An initially
-empty surface stock goes from empty to full on delivery. Enter the quantity in
-the left column for deliveries above the surface baseline.
+empty surface stock goes from empty to full on delivery. The right-hand slider
+under a surface stock bar edits the signed transfer within its available range.
 
 Fuel sliders use the full tank capacity. The Cargo amount field and manifest
-display fuel in tenths of a mg. Selecting the available limit transfers the
-exact amount the donor can supply and the receiving tank can hold, including
-fractional remainders.
+display fuel in hundredths of a mg. The displayed input limit rounds up to the
+next hundredth. Selecting it transfers the exact amount the donor can supply
+and the receiving tank can hold, including fractional remainders.
 
-Dragging below the starting stock returns cargo to the left container. Signed
-exact amounts permit the same operation. Each cargo type can have its own direction,
+Dragging a fleet's receiving slider below its starting stock returns cargo to
+the left container. Negative surface adjustments and negative exact amounts
+also return cargo. Each cargo type can have its own direction,
 so returning colonists while loading minerals is supported. The editor emits
 ordinary nonnegative transfer orders, tries a feasible sequence, and enables
 Apply only when the shared command-phase projection reaches both displayed
