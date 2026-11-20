@@ -142,6 +142,7 @@ void split_preserves_source_id_and_resources()
     auto state = two_fleet_fixture();
     state = processor.process(state, {{1, {MergeFleetsOrder{1, 2}}}});
     const auto before = *find_fleet(state, 1);
+    state.orbitalStations.clear(); // Measure the split without another year's depot service.
 
     const auto split = processor.process(state, {{1, {SplitFleetOrder{1, {{kScoutDesignId, 1}}}}}});
     const auto* source = find_fleet(split, 1);

@@ -237,6 +237,7 @@ void departure_estimate_uses_the_shared_dock_supply(MainWindow& window)
     auto state = world();
     auto& first = state.fleets.front();
     first.fuel = 20;
+    first.telemetry = {};
     first.telemetry = confirmed_fleet_telemetry(state, first);
     auto other = first;
     other.id = state.nextFleetId++;
