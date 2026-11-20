@@ -165,8 +165,12 @@ StationDetailsDialog::StationDetailsDialog(const OrbitalStation& station, std::u
         return std::find(station.modules.begin(), station.modules.end(), module) != station.modules.end();
     };
     auto* services = new QLabel(QString("Shipyard / fleet repair: %1 • Refueling depot: %2")
-        .arg(has(OrbitalStationModule::Shipyard) ? "Fitted" : "Not fitted")
-        .arg(has(OrbitalStationModule::RefuelingDepot) ? "Fitted" : "Not fitted"), this);
+        .arg(!has(OrbitalStationModule::Shipyard) ? "Not fitted"
+            : station.hull == OrbitalStationHullType::OrbitalDock
+                ? QString("up to %1 kt dry mass per ship").arg(kOrbitalDockShipMassKt) : "Fitted")
+        .arg(!has(OrbitalStationModule::RefuelingDepot) ? "Not fitted"
+            : station.hull == OrbitalStationHullType::OrbitalDock
+                ? QString("%1 mg/year shared by all fleets").arg(kOrbitalDockAnnualFuelMg) : "Fitted"), this);
     services->setObjectName("stationDetailsServices"); services->setWordWrap(true); layout->addWidget(services);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

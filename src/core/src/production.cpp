@@ -213,6 +213,23 @@ std::uint32_t colony_research_allocation(const GameState& state, const Planet& p
     return bootstrappingReceiver && output > 0 ? std::min(requested, output - 1) : requested;
 }
 
+std::optional<OrbitalStationId> complete_orbital_station_production(
+    GameState& state, const Planet& planet, const std::optional<StationConstruction>& construction)
+{
+    if (construction) {
+        if (!complete_station_construction(state, planet, *construction)) return std::nullopt;
+        return find_orbital_station_at_planet(state, planet.id)->id;
+    }
+    if (find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state, planet.id))
+        return std::nullopt;
+    const auto id = state.nextOrbitalStationId++;
+    state.orbitalStations.push_back({
+        id, planet.owner, planet.id, planet.name + " Orbital Dock", OrbitalStationHullType::OrbitalDock,
+        {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+    });
+    return id;
+}
+
 ColonyProductionResolution resolve_colony_production(const GameState& state, Planet& planet, bool hasShipyard, std::optional<bool> engineeringSupport)
 {
     ColonyProductionResolution result;
@@ -239,7 +256,9 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     std::vector<std::uint32_t> annualUsed(queue.size());
     planet.productionWaitingForMinerals = false;
     planet.productionWaitingForShipyard = false;
-    bool stationExists = hasShipyard || find_orbital_station_at_planet(state, planet.id) != nullptr || orbital_base_at(state,planet.id);
+    const auto* station = find_orbital_station_at_planet(state, planet.id);
+    auto shipyardHull = station ? std::optional{station->hull} : std::nullopt;
+    bool stationExists = hasShipyard || station || orbital_base_at(state,planet.id);
     const auto erase = [&](std::size_t index) {
         queue.erase(queue.begin() + index);
         origins.erase(origins.begin() + index);
@@ -270,6 +289,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         else if (item.kind == ProductionKind::OrbitalStation) {
             stationExists = true;
             result.hasShipyard = !item.station || item.station->loadout.shipyard;
+            shipyardHull = item.station ? item.station->loadout.hull : OrbitalStationHullType::OrbitalDock;
             result.engineeringSupport=item.station && station_hull_at_least(item.station->loadout.hull,OrbitalStationHullType::Starbase)
                 && item.station->loadout.shipyard;
         }
@@ -286,10 +306,10 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     while (index < queue.size()) {
         const auto origin = origins[index];
         const auto industrialKind = queue[index].kind;
-        if(industrialKind==ProductionKind::ColonyShip) {
-            const auto* d=find_ship_design(state,queue[index].shipDesign?queue[index].shipDesign:kColonyShipDesignId);
-            if(d && d->retired){erase(index);continue;}
-        }
+        const auto* design = industrialKind == ProductionKind::ColonyShip
+            ? find_ship_design(state, queue[index].shipDesign ? queue[index].shipDesign : kColonyShipDesignId)
+            : nullptr;
+        if (design && design->retired) { erase(index); continue; }
         if (player && !production_kind_applicable(player->race.primaryTrait, industrialKind)) {
             erase(index); continue;
         }
@@ -393,7 +413,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
             erase(index); // No eligible work remains: surplus manual terraforming is discarded without charge.
             continue;
         }
-        if (kind == ProductionKind::ColonyShip && !result.hasShipyard) {
+        if (kind == ProductionKind::ColonyShip && (!result.hasShipyard
+                || (design && shipyardHull && !ship_fits_shipyard(*shipyardHull, *design)))) {
             planet.productionWaitingForShipyard = true;
             break;
         }
@@ -495,7 +516,7 @@ GameState project_production(const GameState& state, const PlayerOrders& pending
             } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                 if (const auto* design = resolve_ship_design_order(result, pending.player, value);
                     design && design->owner == pending.player && ship_design_valid(*design)
-                    && colony_has_orbital_service(result, colony.id, pending.player, OrbitalStationModule::Shipyard))
+                    && shipyard_can_build(result, colony, *design))
                     queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
             } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                 if (production_batch_valid({colony.id, value.kind}) || engineering_kind(value.kind) || recovery_kind(value.kind) || value.kind == ProductionKind::Factory || value.kind == ProductionKind::Mine || value.kind == ProductionKind::Terraforming || value.kind == ProductionKind::ColonyDefense)
@@ -503,10 +524,12 @@ GameState project_production(const GameState& state, const PlayerOrders& pending
                 else if (value.kind == ProductionKind::OrbitalStation && !find_orbital_station_at_planet(result, colony.id) && !orbital_base_at(result,colony.id)
                     && std::none_of(queue.begin(), queue.end(), [](const auto& item) { return item.kind == ProductionKind::OrbitalStation; }))
                     queue.push_back({value.kind, kOrbitalDockCost});
-                else if (value.kind == ProductionKind::ColonyShip
-                    && colony_has_orbital_service(result, colony.id, pending.player, OrbitalStationModule::Shipyard)) {
+                else if (value.kind == ProductionKind::ColonyShip) {
                     const auto design = std::find_if(result.shipDesigns.begin(), result.shipDesigns.end(),
-                        [&](const auto& candidate) { return !candidate.retired && candidate.owner == pending.player && ship_design_can_colonize(candidate); });
+                        [&](const auto& candidate) {
+                            return !candidate.retired && candidate.owner == pending.player
+                                && ship_design_can_colonize(candidate) && shipyard_can_build(result, colony, candidate);
+                        });
                     if (design != result.shipDesigns.end()) queue.push_back({value.kind, ship_design_cost(*design), design->id});
                 }
             }

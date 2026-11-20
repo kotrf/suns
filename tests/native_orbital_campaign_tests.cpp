@@ -6,6 +6,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
 #include "native_orbital_defense_fixture.hpp"
+#include "native_orbital_fixture.hpp"
 #include <QCoreApplication>
 #include <QFile>
 #include <QTemporaryDir>
@@ -77,8 +78,9 @@ void human_replaces_a_miner_and_founds_an_orbit_through_pbem_orders()
     auto state=generate_campaign(config,{{"Local host"},native(PlayerController::Human)});
     const auto home=std::find_if(state.planets.begin(),state.planets.end(),[](const auto& p){return p.owner==2;})->id;
     const auto homePlanet=[&]() -> const Planet& {return *find_planet(state,home);};
-    const auto minerDesign=state.fleets.back().design;
-    state=TurnProcessor{}.process(state,{{2,{SetResearchAllocationOrder{0},QueueShipDesignOrder{home,minerDesign}}}});
+    const auto miner = test::light_native_miner(2);
+    state=TurnProcessor{}.process(state,{{2,{SetResearchAllocationOrder{0},
+        CreateShipDesignOrder{miner.name, miner.hull, miner.components}, QueueShipDesignOrder{home,0,miner.name}}}});
     assert(state.fleets.size()==2 && !homePlanet().productionQueue.empty());
     for(unsigned year=0;year<8 && state.fleets.size()<3;++year)state=TurnProcessor{}.process(state,{});
     assert(state.fleets.size()==3 && homePlanet().productionQueue.empty());

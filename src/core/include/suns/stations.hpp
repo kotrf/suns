@@ -1,5 +1,6 @@
 #pragma once
 #include "suns/turn_processor.hpp"
+#include <map>
 #include <span>
 
 namespace suns {
@@ -15,6 +16,26 @@ struct StationHullSpec {
     bool nativeOnly{};
 };
 inline constexpr std::uint16_t kMaximumColonyDefenses = 100;
+inline constexpr double kOrbitalDockAnnualFuelMg = 200.0;
+inline constexpr double kOrbitalDockShipMassKt = 200.0;
+
+class OrbitalDepotRefueling {
+public:
+    // Returns whether a depot served this colony, even if the tank or quota
+    // prevents a transfer. The caller checks that the fleet is in orbit.
+    bool refuel(const GameState&, PlanetId colony, Fleet&);
+
+private:
+    std::map<OrbitalStationId, double> remaining_;
+};
+
+// Budget the next departure using received fuel and lower-ID fleets in orbit.
+[[nodiscard]] double estimated_orbital_departure_fuel(const GameState&, PlanetId colony, const Fleet&);
+// Available only when the received view and pending commands put the fleet at a dock.
+[[nodiscard]] std::optional<double> projected_orbital_dock_departure_fuel(
+    const GameState& received, const PlayerOrders&, FleetId);
+[[nodiscard]] bool ship_fits_shipyard(OrbitalStationHullType, const ShipDesign&);
+[[nodiscard]] bool shipyard_can_build(const GameState&, const Planet&, const ShipDesign&);
 // Existing finite gate rules are unchanged for generalist empires.
 inline constexpr double kStargateRangeLy = 160.0;
 inline constexpr double kStargateMaximumMassKt = 450.0;
@@ -49,10 +70,10 @@ struct StargateSpec {
     const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
 bool transfer_fleet_through_stargate(
     GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false,
-    bool onboard = false);
+    bool onboard = false, OrbitalDepotRefueling* depotFuel = nullptr);
 struct GateFleetOrder;
 // On a PlayerView plus earlier pending orders, reserve only received supplies.
-bool preview_stargate_transfer(GameState&, PlayerId, const GateFleetOrder&);
+bool preview_stargate_transfer(GameState&, PlayerId, const GateFleetOrder&, OrbitalDepotRefueling* depotFuel = nullptr);
 [[nodiscard]] bool station_loadout_valid(const StationLoadout&);
 [[nodiscard]] bool station_loadout_available(const GameState&, PlayerId, const StationLoadout&);
 [[nodiscard]] StationLoadout station_loadout(const OrbitalStation&);

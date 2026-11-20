@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
+#include "suns/stations.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
@@ -112,7 +113,7 @@ void merge_preserves_destination_id_and_all_stacks()
     assert(fleet_ship_count(*fleet) == 3);
     assert(fleet_ship_count(*fleet, kScoutDesignId) == 2);
     assert(fleet_ship_count(*fleet, kColonyShipDesignId) == 1);
-    assert(close(fleet->fuel, fleet_fuel_capacity(merged, *fleet)));
+    assert(close(fleet->fuel, state.fleets[0].fuel + state.fleets[1].fuel + kOrbitalDockAnnualFuelMg));
     assert(fleet->colonists == 300);
     assert(close(fleet->minerals.ironium, 0.3));
     assert(close(fleet->minerals.boranium, 0.3));
@@ -141,6 +142,7 @@ void split_preserves_source_id_and_resources()
     auto state = two_fleet_fixture();
     state = processor.process(state, {{1, {MergeFleetsOrder{1, 2}}}});
     const auto before = *find_fleet(state, 1);
+    state.orbitalStations.clear(); // Measure the split without another year's depot service.
 
     const auto split = processor.process(state, {{1, {SplitFleetOrder{1, {{kScoutDesignId, 1}}}}}});
     const auto* source = find_fleet(split, 1);

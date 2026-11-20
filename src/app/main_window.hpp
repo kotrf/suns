@@ -54,6 +54,7 @@ struct RouteProgramDisplayRow {
     QString etaTooltip;
     QString fuel;
     QString fuelTooltip;
+    std::optional<double> nominalFuelCost;
 };
 
 struct RouteProgramTargetOption {
@@ -85,7 +86,7 @@ public:
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
     [[nodiscard]] std::vector<FleetId> availableOwnedFleetsForRouteProgram() const;
     [[nodiscard]] std::vector<FleetId> ownedFleetsAtSelectedSystem() const;
-    [[nodiscard]] QString fleetSourceNameForRouteProgram(FleetId fleet) const;
+    [[nodiscard]] QString fleetSourceNameForRouteProgram(FleetId fleet, bool markProgram = false) const;
     [[nodiscard]] QString selectedSystemFleetHeading() const;
     [[nodiscard]] QString fleetTargetNameForRouteProgram(FleetId fleet) const;
     [[nodiscard]] std::vector<RouteProgramTargetOption> routeProgramTargetsAtSelectedSystem() const;
@@ -322,6 +323,7 @@ private:
         FleetArrivalAction arrivalAction);
     bool stageSelectedFleetRoute(
         const Fleet& fleet, MoveFleetOrder route, const QString& statusMessage);
+    void stageFleetMove(MoveFleetOrder route, const QString& description);
 
     void appendPendingOrder(Order order, const QString& description);
     void replacePendingFleetMove(

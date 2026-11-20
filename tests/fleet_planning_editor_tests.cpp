@@ -43,6 +43,32 @@ struct MainWindowTestAccess {
     static const GameState& raw(MainWindow& w) { return w.state_; }
     static const GameState& plan(MainWindow& w) { return w.fleetPlanningState(); }
     static const GameState& movementPlan(MainWindow& w) { return w.movementPlanningPreview(); }
+    static void activeMixedFleet(MainWindow& w)
+    {
+        splitSetup(w);
+        auto& state = w.state_;
+        state.stars[1].position = {25, 0};
+        state.shipDesigns.front() = {kScoutDesignId, 1, "Scout", ShipHullType::StarsScout,
+            {ShipComponentType::QuickJump5}};
+        const auto truck = state.nextShipDesignId++;
+        state.shipDesigns.push_back({truck, 1, "Super-Fuel Xport", ShipHullType::SuperFuelXport,
+            {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5}});
+        auto& original = state.fleets.front();
+        original.name = "Fuel truck";
+        original.ships = {{kScoutDesignId, 1}, {truck, 1}};
+        original.fuel = 2300;
+        original.destination = Position{0, 80};
+        w.rebuildScene();
+    }
+    static void showArrival(MainWindow& w, GameState state, FleetId id)
+    {
+        w.state_ = std::move(state);
+        w.pendingOrders_ = {1, {}};
+        w.pendingDescriptions_.clear();
+        w.selection_.fleet = id;
+        w.selection_.star = w.state_.stars[1].id;
+        w.rebuildScene();
+    }
     static void selectionCacheRegression(MainWindow& w)
     {
         const auto revision = w.planningRevision_;
@@ -134,6 +160,74 @@ static void rename(MainWindow& window, const QString& name)
     QTimer::singleShot(0, [name] { auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog); dialog->setTextValue(name); dialog->accept(); });
     window.openRenameFleetDialog();
 }
+static void detachScout(MainWindow& window)
+{
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog && dialog->windowTitle() == "Split fleet");
+        dialog->findChild<QSpinBox*>()->setValue(1);
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    });
+    window.openSplitFleetDialog();
+}
+
+static void stop_split_and_route_in_one_year(MainWindow& window)
+{
+    auto* fleetMenu = window.findChild<QComboBox*>("routeSourceFleetCombo");
+    const auto hasBadge = [&](FleetId id) {
+        QApplication::processEvents();
+        const auto index = fleetMenu->findData(id);
+        assert(index >= 0);
+        return fleetMenu->itemText(index).contains("* (Fleet ");
+    };
+    for (const FleetId leaving : {1u, 2u}) {
+        MainWindowTestAccess::activeMixedFleet(window);
+        assert(hasBadge(1) && !window.selectedFleetRouteProgramRows().empty());
+        window.findChild<QPushButton*>("routeStopButton")->click();
+        assert(!hasBadge(1));
+        detachScout(window);
+        assert(window.ownedFleetsAtSelectedSystem().size() == 2);
+        assert(window.selectFleetForRouteProgram(leaving));
+        rename(window, "Outbound");
+        assert(window.appendCoordinateWaypoint({25, 0}, 4, {}));
+        assert(hasBadge(leaving) && !hasBadge(leaving == 1 ? 2 : 1));
+        assert(fleetMenu->itemText(fleetMenu->findData(leaving)).startsWith("Outbound* (Fleet "));
+        assert(window.appendCoordinateWaypoint({50, 0}, 5, {}));
+        assert(window.setSelectedFleetRouteProgramLegWarp(0, 5));
+        assert(window.removeSelectedFleetRouteProgramLeg(1));
+        assert(window.selectedFleetRouteProgramRows().size() == 1);
+
+        const auto& planned = MainWindowTestAccess::plan(window);
+        const auto& truck = fleet(planned, 1);
+        const auto& scout = fleet(planned, 2);
+        assert(fleet_ship_count(truck) == 1 && fleet_ship_count(scout) == 1);
+        assert(near(truck.fuel, 2250) && near(scout.fuel, 50));
+        assert(window.ownedFleetsAtSelectedSystem().size() == 2);
+        const auto& orders = MainWindowTestAccess::orders(window).orders;
+        assert(orders.size() == 4 && std::get<MoveFleetOrder>(orders[0]).clearRoute);
+        assert(std::get<SplitFleetOrder>(orders[1]).source == 1);
+        assert(std::get<MoveFleetOrder>(orders[3]).fleet == leaving);
+        const auto& state = MainWindowTestAccess::raw(window);
+        const auto actualLeaving = leaving == 1 ? 1 : state.nextFleetId;
+        const auto actualStaying = leaving == 1 ? state.nextFleetId : 1;
+        auto hosted = TurnProcessor{}.process(state, {MainWindowTestAccess::orders(window)});
+        assert(same_position(fleet(hosted, actualLeaving).position, {25, 0}));
+        assert(!fleet(hosted, actualLeaving).destination);
+        assert(same_position(fleet(hosted, actualStaying).position, {0, 0}));
+        assert(fleet_ship_count(fleet(hosted, actualLeaving)) == 1 && fleet_ship_count(fleet(hosted, actualStaying)) == 1);
+
+        assert(window.removeSelectedFleetRouteProgramLeg(0));
+        assert(!hasBadge(leaving) && window.ownedFleetsAtSelectedSystem().size() == 2);
+        assert(near(fleet(MainWindowTestAccess::plan(window), 1).fuel, 2250));
+        assert(near(fleet(MainWindowTestAccess::plan(window), 2).fuel, 50));
+        const auto stopped = TurnProcessor{}.process(state, {MainWindowTestAccess::orders(window)});
+        assert(same_position(fleet(stopped, 1).position, {0, 0}));
+        assert(same_position(fleet(stopped, state.nextFleetId).position, {0, 0}));
+        MainWindowTestAccess::showArrival(window, std::move(hosted), actualLeaving);
+        assert(window.ownedFleetsAtSelectedSystem() == std::vector<FleetId>{actualLeaving});
+        assert(!hasBadge(actualLeaving) && window.selectedFleetRouteProgramRows().empty());
+    }
+}
 static void fuel(MainWindow& window, FleetId receiver, double amount, bool accept = true, bool receivingSlider = false, bool capture = false)
 {
     QTimer::singleShot(0, [&] {
@@ -167,12 +261,9 @@ int main(int argc, char** argv)
     window.resize(1366, 900); window.show(); app.processEvents();
     MainWindowTestAccess::splitSetup(window);
     MainWindowTestAccess::selectionCacheRegression(window);
+    stop_split_and_route_in_one_year(window);
     MainWindowTestAccess::splitSetup(window);
-    QTimer::singleShot(0, [] {
-        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle() == "Split fleet");
-        dialog->findChild<QSpinBox*>()->setValue(1); dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
-    });
-    window.openSplitFleetDialog();
+    detachScout(window);
     const FleetId child = 2;
     assert(window.availableOwnedFleetsForRouteProgram().size() == 2);
     assert(fleet_ship_count(fleet(MainWindowTestAccess::raw(window), 1)) == 2);

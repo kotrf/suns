@@ -231,6 +231,28 @@ void fuel_updates_for_accepted_cargo_but_not_hidden_manifests(MainWindow& window
     const auto hidden = window.selectedFleetRouteProgramRows();
     assert(hidden[0].fuel == received[0].fuel && hidden[1].fuel == received[1].fuel);
 }
+
+void departure_estimate_uses_the_shared_dock_supply(MainWindow& window)
+{
+    auto state = world();
+    auto& first = state.fleets.front();
+    first.fuel = 20;
+    first.telemetry = {};
+    first.telemetry = confirmed_fleet_telemetry(state, first);
+    auto other = first;
+    other.id = state.nextFleetId++;
+    state.fleets.push_back(other);
+    const MoveFleetOrder trip{1, {2000, 0}, 5, {}, {{{0, 0}, 5, {FleetArrivalActionKind::Refuel}}}};
+
+    MainWindowTestAccess::install(window, state, {1, {trip}});
+    auto estimate = window.selectedFleetRouteProgramEstimate();
+    assert(estimate.contains("after dock service ≈ 220.0 mg"));
+    assert(estimate.contains("can add up to 200 mg from its shared annual supply"));
+    MainWindowTestAccess::install(window, state, {1, {RefuelFleetOrder{1, other.id}, trip}});
+    estimate = window.selectedFleetRouteProgramEstimate();
+    assert(estimate.contains("after dock service ≈ 20.0 mg"));
+    assert(estimate.contains("first leg costs more"));
+}
 }
 
 int main(int argc, char** argv)
@@ -248,4 +270,5 @@ int main(int argc, char** argv)
     sent_navigation_outranks_old_telemetry_without_simulating_delivery(window);
     fuel_uses_leg_distance_warp_and_rounding_without_year_simulation(window);
     fuel_updates_for_accepted_cargo_but_not_hidden_manifests(window);
+    departure_estimate_uses_the_shared_dock_supply(window);
 }

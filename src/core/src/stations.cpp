@@ -3,12 +3,69 @@
 #include "suns/orbital_bases.hpp"
 #include "suns/communications.hpp"
 #include "suns/exotic_materials.hpp"
+#include "suns/propulsion.hpp"
+#include "suns/ship_refit.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <stdexcept>
 
 namespace suns {
+bool OrbitalDepotRefueling::refuel(const GameState& state, PlanetId colony, Fleet& fleet)
+{
+    const auto* station = find_orbital_station_at_planet(state, colony);
+    if (!station || station->owner != fleet.owner
+        || !orbital_station_has_module(*station, OrbitalStationModule::RefuelingDepot)) return false;
+    const auto capacity = fleet_fuel_capacity(state, fleet);
+    if (station->hull == OrbitalStationHullType::OrbitalDock) {
+        auto& remaining = remaining_.try_emplace(station->id, kOrbitalDockAnnualFuelMg).first->second;
+        const auto supplied = std::min(remaining, fuel_after_change(capacity, -fleet.fuel));
+        fleet.fuel = std::min(capacity, fuel_after_change(fleet.fuel, supplied));
+        remaining = fuel_after_change(remaining, -supplied);
+    } else {
+        fleet.fuel = capacity;
+    }
+    return true;
+}
+
+double estimated_orbital_departure_fuel(const GameState& state, PlanetId colony, const Fleet& fleet)
+{
+    const auto* station = find_orbital_station_at_planet(state, colony);
+    if (!station || station->owner != fleet.owner
+        || !orbital_station_has_module(*station, OrbitalStationModule::RefuelingDepot)) return fleet.fuel;
+    const auto capacity = fleet_fuel_capacity(state, fleet);
+    if (station->hull != OrbitalStationHullType::OrbitalDock) return capacity;
+
+    auto remaining = kOrbitalDockAnnualFuelMg;
+    auto departureFuel = fleet.fuel;
+    const auto refitting = fleets_under_refit(state);
+    for (const auto& other : state.fleets) {
+        if (other.id > fleet.id || other.owner != fleet.owner || !same_position(other.position, fleet.position)) continue;
+        const bool departing = other.id == fleet.id;
+        if (!departing && refitting.contains(other.id)) continue;
+        const auto tank = departing ? capacity : fleet_fuel_capacity(state, other);
+        const auto generated = other.outpost == OutpostKind::None ? fleet_fuel_generation(state, other) : 0.0;
+        const auto fuel = std::min(tank, fuel_after_change(other.fuel, generated));
+        if (departing) departureFuel = fuel;
+        else remaining = fuel_after_change(remaining, -fuel_after_change(tank, -fuel));
+    }
+    // Use the received tank as the starting point when planning asks again.
+    return std::min(capacity, std::max(fleet.fuel, fuel_after_change(departureFuel, remaining)));
+}
+
+bool ship_fits_shipyard(OrbitalStationHullType hull, const ShipDesign& design)
+{
+    return hull != OrbitalStationHullType::OrbitalDock || ship_design_mass(design) <= kOrbitalDockShipMassKt;
+}
+
+bool shipyard_can_build(const GameState& state, const Planet& colony, const ShipDesign& design)
+{
+    const auto* station = find_orbital_station_at_planet(state, colony.id);
+    return station && station->owner == colony.owner
+        && orbital_station_has_module(*station, OrbitalStationModule::Shipyard)
+        && ship_fits_shipyard(station->hull, design);
+}
+
 std::span<const StargateSpec> stargate_technologies()
 {
     // Initial Suns! balance. The specialist pays for both endpoints; research
@@ -190,7 +247,7 @@ bool stargate_transfer_valid(const GameState& s, PlayerId owner, FleetId fleetId
     return stargate_transfer_error(s, owner, fleetId, source, destination, resonant).empty();
 }
 bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleetId,
-    PlanetId source, PlanetId destination, bool resonant, bool onboard)
+    PlanetId source, PlanetId destination, bool resonant, bool onboard, OrbitalDepotRefueling* depotFuel)
 {
     if (!stargate_transfer_error(s, owner, fleetId, source, destination, resonant, onboard).empty()) return false;
     if (resonant) {
@@ -203,13 +260,15 @@ bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleet
     const auto* star = find_star(s, p->star);
     auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(),
         [=](const Fleet& candidate) { return candidate.id == fleetId && candidate.owner == owner; });
+    if (depotFuel) depotFuel->refuel(s, source, *fleet);
     fleet->lastMovedTurn = s.turn + 1;
     fleet->position = star->position;
     // All fuel stays onboard. Physical movement precedes the normal telemetry
     // stage; no instant report of a remote destination is manufactured here.
     return true;
 }
-bool preview_stargate_transfer(GameState& s, PlayerId owner, const GateFleetOrder& order)
+bool preview_stargate_transfer(GameState& s, PlayerId owner, const GateFleetOrder& order,
+    OrbitalDepotRefueling* depotFuel)
 {
     if (order.resonant) {
         const auto known = known_xenocrystal(s, owner, order.source);
@@ -227,7 +286,8 @@ bool preview_stargate_transfer(GameState& s, PlayerId owner, const GateFleetOrde
         action.gateSource = order.source; action.gateDestination = order.destination; action.gateResonant = order.resonant;
         return submit_fleet_route_command(s, owner, fleet->id, star->position, fleet->warp, action, {});
     }
-    return transfer_fleet_through_stargate(s, owner, order.fleet, order.source, order.destination, order.resonant);
+    return transfer_fleet_through_stargate(s, owner, order.fleet, order.source, order.destination,
+        order.resonant, false, depotFuel);
 }
 StationLoadout station_loadout(const OrbitalStation& s)
 { return {s.hull,s.components,orbital_station_has_module(s,OrbitalStationModule::Shipyard),orbital_station_has_module(s,OrbitalStationModule::RefuelingDepot)}; }

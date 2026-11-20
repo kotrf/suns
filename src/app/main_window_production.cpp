@@ -457,7 +457,7 @@ void MainWindow::refreshProductionQueue()
             remaining = "0";
         } else if (estimates[index].status == SimpleProductionStatus::HousingTooSmall) {
             remaining = "housing";
-        } else if (waitingForShipyard) {
+        } else if (waitingForShipyard || estimates[index].status == SimpleProductionStatus::ShipTooHeavy) {
             remaining = "shipyard";
         } else if (item.remainingCost == 0 && estimates[index].mineralBudgetKnown
             && !mineral_cargo_sufficient(estimates[index].mineralsBefore, production_item_mineral_cost(forecastState, item))) {

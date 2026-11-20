@@ -1,4 +1,8 @@
 #include "suns/game_state.hpp"
+#include "suns/campaign.hpp"
+#include "suns/communications.hpp"
+#include "suns/production.hpp"
+#include "suns/ship_refit.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/stations.hpp"
 
@@ -118,6 +122,8 @@ void station_loss_removes_refueling_service()
         {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
     });
     next = processor.process(next, {{1, {RefuelFleetOrder{1, fleet.id}}}});
+    assert(next.fleets.front().fuel == kOrbitalDockAnnualFuelMg);
+    next = processor.process(next, {});
     assert(next.fleets.front().fuel == fleet_fuel_capacity(next, next.fleets.front()));
 }
 
@@ -160,6 +166,204 @@ void station_without_refueling_module_does_not_refuel()
 
     const auto next = processor.process(state, {});
     assert(std::abs(next.fleets.front().fuel - 12.0) < 0.000001);
+}
+
+void dock_shares_fuel_between_departures_and_arrivals()
+{
+    for (const auto arrivalAction : {FleetArrivalActionKind::None, FleetArrivalActionKind::Refuel}) {
+        auto state = make_demo_game();
+        auto& departure = state.fleets.front();
+        const auto capacity = fleet_fuel_capacity(state, departure);
+        departure.fuel = capacity - 150;
+        departure.destination = Position{1, 0};
+        departure.warp = 1;
+        auto arrival = departure;
+        arrival.id = state.nextFleetId++;
+        arrival.position = *departure.destination;
+        arrival.destination = departure.position;
+        arrival.arrivalAction = FleetArrivalAction{arrivalAction};
+        arrival.fuel = 20;
+        state.fleets.push_back(arrival);
+
+        auto noDepot = state;
+        noDepot.orbitalStations.clear();
+        const auto unserviced = TurnProcessor{}.process(noDepot, {});
+        const auto refueled = TurnProcessor{}.process(state, {});
+        assert(same_position(refueled.fleets[0].position, arrival.position));
+        assert(same_position(refueled.fleets[1].position, *arrival.destination));
+        assert(std::abs(refueled.fleets[0].fuel - unserviced.fleets[0].fuel - 150) < 1e-8);
+        assert(std::abs(refueled.fleets[1].fuel - unserviced.fleets[1].fuel - 50) < 1e-8);
+        const auto next = TurnProcessor{}.process(refueled, {});
+        assert(std::abs(next.fleets[1].fuel - refueled.fleets[1].fuel - 200) < 1e-8);
+    }
+}
+
+void dock_refuels_in_order_and_reuses_the_quota_for_explicit_commands()
+{
+    auto state = make_demo_game();
+    const auto capacity = fleet_fuel_capacity(state, state.fleets.front());
+    state.fleets.front().fuel = capacity - 150;
+    auto second = state.fleets.front();
+    second.id = state.nextFleetId++;
+    state.fleets.insert(state.fleets.begin(), second); // Higher ID first in storage.
+
+    const auto estimated = estimated_orbital_departure_fuel(state, 1, second);
+    assert(estimated == capacity - 100);
+    second.fuel = estimated;
+    assert(estimated_orbital_departure_fuel(state, 1, second) == estimated);
+    const auto automatic = TurnProcessor{}.process(state, {});
+    assert(automatic.fleets[0].fuel == estimated && automatic.fleets[1].fuel == capacity);
+
+    // Filling before and after a transfer consumes the same station balance.
+    const PlayerOrders orders{1, {RefuelFleetOrder{1, 2}, TransferFleetFuelOrder{2, 1, 100},
+        RefuelFleetOrder{1, 2}, RefuelFleetOrder{1, 2}}};
+    const auto commandBoundary = projected_cargo_order_state(state, orders);
+    assert(commandBoundary.fleets[0].fuel == capacity - 50);
+    assert(commandBoundary.fleets[1].fuel == capacity - 50);
+    assert(projected_orbital_dock_departure_fuel(state, orders, 2) == capacity - 50);
+    const auto explicitFuel = TurnProcessor{}.process(state, {orders});
+    assert(explicitFuel.fleets[0].fuel == capacity - 50 && explicitFuel.fleets[1].fuel == capacity - 50);
+
+    state.orbitalStations.front().hull = OrbitalStationHullType::Starbase;
+    const auto advanced = TurnProcessor{}.process(state, {});
+    assert(advanced.fleets[0].fuel == capacity && advanced.fleets[1].fuel == capacity);
+}
+
+void dock_budget_skips_fleets_with_a_live_refit()
+{
+    auto state = make_demo_game();
+    auto& colony = state.planets.front();
+    colony.minerals = {};
+    colony.observedConcentration = MineralCargo{};
+    auto& first = state.fleets.front();
+    first.fuel = 0;
+    first.telemetry = {};
+    auto second = first;
+    second.id = state.nextFleetId++;
+    state.fleets.push_back(second);
+    assert(estimated_orbital_departure_fuel(state, colony.id, second) == 0);
+
+    auto design = *find_ship_design(state, kScoutDesignId);
+    design.id = state.nextShipDesignId++;
+    design.name = "Refitted scout";
+    design.components.push_back(ShipComponentType::MoleSkinShield);
+    design.placements.clear();
+    state.shipDesigns.push_back(design);
+    assert(queue_ship_refit(state, 1, {colony.id, 1, kScoutDesignId, design.id}));
+    state.players.front().surveyKnowledge.clear();
+    set_survey_level(state, 1, colony.star, SurveyLevel::DeepSurvey, state.turn);
+    const auto received = make_player_view(state, 1);
+    const auto& receivedFleet = received.state.fleets.back();
+    assert(receivedFleet.id == second.id && !received.state.planets.front().productionQueue.empty());
+    assert(estimated_orbital_departure_fuel(received.state, colony.id, receivedFleet) == kOrbitalDockAnnualFuelMg);
+    assert(projected_orbital_dock_departure_fuel(received.state, {1, {}}, second.id) == kOrbitalDockAnnualFuelMg);
+    const auto next = TurnProcessor{}.process(state, {});
+    assert(!next.planets.front().productionQueue.empty() && next.planets.front().productionQueue.front().refit);
+    assert(next.fleets.front().fuel == 0 && next.fleets.back().fuel == kOrbitalDockAnnualFuelMg);
+
+    state.fleets.front().destination = Position{1, 0};
+    assert(estimated_orbital_departure_fuel(state, colony.id, second) == 0);
+}
+
+void dock_budget_uses_fuel_after_onboard_generation()
+{
+    auto state = make_demo_game();
+    const auto colony = state.planets.front().id;
+    const auto tankerDesign = state.nextShipDesignId++;
+    state.shipDesigns.push_back({tankerDesign, 1, "Tanker", ShipHullType::SuperFuelXport,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5}});
+    auto scout = state.fleets.front();
+    scout.id = state.nextFleetId++;
+    scout.fuel = 0;
+    scout.warp = 5;
+    state.fleets.front().design = tankerDesign;
+    state.fleets.front().ships = {{tankerDesign, 1}};
+    state.fleets.push_back(scout);
+    assert(fleet_fuel_capacity(state, state.fleets.front()) == 2250);
+    assert(fleet_fuel_generation(state, state.fleets.front()) == 200);
+
+    const struct {
+        double tankerBefore, tankerAfter, scoutAfter;
+    } cases[] = {{2050, 2250, 200}, {1950, 2250, 100}, {1000, 1400, 0}};
+    for (const auto& [tankerBefore, tankerAfter, scoutAfter] : cases) {
+        state.fleets.front().fuel = tankerBefore;
+        for (auto& fleet : state.fleets) {
+            fleet.telemetry = {};
+            fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+        }
+        const auto received = make_player_view(state, 1);
+        const auto& view = received.state;
+        assert(estimated_orbital_departure_fuel(view, colony, view.fleets.back()) == scoutAfter);
+        assert(projected_orbital_dock_departure_fuel(view, {1, {}}, scout.id) == scoutAfter);
+        auto tanker = view.fleets.front();
+        assert(estimated_orbital_departure_fuel(view, colony, tanker) == tankerAfter);
+        tanker.fuel = tankerAfter;
+        assert(estimated_orbital_departure_fuel(view, colony, tanker) == tankerAfter);
+        const auto next = TurnProcessor{}.process(state, {});
+        assert(next.fleets.front().fuel == tankerAfter && next.fleets.back().fuel == scoutAfter);
+    }
+
+    state.fleets.front().fuel = 2050;
+    const Position destination{25, 0};
+    const auto underway = TurnProcessor{}.process(state, {{1, {MoveFleetOrder{scout.id, destination, 5}}}});
+    assert(same_position(underway.fleets.back().position, destination));
+    assert(std::abs(underway.fleets.back().fuel - (200.0
+        - fleet_fuel_consumption_for_distance(state, scout, 25))) < 1e-8);
+}
+
+void dock_checks_dry_mass_at_admission_and_before_spending()
+{
+    auto state = make_demo_game();
+    state.players.front().technology.levels.fill(20);
+    state.players.front().technology.researchActive = false;
+    auto& colony = state.planets.front();
+    colony.population = 250'000;
+    colony.industry = 200;
+    colony.minerals = {1000, 1000, 1000};
+    colony.mines = 0;
+
+    ShipDesign exact{90, 1, "200 kt", ShipHullType::Cruiser,
+        {ShipComponentType::TransGalacticDrive, ShipComponentType::TransGalacticDrive,
+            ShipComponentType::Tritanium}};
+    auto heavy = exact;
+    heavy.id = 91;
+    heavy.name = "201 kt";
+    heavy.components.push_back(ShipComponentType::MoleSkinShield);
+    assert(ship_design_mass(exact) == 200 && ship_design_mass(heavy) == 201);
+    assert(ship_design_valid(exact) && ship_design_valid(heavy));
+    state.shipDesigns.push_back(exact);
+    state.shipDesigns.push_back(heavy);
+    state.nextShipDesignId = 92;
+
+    const PlayerOrders orders{1, {QueueShipDesignOrder{1, heavy.id}, QueueShipDesignOrder{1, exact.id},
+        QueueShipDesignOrder{1, exact.id}}};
+    const auto plan = planned_production_state(state, orders);
+    assert(plan.planets.front().productionQueue.size() == 2);
+    const auto next = TurnProcessor{}.process(state, {orders});
+    assert(next.planets.front().productionQueue.empty());
+    assert(std::count_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.design == exact.id;
+    }) == 2);
+    assert(std::none_of(next.fleets.begin(), next.fleets.end(), [&](const Fleet& fleet) { return fleet.design == heavy.id; }));
+
+    const auto idle = TurnProcessor{}.process(state, {});
+    colony.productionQueue = {{ProductionKind::ColonyShip, 1, heavy.id}};
+    const auto blocked = TurnProcessor{}.process(state, {});
+    assert(blocked.planets.front().productionWaitingForShipyard);
+    assert(blocked.planets.front().productionQueue.front().remainingCost == 1);
+    assert(blocked.planets.front().minerals.ironium == idle.planets.front().minerals.ironium);
+    assert(blocked.planets.front().minerals.boranium == idle.planets.front().minerals.boranium);
+    assert(blocked.planets.front().minerals.germanium == idle.planets.front().minerals.germanium);
+    assert(blocked.fleets.size() == state.fleets.size());
+
+    const StationLoadout upgrade{OrbitalStationHullType::Starbase, {}, true, true};
+    ProductionItem refit{ProductionKind::OrbitalStation, 0};
+    refit.station = StationConstruction{upgrade, state.orbitalStations.front().id};
+    colony.productionQueue.insert(colony.productionQueue.begin(), refit);
+    const auto upgraded = TurnProcessor{}.process(state, {});
+    assert(upgraded.orbitalStations.front().hull == OrbitalStationHullType::Starbase);
+    assert(upgraded.planets.front().productionQueue.empty());
+    assert(upgraded.fleets.back().design == heavy.id);
 }
 
 void shipyard_repairs_docked_fleets_once_per_year()
@@ -339,6 +543,52 @@ void production_forecast_understands_shipyard_dependency()
     assert(sequenced[1].completionTurn == state.turn + 1);
 }
 
+void production_forecast_carries_station_hulls_between_years()
+{
+    auto state = make_demo_game();
+    state.players.front().technology.levels.fill(20);
+    state.players.front().technology.researchActive = false;
+    auto& colony = state.planets.front();
+    colony.population = 75'000;
+    colony.industry = colony.mines = 0;
+    colony.minerals = {10000, 10000, 10000};
+    const ShipDesign heavy{90, 1, "Heavy cruiser", ShipHullType::Cruiser,
+        {ShipComponentType::TransGalacticDrive, ShipComponentType::TransGalacticDrive,
+            ShipComponentType::Tritanium, ShipComponentType::MoleSkinShield}};
+    assert(ship_design_valid(heavy) && ship_design_mass(heavy) == 201);
+    state.shipDesigns.push_back(heavy);
+    state.nextShipDesignId = 91;
+    const ProductionItem ship{ProductionKind::ColonyShip, ship_design_cost(heavy), heavy.id};
+    ProductionItem refit{ProductionKind::OrbitalStation, colony_output(state, colony)};
+    refit.station = StationConstruction{{OrbitalStationHullType::Starbase},
+        state.orbitalStations.front().id};
+    colony.productionQueue = {refit, ship};
+    constexpr unsigned horizon = 12;
+    const auto upgraded = forecast_production_queue(state, colony, colony.productionQueue, horizon);
+    TurnProcessor processor;
+    auto hosted = processor.process(state, {});
+    assert(hosted.orbitalStations.front().hull == OrbitalStationHullType::Starbase);
+    assert(hosted.planets.front().productionQueue.size() == 1);
+    for (unsigned year = 1; year < horizon && !hosted.planets.front().productionQueue.empty(); ++year)
+        hosted = processor.process(hosted, {});
+    assert(hosted.planets.front().productionQueue.empty() && hosted.fleets.back().design == heavy.id);
+    assert(upgraded[1].completionTurn == hosted.turn);
+
+    for (const bool explicitLoadout : {false, true}) {
+        state.orbitalStations.clear();
+        ProductionItem dock{ProductionKind::OrbitalStation, kOrbitalDockCost};
+        if (explicitLoadout) dock.station = StationConstruction{};
+        colony.productionQueue = {dock, ship};
+        const auto forecast = forecast_production_queue(state, colony, colony.productionQueue, horizon);
+        hosted = state;
+        for (unsigned year = 0; year < horizon; ++year) hosted = processor.process(hosted, {});
+        assert(forecast[0].completionTurn && hosted.orbitalStations.front().hull == OrbitalStationHullType::OrbitalDock);
+        assert(hosted.planets.front().productionQueue.size() == 1);
+        assert(hosted.planets.front().productionQueue.front().remainingCost == ship.remainingCost);
+        assert(!forecast[1].completionTurn && forecast[1].beyondForecastHorizon);
+    }
+}
+
 
 void paid_stargates_validate_technology_and_safe_transport()
 {
@@ -420,6 +670,11 @@ int main()
     station_loss_removes_refueling_service();
     station_refuels_before_departure_and_after_arrival();
     station_without_refueling_module_does_not_refuel();
+    dock_shares_fuel_between_departures_and_arrivals();
+    dock_refuels_in_order_and_reuses_the_quota_for_explicit_commands();
+    dock_budget_skips_fleets_with_a_live_refit();
+    dock_budget_uses_fuel_after_onboard_generation();
+    dock_checks_dry_mass_at_admission_and_before_spending();
     shipyard_repairs_docked_fleets_once_per_year();
     repair_requires_a_friendly_shipyard_at_the_fleet_position();
     arriving_fleet_repairs_but_departing_fleet_does_not();
@@ -427,5 +682,6 @@ int main()
     field_bays_repair_remote_fleets_in_proportion_to_equipped_ships();
     restored_mobility_is_reported_once_and_respects_communications_delay();
     production_forecast_understands_shipyard_dependency();
+    production_forecast_carries_station_hulls_between_years();
     paid_stargates_validate_technology_and_safe_transport();
 }

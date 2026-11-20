@@ -77,7 +77,9 @@ Current logistics components include:
 - **Fuel Tank** — +300 fuel capacity;
 - **Antimatter Generator** — Energy 1; +200 fuel capacity and +50 fuel per turn.
 
-Fleets at a friendly colony are automatically refuelled at the start of turn for now. This stands in for explicit planetary fuel transfer until colony logistics are modelled in more detail.
+Friendly orbital depots automatically refuel fleets before departure and
+after arrival. An Orbital Dock shares 200 mg per year across all its fleets
+and refueling requests. See [orbital station services](orbital-stations.md).
 
 Fuel is ionised antimatter held in magnetic traps. Each sealed container holds
 **0.1 mg**. Opening it commits the full contents to use. A positive movement

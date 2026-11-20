@@ -50,6 +50,7 @@ void mesh_order_independence() {
 void safe_ai_target() {
  auto s=generate_campaign(GalaxyConfig{},{{"AI",RacePreset::Terran}});s.fleets.clear();s.players[0].technology.levels.fill(26);s.players[0].technology.researchAllocationPercent=0;s.stars.resize(3);s.planets.resize(3);s.orbitalStations.resize(1);
  auto& home=s.planets[0];home.id=1;home.star=1;home.owner=1;home.population=1000000;home.minerals={10000,10000,10000};home.productionQueue.clear();s.stars[0].id=1;s.stars[0].position={0,0};s.orbitalStations[0].planet=1;s.orbitalStations[0].owner=1;s.orbitalStations[0].modules={OrbitalStationModule::Shipyard};
+ s.orbitalStations[0].hull = OrbitalStationHullType::Starbase;
  for(int i=1;i<3;++i){auto&p=s.planets[i];p=home;p.id=i+1;p.star=i+1;p.owner=0;p.population=0;p.homeworld=false;p.environment={100,100,100};p.habitability=-90;s.stars[i]={StarId(i+1),"Target",{double(100*i),0},i==1?StarClass::BlueWhite:StarClass::Red};set_survey_level(s,1,i+1,SurveyLevel::OrbitalSurvey,s.turn);}
  set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);PlayerOrders orders{1,{}};ComputerState memory;plan_orbital_bases(make_player_view(s,1),orders,memory);assert(orders.orders.size()==2);
 }

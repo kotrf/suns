@@ -1,7 +1,9 @@
 #include "suns/game_state.hpp"
+#include "suns/stations.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -131,18 +133,19 @@ void verify_automatic_station_refuel()
     auto state = logistics_fixture();
     const auto capacity = suns::fleet_fuel_capacity(state, *fleet(state, 2));
     assert(capacity > 12.0);
+    const auto supplied = std::min(capacity, 12.0 + suns::kOrbitalDockAnnualFuelMg);
 
     // The homeworld station has a refueling depot, so no explicit order is
     // needed at the planning boundary.
     const auto refuelled = processor.process(state, {});
-    assert(std::abs(fleet(refuelled, 2)->fuel - capacity) < 0.000001);
+    assert(std::abs(fleet(refuelled, 2)->fuel - supplied) < 0.000001);
 
     // Legacy orders remain valid for old saves and multiplayer turn files.
     auto legacyState = logistics_fixture();
     suns::PlayerOrders refuel{1, {}};
     refuel.orders.emplace_back(suns::RefuelFleetOrder{1, 2});
     const auto legacyRefuelled = processor.process(legacyState, {refuel});
-    assert(std::abs(fleet(legacyRefuelled, 2)->fuel - capacity) < 0.000001);
+    assert(std::abs(fleet(legacyRefuelled, 2)->fuel - supplied) < 0.000001);
 
     auto away = logistics_fixture();
     away.fleets.back().position = {20.0, 20.0};

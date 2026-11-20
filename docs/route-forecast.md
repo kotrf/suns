@@ -7,9 +7,12 @@ there is no disposable TurnProcessor, 96-year horizon or background worker.
 The table shows position, destination, Warp and **ETA ≈**. Nominal travel time
 is cumulative ceil(distance / Warp²) from the received fleet position. Numbers
 are prefixed ≈ and exclude command delivery, fuel, coasting, generation, clouds,
-refueling, encounters and future arrival actions. The Route estimate dialog is
-a quick summary of the same geometry. It does not run a detailed calculation.
-Current fuel and the local overdrive warning remain available separately.
+refueling, encounters and future arrival actions. The Route estimate dialog
+also estimates the departure fuel at a known Orbital Dock using received
+manifests and the current orders. It compares that supply with the nominal
+first leg cost. Later known docks show their shared 200 mg annual limit.
+Actual fuel available at those stops depends on the other fleets served that
+year. Current fuel and the local overdrive warning remain available separately.
 
 A moving target uses a position estimate from its received track, without
 claiming an interception outcome. A gate row estimates approach to the source only; the actual hop and
@@ -29,6 +32,11 @@ Removing the last point submits explicit Stop: navigation, repetition and
 stationary tasks stop when delivered. Older packets cannot restart the canceled
 program. Stop remains valid for an immobilized fleet and does not depend on an
 estimated future coordinate.
+
+When a fleet is stopped and split in the same year, the queue keeps the Stop
+before the Split. A new route for the original or detached fleet runs after
+the split. Orbiting fleets with a visible waypoint have an asterisk after
+their name in the Fleet selector.
 
 Route intent precedence remains current pending edits, then the latest sent
 navigation command (including Stop), then the received onboard route. Sent

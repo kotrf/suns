@@ -353,11 +353,12 @@ void arrival_loads_are_funded_through_actual_delivery()
 }
 void initial_depot_service_preserves_active_loading()
 {
-    enum class Case { Missing, Hidden, ShipyardOnly, Received, StalePosition, LaterWaypoint };
-    for (const auto kind:{Case::Missing,Case::Hidden,Case::ShipyardOnly,Case::Received,Case::StalePosition,Case::LaterWaypoint}) {
+    enum class Case { Missing, Hidden, ShipyardOnly, Received, Limited, StalePosition, LaterWaypoint };
+    for (const auto kind:{Case::Missing,Case::Hidden,Case::ShipyardOnly,Case::Received,Case::Limited,Case::StalePosition,Case::LaterWaypoint}) {
         auto s=active_mineral_shuttle_fixture(20);
         if (kind!=Case::Missing) {
             auto depot=make_demo_game().orbitalStations[0];
+            if (kind != Case::Limited) depot.hull = OrbitalStationHullType::Starbase;
             depot.modules=kind==Case::ShipyardOnly ? std::vector<OrbitalStationModule>{OrbitalStationModule::Shipyard}
                 : std::vector<OrbitalStationModule>{OrbitalStationModule::RefuelingDepot};
             if (kind==Case::LaterWaypoint) depot.planet=2;
@@ -372,6 +373,10 @@ void initial_depot_service_preserves_active_loading()
         const auto view=make_player_view(s,1);
         const auto plan=plan_computer_turn(view); const auto route=planned_move(plan);
         assert(near(s.fleets[0].fuel,20)); // Planning never fills the physical tank.
+        if (kind == Case::Limited) {
+            assert(route.clearRoute || route.warp < 8); // The basic dock cannot fund the original Warp 8 plan.
+            continue;
+        }
         if (kind!=Case::Received) {
             assert(route.clearRoute); // No free credit from missing/hidden services or stale motion.
             continue;

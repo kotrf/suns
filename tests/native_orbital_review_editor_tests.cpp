@@ -10,6 +10,7 @@
 #include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
@@ -55,8 +56,9 @@ struct MainWindowTestAccess {
     static bool factoryButtonEnabled(const MainWindow& w) { return w.buildFactoryButton_->isEnabled(); }
     static void staleIndustry(MainWindow& w) {
         auto& p = w.state_.planets.front();
+        const auto miner = test::add_light_native_miner(w.state_);
         p.productionQueue = {{ProductionKind::Factory, kFactoryCost, 0, ProductionAutomation::Annual, 1000},
-            {ProductionKind::ColonyShip, ship_design_cost(w.state_.shipDesigns.front()), w.state_.shipDesigns.front().id}};
+            {ProductionKind::ColonyShip, ship_design_cost(*find_ship_design(w.state_, miner)), miner}};
         w.state_.players.front().technology.researchActive = false;
         w.state_.players.front().surveyKnowledge.clear(); w.state_.players.front().surveyedStars.clear();
         set_survey_level(w.state_,1,p.star,SurveyLevel::DeepSurvey,w.state_.turn);
@@ -86,13 +88,25 @@ void save_draft(MainWindow& w, const char* name, bool unfitted)
     auto* dialog = MainWindowTestAccess::designer(w); assert(dialog);
     auto* source = dialog->findChild<QComboBox*>("shipDesignTemplate"); assert(source);
     source->setCurrentIndex(source->findData(quint32{1}));
-    if (unfitted) {
-        const auto before = dialog->draft(); bool removed = false;
-        for (const auto& p : before.placements) if (p.component == ShipComponentType::RoboMiniMiner) {
-            dialog->findChild<QToolButton*>(QString("shipSlot_%1").arg(p.slot))->click();
-            dialog->findChild<QPushButton*>("removeSelectedComponent")->click(); removed = true; break;
+    const auto before = dialog->draft();
+    const auto slot = std::find_if(before.placements.begin(), before.placements.end(),
+        [](const auto& p) { return p.component == ShipComponentType::RoboMiniMiner; });
+    assert(slot != before.placements.end());
+    dialog->findChild<QToolButton*>(QString("shipSlot_%1").arg(slot->slot))->click();
+    dialog->findChild<QPushButton*>("removeSelectedComponent")->click();
+    assert(dialog->draft().components.size() == 1);
+    if (!unfitted) {
+        auto* catalog = dialog->findChild<QListWidget*>("shipComponentCatalog");
+        for (int row = 0; row < catalog->count(); ++row) {
+            if (catalog->item(row)->data(Qt::UserRole).toInt() == int(ShipComponentType::RoboMidgetMiner)) {
+                catalog->setCurrentRow(row);
+                break;
+            }
         }
-        assert(removed && dialog->draft().components.size() == 1);
+        auto* fit = dialog->findChild<QPushButton*>("fitSelectedComponent");
+        assert(fit && fit->isEnabled());
+        fit->click();
+        assert(dialog->draft().components.size() == 2);
     }
     dialog->findChild<QLineEdit*>("shipDesignName")->setText(name);
     auto* save = dialog->findChild<QPushButton*>("saveShipDesign"); assert(save && save->isEnabled()); save->click();
@@ -234,7 +248,7 @@ void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
     MainWindow w; MainWindowTestAccess::setup(w); MainWindowTestAccess::staleIndustry(w);
     auto* tree = MainWindowTestAccess::production(w); assert(tree && tree->topLevelItemCount() == 2);
     assert(tree->topLevelItem(0)->text(3) == "Currently skipped");
-    assert(tree->topLevelItem(1)->text(3).contains("(+4)"));
+    assert(tree->topLevelItem(1)->text(3).contains("(+3)"));
     assert(tree->topLevelItem(0)->data(0,Qt::UserRole).toUInt() == 0);
     assert(tree->topLevelItem(1)->data(0,Qt::UserRole).toUInt() == 1);
     auto resolved = MainWindowTestAccess::state(w);
@@ -244,11 +258,11 @@ void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
         paidSupport += resolved.planets.front().nativeOrbit.mineralUnitsPaid;
     }
     assert(resolved.fleets.size() == 2 && !resolved.planets.front().industry);
-    assert(resolved.planets.front().minerals.germanium + paidSupport == 90);
+    assert(resolved.planets.front().minerals.germanium + paidSupport == 93);
     tree->setCurrentItem(tree->topLevelItem(1)); MainWindowTestAccess::moveUp(w);
     const auto* reorder = std::get_if<ReorderProductionQueueOrder>(&MainWindowTestAccess::orders(w).orders.back());
     assert(reorder && reorder->fromIndex == 1 && reorder->toIndex == 0);
-    assert(tree->topLevelItem(0)->text(3).contains("(+4)") && tree->topLevelItem(1)->text(3) == "Currently skipped");
+    assert(tree->topLevelItem(0)->text(3).contains("(+3)") && tree->topLevelItem(1)->text(3) == "Currently skipped");
     MainWindowTestAccess::remove(w);
     const auto& orders = MainWindowTestAccess::orders(w);
     const auto* cancel = std::get_if<CancelProductionOrder>(&orders.orders.back()); assert(cancel && cancel->index == 0);
@@ -265,7 +279,7 @@ void paid_miner_eta_reserves_support_minerals_after_pending_cargo()
         TransferCargoOrder{{home, 0}, {0, transport}, 0, {0, boranium, 0}}
     }}});
     assert(state.turn == 6 && state.planets.front().nativeOrbit.service == HabitatService::Reserve);
-    assert(state.planets.front().minerals.ironium == 58 && state.planets.front().productionQueue.front().remainingCost == 0);
+    assert(state.planets.front().minerals.ironium == 42 && state.planets.front().productionQueue.front().remainingCost == 0);
     SaveGameData host; host.state = state; host.mode = SessionMode::Host;
     host.campaignId = 288; host.turnToken = 17; host.playerTokens = {{1,17}};
     host.pendingOrders = {1, {TransferCargoOrder{{0, transport}, {home, 0}, 0, {0, 20, 0}}}};
@@ -291,13 +305,13 @@ void paid_miner_eta_reserves_support_minerals_after_pending_cargo()
             : "Shortfall for this batch: I 4.0 / B 0.0 / G 0.0 kt"));
         const auto summary = MainWindowTestAccess::productionSummary(w);
         assert(summary.contains("Stock after life support"));
-        assert(summary.contains(enough ? "I 58.0 / B 16.0 / G 83.0 kt" : "I 54.0 / B 16.0 / G 83.0 kt"));
+        assert(summary.contains(enough ? "I 42.0 / B 16.0 / G 83.0 kt" : "I 38.0 / B 16.0 / G 83.0 kt"));
         const auto actual = TurnProcessor{}.process_with_events(input.state, {input.pendingOrders});
         const auto& planet = actual.state.planets.front();
         assert(planet.nativeOrbit.service == HabitatService::Normal && planet.nativeOrbit.mineralUnitsPaid == 4);
         assert(actual.state.fleets.size() == (enough ? 3 : 2));
         assert(planet.productionQueue.empty() == enough);
-        assert(planet.minerals.ironium == (enough ? 0 : 54));
+        assert(planet.minerals.ironium == (enough ? 0 : 38));
         if (!enough) {
             const auto eta = row->text(3);
             MainWindowTestAccess::hiddenShortage(w); MainWindowTestAccess::refreshHome(w);
