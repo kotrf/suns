@@ -23,9 +23,9 @@ void verify_starting_scout_range()
     assert(fleet_gross_mass(state, scout) == 17);
     assert(fleet_fuel_capacity(state, scout) == 50);
     scout.warp = 8;
-    assert(fleet_fuel_consumption_for_distance(state, scout, 64) == 44);
+    assert(near(fleet_fuel_consumption_for_distance(state, scout, 64), 43.6));
     scout.warp = 5;
-    assert(fleet_fuel_consumption_for_distance(state, scout, 25) == 3);
+    assert(near(fleet_fuel_consumption_for_distance(state, scout, 25), 2.2));
 
     // A generated fleet must already choose the economical engine speed.
     assert(state.fleets.front().warp == 5);
@@ -35,10 +35,10 @@ void verify_starting_scout_range()
     state.fleets.front().destination = Position{2000, 1000};
     const auto manualFastRoute = state;
     const TurnProcessor processor;
-    for (int turn = 1; turn <= 16; ++turn) {
+    for (int turn = 1; turn <= 22; ++turn) {
         state = processor.process(state, {});
         assert(near(state.fleets.front().position.x, 1000 + turn * 25));
-        assert(near(state.fleets.front().fuel, 50 - turn * 3));
+        assert(near(state.fleets.front().fuel, 50 - turn * 2.2));
         assert(state.fleets.front().warp == 5);
     }
 
@@ -48,13 +48,13 @@ void verify_starting_scout_range()
     const auto next = processor.process(fast, {});
     assert(next.fleets.front().warp == 8);
     assert(next.fleets.front().position.x == 1064);
-    assert(next.fleets.front().fuel == 6);
+    assert(near(next.fleets.front().fuel, 6.4));
 
     const auto campaign = generate_campaign(GalaxyConfig{},
         {{"Terrans", RacePreset::Terran}, {"Ice", RacePreset::Cryophile}});
     for (const auto& fleet : campaign.fleets) {
         assert(fleet.warp == 5 && fleet.telemetry.warp == 5);
-        assert(fleet_fuel_consumption_for_distance(campaign, fleet, 25) == 3);
+        assert(near(fleet_fuel_consumption_for_distance(campaign, fleet, 25), 2.2));
     }
 }
 
@@ -119,7 +119,7 @@ void verify_movement_accounting_survives_arrival_refuelling()
     const auto movement = std::find_if(result.movementFuel.begin(), result.movementFuel.end(),
         [id](const auto& entry) { return entry.fleet == id; });
     assert(movement != result.movementFuel.end());
-    assert(near(movement->consumed, 3) && near(movement->remaining, 27));
+    assert(near(movement->consumed, 2.2) && near(movement->remaining, 27.8));
     assert(!movement->fuelLimited);
     const auto arrived = std::find_if(result.state.fleets.begin(), result.state.fleets.end(),
         [id](const auto& entry) { return entry.id == id; });
@@ -222,7 +222,7 @@ void verify_original_fuel_tables_and_rounding()
     state.players.front().race.improvedFuelEfficiency = true;
     assert(fleet_fuel_consumption_for_distance(state, fleet, 100) == 306);
     assert(fleet_fuel_consumption_for_distance(state, fleet, 0) == 0);
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 1.01) == 7);
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 1.01), 6.2));
     fleet.fuel = 6;
     assert(near(fleet_fuel_affordable_distance(state, fleet, 81), 1));
 
@@ -274,16 +274,16 @@ void verify_mixed_fleet_cargo_and_fuel_collection()
     Fleet fleet{1, 1, "Convoy", FleetRole::Scout, 10, {0, 0}, Position{100, 0}, 9, 600, 0};
     fleet.ships = {{10, 1}, {11, 1}};
     fleet.minerals.ironium = 100;
-    // All 100 kt cargo is on the freighter: ceil(918.5) + ceil(7.1).
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 927);
+    // All 100 kt of cargo is on the freighter. The two stacks cost 918.6 and 7.2 mg.
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 81), 925.8));
     std::reverse(fleet.ships.begin(), fleet.ships.end());
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 927);
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 81), 925.8));
     state.shipDesigns.front().components.assign(3, ShipComponentType::GalaxyScoop);
     fleet.warp = 9;
     fleet.fuel = 0;
     // The scoop's future collection cannot finance the escort's initial burn.
     assert(fleet_fuel_change_for_distance(state, fleet, 81) < 0);
-    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 8);
+    assert(near(fleet_fuel_consumption_for_distance(state, fleet, 81), 7.2));
     assert(fleet_fuel_affordable_distance(state, fleet, 81) < 81);
     assert(fleet_free_warp(state, fleet) == 1);
 }
@@ -309,9 +309,10 @@ void verify_reference_fuel_exhaustion_and_free_speed()
     state.fleets.front().fuel = 5;
     state.fleets.front().warp = 10;
     next = TurnProcessor{}.process(state, {});
-    assert(near(next.fleets.front().position.x, 7 + 16 * .93));
-    assert(near(next.fleets.front().damagePercent, 18 * .07));
-    assert(next.fleets.front().fuel == 14);
+    // Seven ly now costs 5.1 mg, so the fleet buys six ly and coasts at W4.
+    assert(near(next.fleets.front().position.x, 6 + 16 * .94));
+    assert(near(next.fleets.front().damagePercent, 18 * .06));
+    assert(near(next.fleets.front().fuel, 15.6));
 
     state.shipDesigns.front().components.front() = ShipComponentType::QuickJump5;
     state.fleets.front().warp = 9;
@@ -319,6 +320,142 @@ void verify_reference_fuel_exhaustion_and_free_speed()
     next = TurnProcessor{}.process(state, {});
     assert(near(next.fleets.front().position.x, 1));
     assert(next.fleets.front().fuel == 1);
+}
+
+void verify_exact_container_budget_with_many_stacks()
+{
+    using namespace suns;
+    GameState state;
+    Fleet fleet;
+    fleet.owner = 1;
+    fleet.warp = 8;
+    fleet.fuel = 2'517'074.4;
+    for (ShipDesignId id = 1; id <= 24; ++id) {
+        state.shipDesigns.push_back({id, 1, "Scout", ShipHullType::StarsScout, {ShipComponentType::QuickJump5}});
+        fleet.ships.push_back({id, 3414});
+    }
+
+    // Each of the 24 stacks costs 104878.1 mg. The budget covers all 64 ly.
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 64) == fleet.fuel);
+    assert(fleet_fuel_affordable_distance(state, fleet, 64) == 64);
+}
+
+suns::GameState loaded_freighters(std::uint32_t count)
+{
+    using namespace suns;
+    auto state = make_demo_game();
+    state.planets.clear();
+    const auto design = state.nextShipDesignId++;
+    state.shipDesigns.push_back({design, 1, "Loaded freighter", ShipHullType::LargeFreighter,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5,
+            ShipComponentType::SuperFuelTank, ShipComponentType::SuperFuelTank}});
+    auto& fleet = state.fleets.front();
+    fleet.design = design;
+    fleet.ships = {{design, count}};
+    fleet.minerals.ironium = fleet_cargo_capacity(state, fleet);
+    fleet.position = {0, 0};
+    fleet.warp = 8;
+    return state;
+}
+
+void verify_exact_container_budget_across_turns()
+{
+    using namespace suns;
+    auto state = loaded_freighters(2378);
+    auto& fleet = state.fleets.front();
+    fleet.fuel = 8'468'914.2;
+    assert(fleet.fuel <= fleet_fuel_capacity(state, fleet));
+    const PlayerOrders orders{1, {MoveFleetOrder{fleet.id, {66, 0}, 8}}};
+
+    const TurnProcessor processor;
+    const auto first = processor.process_with_events(state, {orders});
+    assert(first.state.fleets.front().position == Position(64, 0));
+    assert(first.movementFuel.size() == 1 && near(first.movementFuel.front().consumed, 8'212'280.4));
+    const auto second = processor.process_with_events(first.state, {});
+    const auto& arrived = second.state.fleets.front();
+    assert(arrived.position == Position(66, 0) && !arrived.destination);
+    assert(second.movementFuel.size() == 1 && near(second.movementFuel.front().consumed, 256'633.8));
+    assert(!second.movementFuel.front().fuelLimited && arrived.fuel == 0.0);
+}
+
+void verify_refuelling_covers_exact_movement_budget()
+{
+    using namespace suns;
+    auto state = loaded_freighters(2430);
+    auto& freighters = state.fleets.front();
+    const auto freighterId = freighters.id;
+    freighters.minerals.ironium = 2'915'999.84;
+    freighters.fuel = 8'391'858.7;
+    const auto required = fleet_fuel_consumption_for_distance(state, freighters, 64);
+    assert(required == 8'391'858.8 && required <= fleet_fuel_capacity(state, freighters));
+
+    Fleet tanker;
+    tanker.id = state.nextFleetId++;
+    tanker.owner = 1;
+    tanker.design = kScoutDesignId;
+    tanker.position = freighters.position;
+    tanker.fuel = 0.1;
+    state.fleets.push_back(tanker);
+    const TransferFleetFuelOrder transfer{tanker.id, freighterId, 0.1, 0.0};
+    const PlayerOrders orders{1, {transfer, MoveFleetOrder{freighterId, {64, 0}, 8}}};
+
+    const auto result = TurnProcessor{}.process_with_events(state, {orders});
+    const auto& reached = result.state.fleets.front();
+    assert(reached.position == Position(64, 0) && !reached.destination);
+    assert(result.movementFuel.size() == 1);
+    assert(result.movementFuel.front().consumed == required && !result.movementFuel.front().fuelLimited);
+    assert(reached.fuel == 0.0 && result.state.fleets.back().fuel == 0.0);
+
+    const auto projected = projected_cargo_order_state(state, {1, {transfer}});
+    assert(projected.fleets.front().fuel == required && projected.fleets.back().fuel == 0.0);
+
+    // Transfer unsealed fractions just like whole containers, respecting the donor reserve.
+    state.fleets.front().fuel = 0.06;
+    state.fleets.back().fuel = 0.096;
+    const auto partial = projected_cargo_order_state(state, {1, {
+        TransferFleetFuelOrder{tanker.id, freighterId, 0.04, 0.056}}});
+    assert(near(partial.fleets.front().fuel, 0.1, 1e-9));
+    assert(fuel_in_complete_containers(partial.fleets.front().fuel) == 0.1);
+    assert(near(partial.fleets.back().fuel, 0.056, 1e-9));
+
+    const auto capacity = fleet_fuel_capacity(state, state.fleets.front());
+    state.fleets.front().fuel = capacity - 0.1;
+    state.fleets.back().fuel = 0.2;
+    const auto filled = projected_cargo_order_state(state, {1, {
+        TransferFleetFuelOrder{tanker.id, freighterId, 0.2, 0.05}}});
+    assert(filled.fleets.front().fuel == capacity && filled.fleets.back().fuel == 0.1);
+
+    // Around this tank size a fractional top-up can land on the double just
+    // below the decimal boundary. A subsequent burn must carry that container.
+    const auto largeBalance = fuel_after_change(16'783'717.58, 0.02);
+    assert(fuel_in_complete_containers(largeBalance) == 16'783'717.6);
+    assert(fuel_after_consumption(largeBalance, 16'783'717.5) == 0.1);
+    assert(fuel_in_complete_containers(fuel_after_change(largeBalance, -0.01)) == 16'783'717.5);
+}
+
+void verify_fuel_cost_for_equal_cargo_mass(std::uint32_t shipCount, suns::MineralCargo mixedCargo, double budget)
+{
+    using namespace suns;
+    auto state = loaded_freighters(shipCount);
+    auto& fleet = state.fleets.front();
+    fleet.fuel = budget;
+    const PlayerOrders orders{1, {MoveFleetOrder{fleet.id, {64, 0}, 8}}};
+    const TurnProcessor processor;
+
+    for (const auto& cargo : {fleet.minerals, mixedCargo,
+             MineralCargo{mixedCargo.germanium, mixedCargo.boranium, mixedCargo.ironium}}) {
+        fleet.minerals = cargo;
+        const auto result = processor.process_with_events(state, {orders});
+        const auto& arrived = result.state.fleets.front();
+        assert(arrived.position == Position(64, 0) && !arrived.destination);
+        assert(result.movementFuel.size() == 1);
+        assert(result.movementFuel.front().consumed == budget && !result.movementFuel.front().fuelLimited);
+        assert(arrived.fuel == 0.0);
+        assert(fleet_fuel_consumption_for_distance(state, fleet, 64) == budget);
+    }
+
+    const auto nextContainer = (std::round(budget * kFuelContainersPerMg) + 1.0) / kFuelContainersPerMg;
+    assert(fuel_container_cost(budget + 0.01) == nextContainer);
 }
 
 void verify_default_propulsion_and_cargo()
@@ -382,24 +519,39 @@ void verify_researched_warp_ten_drive()
 
 void verify_fuel_limits_actual_travel()
 {
+    using namespace suns;
+    assert(fuel_container_cost(0.0) == 0.0);
+    assert(near(fuel_container_cost(1e-6), 0.1));
+    assert(near(fuel_container_cost(0.1 + 0.2), 0.3));
+    assert(near(fuel_container_cost(1.001), 1.1));
+    constexpr auto largeBill = 10'000'000'000'000.0;
+    assert(fuel_container_cost(largeBill + 0.01) == 10'000'000'000'000.1);
+    assert(fuel_in_complete_containers(0.099) == 0.0);
+    assert(near(fuel_in_complete_containers(1.086), 1.0));
+
     auto state = suns::make_demo_game();
     state.planets.clear();
     auto& scout = state.fleets.front();
     scout.position = {0.0, 0.0};
     scout.destination.reset();
     scout.warp = 8;
-    scout.fuel = 10.0;
+    scout.fuel = 10.036;
 
     suns::PlayerOrders orders{1, {}};
     orders.orders.emplace_back(suns::MoveFleetOrder{scout.id, {64.0, 0.0}, 8});
 
     const suns::TurnProcessor processor;
-    const auto next = processor.process(state, {orders});
-    const auto& moved = next.fleets.front();
+    const auto result = processor.process_with_events(state, {orders});
+    const auto& moved = result.state.fleets.front();
     assert(moved.position.x > 0.0);
     assert(moved.position.x < 64.0);
-    assert(near(moved.fuel, 0.0));
+    assert(near(moved.fuel, 0.036));
     assert(moved.destination.has_value());
+    assert(result.movementFuel.size() == 1 && near(result.movementFuel.front().consumed, 10.0));
+
+    const auto stalled = processor.process(result.state, {});
+    assert(stalled.fleets.front().position == moved.position && stalled.fleets.front().fuelStalled);
+    assert(near(stalled.fleets.front().fuel, 0.036));
 }
 
 void verify_ram_scoop_can_generate_fuel_in_flight()
@@ -531,6 +683,11 @@ int main()
     verify_original_collection_is_per_engine();
     verify_mixed_fleet_cargo_and_fuel_collection();
     verify_reference_fuel_exhaustion_and_free_speed();
+    verify_exact_container_budget_with_many_stacks();
+    verify_exact_container_budget_across_turns();
+    verify_refuelling_covers_exact_movement_budget();
+    verify_fuel_cost_for_equal_cargo_mass(2430, {2'500'000.1, 20'000.2, 395'999.7}, 8'391'859.2);
+    verify_fuel_cost_for_equal_cargo_mass(2400, {2'500'000.1, 20'000.2, 359'999.7}, 8'288'256.0);
     verify_stars_progression_and_multifield_gates();
     verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();

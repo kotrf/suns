@@ -79,9 +79,16 @@ Current logistics components include:
 
 Fleets at a friendly colony are automatically refuelled at the start of turn for now. This stands in for explicit planetary fuel transfer until colony logistics are modelled in more detail.
 
+Fuel is ionised antimatter held in magnetic traps. Each sealed container holds
+**0.1 mg**. Opening it commits the full contents to use. A positive movement
+charge therefore rounds up to the next whole container, and a zero-cost move
+spends zero. Fuel under 0.1 mg stays aboard until collection, generation, or a
+delivery provides enough for a complete container. Fuel transfers and saved
+balances retain their fractional amounts.
+
 If a legacy normal drive lacks enough fuel for the requested Warp distance, the fleet travels only the distance its remaining fuel can support and keeps its course. A legacy ram-scoop with a negative fuel rate can move even with an empty tank and collect fuel during that movement.
 
-The reference Stars! engines use individual Warp fuel tables and separate collection per engine per ly. If fuel runs out at the ordered Warp, their fleets use the remaining travel time at the lowest free Warp among their engines. The ordered Warp is retained for the next year. Fuel efficiency reduces their consumption by 15%; legacy engines keep their previous behavior. See [reference fuel rules](stars-propulsion.md#reference-fuel-rules) for rounding, cargo allocation and collection details.
+The reference Stars! engines use individual Warp fuel tables and separate collection per engine per ly. If fuel runs out at the ordered Warp, their fleets use the remaining travel time at the lowest free Warp among their engines. The ordered Warp is retained for the next year. Fuel efficiency reduces consumption for reference engines by 15%. See [reference fuel rules](stars-propulsion.md#reference-fuel-rules) for rounding, cargo allocation and collection details.
 
 ## Mass and cargo
 

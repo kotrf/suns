@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 
 #include "suns/communications.hpp"
+#include "suns/propulsion.hpp"
 
 #include <QGraphicsScene>
 #include <QGroupBox>
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace suns {
 namespace {
@@ -54,10 +56,7 @@ void MainWindow::installFleetReadabilityPolish()
     QProgressBar* damageBar = nullptr;
     if (auto* fleetGroup = findChild<QGroupBox*>("fleetGroup")) {
         if (auto* layout = qobject_cast<QVBoxLayout*>(fleetGroup->layout())) {
-            fuelBar = makeFleetGauge(
-                "fleetFuelBar",
-                "Fuel aboard versus the fitted ship design's tank capacity.",
-                fleetGroup);
+            fuelBar = makeFleetGauge("fleetFuelBar", {}, fleetGroup);
             cargoBar = makeFleetGauge(
                 "fleetCargoBar",
                 "Shared cargo-hold usage. Colonists and Ironium/Boranium/Germanium all occupy this same capacity.",
@@ -213,23 +212,27 @@ void MainWindow::installFleetReadabilityPolish()
                 bar->setEnabled(false);
                 bar->setFormat("No fleet selected");
             }
+            fuelBar->setToolTip({});
             return;
         }
 
         const double fuelCapacity = fleet_fuel_capacity(state_, *fleet);
+        const double availableFuel = fuel_in_complete_containers(fleet->fuel);
         fuelBar->setEnabled(fuelCapacity > 0.000001);
-        fuelBar->setValue(percentOf(fleet->fuel, fuelCapacity));
+        fuelBar->setValue(percentOf(availableFuel, fuelCapacity));
         if (fuelCapacity > 0.000001) {
             fuelBar->setFormat(
                 QString("Fuel %1 / %2 mg")
-                    .arg(fleet->fuel, 0, 'f', 1)
+                    .arg(availableFuel, 0, 'f', 1)
                     .arg(fuelCapacity, 0, 'f', 1));
         } else {
             fuelBar->setFormat("Fuel — no tank capacity");
         }
         fuelBar->setToolTip(
-            QString("Fuel aboard: %1 / %2\nFleet gross mass: %3 kt")
-                .arg(fleet->fuel, 0, 'f', 1)
+            QString("Fuel available to burn %1 mg\nTotal fuel aboard %2 / %3 mg\n"
+                    "Each opened 0.1 mg container is spent in full.\nFleet gross mass %4 kt")
+                .arg(availableFuel, 0, 'f', 1)
+                .arg(fleet->fuel, 0, 'g', std::numeric_limits<double>::digits10)
                 .arg(fuelCapacity, 0, 'f', 1)
                 .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1));
 

@@ -55,9 +55,9 @@ survey ability. The designer shows ordinary and penetrating ranges separately;
 the map's fleet coverage circle uses the greater of the two.
 
 All new empires start at Electronics 1 with a Rhino-equipped Scout, for a 50 ly
-starting radar. The reference Scout now weighs 17 kt (8 hull, 4 Quick Jump 5,
-5 Rhino); fuel capacity remains 50 mg. A full 25 ly Warp-5 turn still costs 3 mg
-with the existing whole-mg billing, while a 64 ly Warp-8 turn costs 44 mg.
+starting radar. The reference Scout weighs 17 kt (8 hull, 4 Quick Jump 5,
+5 Rhino) and holds 50 mg of fuel. A full 25 ly Warp-5 turn costs 2.2 mg.
+A full 64 ly Warp-8 turn costs 43.6 mg.
 Colony sensors remain 150 ly; signal speed remains 150 ly/year.
 
 ## Anomalies and compatibility

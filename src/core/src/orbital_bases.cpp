@@ -4,6 +4,7 @@
 #include "suns/mobile_base.hpp"
 #include "suns/stations.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/campaign.hpp"
 #include <algorithm>
 #include <cmath>
@@ -97,7 +98,8 @@ std::string orbital_retirement_error(const GameState& s, const Fleet& f, const O
     const auto recovered = orbital_base_recovery(s, f);
     if (fleet_cargo_used(s, *receiver) + mineral_cargo_mass(f.minerals) + mineral_cargo_mass(recovered)
         > fleet_cargo_capacity(s, *receiver)) return "Recovery transport needs room for all stocks and recovered I/B/G";
-    if (receiver->fuel + f.fuel > fleet_fuel_capacity(s, *receiver)) return "Recovery transport needs tank space for all remaining fuel";
+    if (fuel_after_change(receiver->fuel, f.fuel) > fleet_fuel_capacity(s, *receiver))
+        return "Recovery transport needs tank space for all remaining fuel";
     if (c.action == OrbitalBaseAction::RebuildStation) {
         const auto* p = find_planet(s, f.orbitalBase.planet);
         if (!p || p->owner != f.owner || !p->population) return "Station rebuilding requires your populated surface colony";
@@ -266,7 +268,7 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
             receiver.minerals.ironium += f.minerals.ironium + recovered.ironium;
             receiver.minerals.boranium += f.minerals.boranium + recovered.boranium;
             receiver.minerals.germanium += f.minerals.germanium + recovered.germanium;
-            receiver.fuel += f.fuel;
+            receiver.fuel = fuel_after_change(receiver.fuel, f.fuel);
             if (command.station) {
                 auto& p = *std::find_if(s.planets.begin(), s.planets.end(), [&](const auto& p) { return p.id == b.planet; });
                 ProductionItem item{ProductionKind::OrbitalStation, station_build_cost(*command.station)};
@@ -290,9 +292,13 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
             continue;
         }
         if (!f.colonists) { if (previouslySupported) report(2); continue; }
-        if (f.damagePercent < 100 && f.fuel >= 1 && pay(f, {1, 1, 1})) {
-            f.fuel -= 1; b.supported = true;
-            if (b.reserveYears < 3 && f.fuel >= 1 && pay(f, {1, 1, 1})) { f.fuel -= 1; ++b.reserveYears; }
+        if (f.damagePercent < 100 && fuel_in_complete_containers(f.fuel) >= 1.0 && pay(f, {1, 1, 1})) {
+            f.fuel = fuel_after_consumption(f.fuel, 1.0);
+            b.supported = true;
+            if (b.reserveYears < 3 && fuel_in_complete_containers(f.fuel) >= 1.0 && pay(f, {1, 1, 1})) {
+                f.fuel = fuel_after_consumption(f.fuel, 1.0);
+                ++b.reserveYears;
+            }
         } else if (b.reserveYears) --b.reserveYears;
         else { b.populationLost = f.colonists / 10 + (f.colonists % 10 != 0); f.colonists -= b.populationLost; }
         const auto radiation = orbital_radiation_losses(s, f);

@@ -33,6 +33,7 @@ struct MainWindowTestAccess {
         w.state_.stars[2].position = {80, 0};
         w.state_.stars[2].name = "Perrin";
         w.state_.fleets.front().position = {20, 20};
+        w.state_.fleets.front().fuel = 0.06;
         w.state_.fleets.front().telemetry = {};
         auto own = w.state_.fleets.front();
         own.id = 2;
@@ -156,6 +157,12 @@ int main(int argc, char** argv)
     window.show();
     settle();
 
+    auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar");
+    assert(fuel && fuel->format() == "Fuel 0.0 / 300.0 mg");
+    assert(fuel->toolTip().contains("Fuel available to burn 0.0 mg"));
+    assert(fuel->toolTip().contains("Total fuel aboard 0.06 / 300.0 mg"));
+    assert(fuel->toolTip().contains("Each opened 0.1 mg container is spent in full."));
+
     auto* source = window.findChild<QComboBox*>("routeSourceFleetCombo");
     auto* view = window.findChild<QGraphicsView*>();
     view->resetTransform();
@@ -177,7 +184,8 @@ int main(int argc, char** argv)
     source->setCurrentIndex(source->findData(quint32(2)));
     settle();
     assert(window.selectedFleetForRouteProgram() == 2);
-    assert(window.findChild<QProgressBar*>("fleetFuelBar")->format().contains("17.0"));
+    assert(fuel->format().contains("17.0"));
+    assert(fuel->toolTip().contains("Total fuel aboard 17 / 300.0 mg"));
     clickSystem(window, {80, 0});
     assert(window.selectedFleetForRouteProgram() == 2);
     assert(source->itemData(1).toUInt() == 5); // Confirmed position, not hidden host position 3000.
