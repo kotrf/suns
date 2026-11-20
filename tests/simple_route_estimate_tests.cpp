@@ -180,13 +180,13 @@ void fuel_uses_leg_distance_warp_and_rounding_without_year_simulation(MainWindow
     const auto id = state.fleets.front().id; const PlayerOrders orders{1, {route(id)}};
     MainWindowTestAccess::install(window, state, orders);
     const auto rows = window.selectedFleetRouteProgramRows();
-    assert(nominalFuel(rows[0]) == 3 && nominalFuel(rows[1]) > nominalFuel(rows[0]));
+    assert(rows[0].fuel == "≈2.2" && rows[1].fuel == "≈4.3");
     assert(rows[0].fuelTooltip.contains("mg") && rows[0].fuelTooltip.contains("per-year rounding"));
     const auto first = TurnProcessor{}.process(state, {orders});
-    assert(50 - first.fleets.front().fuel == nominalFuel(rows[0]));
+    assert(std::abs(50 - first.fleets.front().fuel - nominalFuel(rows[0])) < 1e-9);
     const auto third = TurnProcessor{}.process(TurnProcessor{}.process(first, {}), {});
     const auto realSecondLeg = first.fleets.front().fuel - third.fleets.front().fuel;
-    assert(std::abs(realSecondLeg - nominalFuel(rows[1])) <= 2); // Annual billing can round separately.
+    assert(std::abs(realSecondLeg - 4.4) < 1e-9); // Each of the two years costs 2.2 mg.
 
     QApplication::processEvents(); QApplication::processEvents();
     auto* tree = window.findChild<QTreeWidget*>("routeProgramQueue"); assert(tree && tree->columnCount() == 5);
@@ -194,7 +194,7 @@ void fuel_uses_leg_distance_warp_and_rounding_without_year_simulation(MainWindow
     auto fast = route(id); fast.warp = 8;
     MainWindowTestAccess::install(window, state, {1, {fast}});
     const auto faster = window.selectedFleetRouteProgramRows();
-    assert(faster[0].eta == rows[0].eta && nominalFuel(faster[0]) > nominalFuel(rows[0]));
+    assert(faster[0].eta == rows[0].eta && faster[0].fuel == "≈17.0");
     QApplication::processEvents(); QApplication::processEvents();
     assert(tree->topLevelItem(0)->text(4) == faster[0].fuel);
 }

@@ -2,6 +2,7 @@
 #include "suns/communications.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/deep_space.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/ship_refit.hpp"
 #include <algorithm>
@@ -98,10 +99,7 @@ bool transfer_mobile_base_fuel(GameState& state, PlayerId player, const Transfer
         if (!mobile_base_service_error(state, *fleet, serviceTurn).empty()) return false;
     }
     const auto reserve = std::max(order.sourceReserve, mobile_base_dock(state, *from) ? from->mobileBase.fuelReserve : 0.0);
-    const auto amount = std::min({order.amount, std::max(0.0, from->fuel - reserve),
-        std::max(0.0, fleet_fuel_capacity(state, *to) - to->fuel)});
-    if (amount <= 0) return false;
-    from->fuel -= amount; to->fuel += amount; return true;
+    return transfer_fuel(*from, *to, order.amount, reserve, fleet_fuel_capacity(state, *to)) > 0.0;
 }
 void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
 {
@@ -124,9 +122,8 @@ void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
             auto* client = client_fleet(state, clientId);
             if (!client || client == &base || client->owner != base.owner || client->outpost != OutpostKind::None
                 || !same_position(client->position, base.position)) continue;
-            const auto fuel = refitting.contains(clientId) ? 0.0 : std::min(std::max(0.0, base.fuel - base.mobileBase.fuelReserve),
-                std::max(0.0, fleet_fuel_capacity(state, *client) - client->fuel));
-            base.fuel -= fuel; client->fuel += fuel;
+            if (!refitting.contains(clientId))
+                (void)transfer_fuel(base, *client, base.fuel, base.mobileBase.fuelReserve, fleet_fuel_capacity(state, *client));
             const auto mass = fleet_dry_mass(state, *client);
             if (mass <= 0 || client->damagePercent <= 0) continue;
             const auto work = std::max(0.0, std::min({budget, mass * client->damagePercent / 100.0,

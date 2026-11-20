@@ -3,8 +3,81 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 namespace suns {
+
+namespace {
+constexpr double kFuelRoundingToleranceMg = 1e-9;
+constexpr double kRelativeFuelCostRoundoff = 8.0 * std::numeric_limits<double>::epsilon();
+constexpr double kMaximumFuelCostRoundoffMg = 0.005;
+
+double complete_fuel_container_count(double storedMg)
+{
+    const auto available = std::max(0.0, storedMg);
+    const auto nearest = std::round(available * kFuelContainersPerMg);
+    const auto boundary = nearest / kFuelContainersPerMg;
+    // A sum of fractional amounts can land one representable step below the
+    // boundary, even when its nominal value covers the whole container.
+    if (boundary - available > kFuelRoundingToleranceMg && available < std::nextafter(boundary, 0.0))
+        return nearest - 1.0;
+    return nearest;
+}
+}
+
+double fuel_containers_required(double requiredMg)
+{
+    if (!(requiredMg > 0.0)) return 0.0;
+    const auto nearest = std::round(requiredMg * kFuelContainersPerMg);
+    const auto boundary = nearest / kFuelContainersPerMg;
+    // Cargo sums, load allocation and engine scaling can each round. Allow
+    // their accumulated error while keeping an extra hundredth of a mg billable.
+    const auto roundoff = std::clamp(boundary * kRelativeFuelCostRoundoff,
+        kFuelRoundingToleranceMg, kMaximumFuelCostRoundoffMg);
+    const auto required = requiredMg - boundary > roundoff
+            && requiredMg > std::nextafter(boundary, requiredMg)
+        ? nearest + 1.0 : nearest;
+    return std::max(1.0, required);
+}
+
+double fuel_in_complete_containers(double storedMg)
+{
+    return complete_fuel_container_count(storedMg) / kFuelContainersPerMg;
+}
+
+double fuel_after_change(double storedMg, double changeMg)
+{
+    if (storedMg == 0.0 || changeMg == 0.0 || changeMg <= -storedMg)
+        return std::max(0.0, storedMg + changeMg);
+
+    // Sum counts before converting back to mg, so exact tenths stay exact
+    // even when a small delivery goes into a large tank.
+    const auto storedContainers = std::round(storedMg * kFuelContainersPerMg);
+    const auto changedContainers = std::round(changeMg * kFuelContainersPerMg);
+    const auto storedFraction = storedMg - storedContainers / kFuelContainersPerMg;
+    const auto changedFraction = changeMg - changedContainers / kFuelContainersPerMg;
+    return std::max(0.0, (storedContainers + changedContainers) / kFuelContainersPerMg
+        + (storedFraction + changedFraction));
+}
+
+double fuel_after_consumption(double storedMg, double consumedMg)
+{
+    if (consumedMg <= 0.0) return storedMg;
+    const auto available = fuel_in_complete_containers(storedMg);
+    return fuel_after_change(std::max(storedMg, available), -std::min(consumedMg, available));
+}
+
+double transfer_fuel(Fleet& source, Fleet& destination,
+    double requestedMg, double sourceReserveMg, double destinationCapacityMg)
+{
+    const auto available = fuel_after_change(source.fuel, -sourceReserveMg);
+    const auto room = fuel_after_change(destinationCapacityMg, -destination.fuel);
+    const auto amount = std::min({requestedMg, available, room});
+    if (!std::isfinite(amount) || amount <= 0.0) return 0.0;
+    source.fuel = std::max(sourceReserveMg, fuel_after_change(source.fuel, -amount));
+    destination.fuel = std::min(destinationCapacityMg, fuel_after_change(destination.fuel, amount));
+    return amount;
+}
 
 // Stars! Technical Reference Guide, p11, and Player's Guide, B-6 (PDF p246).
 // Thrust and deterministic hull damage belong to Suns!.

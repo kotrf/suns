@@ -43,9 +43,9 @@ Starting fleets and newly built ships use the fitted reference engine's catalog
 optimal Warp as their initial speed. Legacy ships retain their previous defaults
 (Warp 8 for scouts/other ships, Warp 7 for colony ships). The starting reference
 Scout weighs 17 kt (8 kt hull, 4 kt Quick Jump 5, 5 kt Rhino scanner) and holds
-50 mg. A full turn at Warp 5 moves 25 ly and costs 3 mg; at Warp 8 it would move
-64 ly and cost 44 mg. In deep space, Warp 5 sustains
-16 full turns / 400 ly before needing a slower leg or refuelling. Existing saves
+50 mg. A full turn at Warp 5 moves 25 ly and costs 2.2 mg. At Warp 8 it moves
+64 ly and costs 43.6 mg. In deep space, Warp 5 sustains
+22 full turns / 550 ly before needing a slower leg or refuelling. Existing saves
 and explicit route speeds are preserved; set an existing Quick Jump 5 scout to
 Warp 5 for normal exploration. Higher speeds remain available when needed.
 
@@ -79,15 +79,14 @@ the host independently rejects designs that bypass those gates.
 Travel remains Warp squared. For a table percentage `E`, unrounded consumption
 is `loaded_mass_kt * E * distance_ly / 20000`: at 100%, one mg moves 200 kt by
 one ly. Cargo is distributed between design stacks in proportion to their cargo
-capacity. Consumption is billed separately for each stack: round distance up to
-whole ly, truncate the computed bill to one decimal place, then round up to whole
-mg. Fuel efficiency first changes `E` to `ceil(E * 0.85)`.
+capacity. Each stack's movement bill uses distance rounded up to whole ly. The
+fuel cost rounds up to a whole 0.1 mg container. Fuel efficiency first changes
+`E` to `ceil(E * 0.85)`.
 
-The rounding follows the empirical Stars! algorithm attributed to m.a@stars,
-published in CraigStars (`getFuelCostForEngine`, pinned source):
+The engine tables and distance billing draw on the empirical Stars! algorithm
+attributed to m.a@stars and published in CraigStars (`getFuelCostForEngine`, pinned source).
 https://github.com/sirgwain/craig-stars/blob/d6a71d0b981b2343498e31311ef17797ec501d2d/cs/fleet.go
-Suns! implements these rules independently and retains its fractional ship/cargo
-masses; it does not reproduce every integer-mass quirk of the original binary.
+Suns! retains fractional ship and cargo masses and uses its own container size.
 
 Collection is separate from consumption and depends on engine count and actual
 distance, not cargo mass. Each engine collects 1/3/6/10 mg per ly at its free
@@ -100,8 +99,9 @@ its fuel capacity.
 When fuel cannot support the ordered Warp, reference-engine fleets spend their
 remaining time at the lowest free Warp among their engines, retaining the
 requested Warp for the next year. Collection during a move cannot finance the
-initial consumption of another engine in the fleet. Pure legacy fleets retain
-their previous fuel-limited movement and signed linear fuel curves.
+initial consumption of another engine in the fleet. Pure legacy fleets use their
+signed linear fuel curves. Their positive movement cost rounds up to whole
+containers, and available whole containers determine how far they can travel.
 
 The designer shows base consumption per 100 kt per ly separately from collection
 for the fitted engine bank; Fuel efficiency is applied in flight. The reference
