@@ -16,6 +16,7 @@ void explain(std::string&, const std::string&);
 bool military_fleet(const GameState&, const Fleet&);
 bool hostile_intel(const PlayerView&);
 void plan_military(const PlayerView&, ComputerTurnPlan&, std::string&);
+void plan_battle_plans(const PlayerView&, PlayerOrders&);
 std::optional<GateFleetOrder> gate_staging_order(
     const GameState&, const Fleet&, Position target, bool requireRefueling = false, const PlayerOrders* pending = nullptr);
 void plan_gate_construction(const PlayerView&, ComputerTurnPlan&, std::string&);

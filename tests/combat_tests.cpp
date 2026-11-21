@@ -418,6 +418,207 @@ void founding_cannot_evade_combat()
     assert(automatic.state.planets.front().owner == 0 && !fleet(automatic.state, 2));
 }
 
+void attack_policy_controls_route_contact()
+{
+    auto state = arena({C::Laser, C::CompletePhaseShield}, {C::Laser, C::CompletePhaseShield});
+    state.fleets[0].position = {0, 0};
+    state.fleets[0].destination = Position{25, 0};
+    state.fleets[0].warp = 5;
+    state.fleets[1].position = {10, 0};
+    for (auto& fleet : state.fleets) fleet.battlePlan.attackOnContact = false;
+    const auto passing = TurnProcessor{}.process_with_events(state, {});
+    assert(passing.state.fleets.size() == 2 && same_position(fleet(passing.state, 1)->position, {25, 0}));
+    assert(std::none_of(passing.events.begin(), passing.events.end(), [](const auto& e) { return e.battle.has_value(); }));
+
+    // An immediate plan order takes effect before movement. Return-fire
+    // fleets defend themselves without contributing to battle initiation.
+    const auto attacked = TurnProcessor{}.process_with_events(state, {{1, {SetFleetBattlePlanOrder{1, {}}}}});
+    const auto& battle = *battle_event(attacked).battle;
+    assert(same_position(battle.position, {10, 0}));
+    assert(battle.units[0].initiated && !battle.units[1].initiated);
+    assert(std::any_of(battle.shots.begin(), battle.shots.end(), [](const auto& shot) { return shot.attacker == 1; }));
+
+    state.shipDesigns[1].components = {C::QuickJump5};
+    auto armedOnly = FleetBattlePlan{true, BattleTarget::ArmedShips, false};
+    const auto filtered = TurnProcessor{}.process_with_events(state, {{1, {SetFleetBattlePlanOrder{1, armedOnly}}}});
+    assert(same_position(fleet(filtered.state, 1)->position, {25, 0}));
+    assert(std::none_of(filtered.events.begin(), filtered.events.end(), [](const auto& e) { return e.battle.has_value(); }));
+    const auto againstUnarmed = TurnProcessor{}.process_with_events(state, {{1, {SetFleetBattlePlanOrder{1, {}}}}});
+    assert(battle_event(againstUnarmed).battle->units[0].initiated);
+}
+
+void preferred_and_strict_targets()
+{
+    auto state = arena({C::GatlingGun, C::CompletePhaseShield}, {C::Laser, C::CompletePhaseShield});
+    state.shipDesigns.push_back({21, 2, "Cargo ship", ShipHullType::SmallFreighter, {C::QuickJump5}});
+    state.fleets[1].ships.push_back({21, 1});
+    // Keep both of the defender's designs together so the gatling first
+    // reaches its preferred and fallback categories in the same round.
+    state.fleets[1].battlePlan = {false, BattleTarget::Stations, false};
+    state.fleets[0].battlePlan = {true, BattleTarget::CargoShips, false};
+    auto observer = state.fleets[1];
+    observer.id = 3;
+    observer.owner = 3;
+    observer.design = 30;
+    observer.ships = {{30, 1}};
+    observer.destination = Position{25, 0};
+    observer.warp = 5;
+    state.shipDesigns.push_back({30, 3, "Observer", ShipHullType::Destroyer, {C::QuickJump5, C::Laser}});
+    state.fleets.push_back(observer);
+    state.nextFleetId = 4;
+
+    const auto strict = TurnProcessor{}.process_with_events(state, {});
+    const auto& filtered = *battle_event(strict).battle;
+    assert(filtered.units.size() == 3 && same_position(fleet(strict.state, 3)->position, {25, 0}));
+    assert(std::none_of(strict.events.begin(), strict.events.end(), [](const auto& e) { return e.recipient == 3 && e.battle; }));
+    assert(std::any_of(filtered.shots.begin(), filtered.shots.end(), [](const auto& shot) { return shot.attacker == 0; }));
+    for (const auto& shot : filtered.shots)
+        if (shot.attacker == 0) assert(filtered.units[shot.target].design == 21);
+
+    state.fleets.pop_back();
+    state.fleets[0].battlePlan.allowOtherTargets = true;
+    const auto fallback = TurnProcessor{}.process_with_events(state, {});
+    const auto& preferred = *battle_event(fallback).battle;
+    const auto firstVolley = std::find_if(preferred.shots.begin(), preferred.shots.end(),
+        [](const auto& shot) { return shot.attacker == 0; });
+    assert(firstVolley != preferred.shots.end() && preferred.units[firstVolley->target].design == 21);
+    assert(std::any_of(firstVolley, preferred.shots.end(), [&](const auto& shot) {
+        return shot.attacker == 0 && preferred.units[shot.target].design == 20;
+    }));
+}
+
+void ranged_and_escort_tactics()
+{
+    auto state = arena({C::MarkIVBlaster, C::CompletePhaseShield}, {C::Laser, C::CompletePhaseShield});
+    const auto approach = TurnProcessor{}.process_with_events(state, {});
+    state.fleets[0].battlePlan.tactic = BattleTactic::KeepDistance;
+    const auto ranged = TurnProcessor{}.process_with_events(state, {});
+    const auto returnShots = [](const auto& result) {
+        const auto& shots = battle_event(result).battle->shots;
+        return std::count_if(shots.begin(), shots.end(), [](const auto& shot) { return shot.attacker == 1; });
+    };
+    assert(returnShots(ranged) < returnShots(approach));
+    const auto& shots = battle_event(ranged).battle->shots;
+    assert(std::any_of(shots.begin(), shots.end(), [](const auto& shot) { return shot.attacker == 0 && shot.range > 1; }));
+
+    auto convoy = arena({C::Laser}, {});
+    convoy.shipDesigns.push_back({11, 1, "Cargo ship", ShipHullType::SmallFreighter, {C::QuickJump5}});
+    convoy.fleets[0].ships.push_back({11, 1});
+    convoy.fleets[0].battlePlan.tactic = BattleTactic::Escort;
+    const auto escort = TurnProcessor{}.process_with_events(convoy, {});
+    assert(battle_event(escort).battle->shots.empty());
+    convoy.fleets[0].ships.pop_back();
+    const auto withoutCargo = TurnProcessor{}.process_with_events(convoy, {});
+    assert(!battle_event(withoutCargo).battle->shots.empty());
+}
+
+void separate_escort_joins_moving_cargo()
+{
+    auto state = arena({C::Laser}, {});
+    state.fleets[0].position = {10, 0};
+    state.fleets[0].battlePlan = {true, BattleTarget::CargoShips, false};
+    state.fleets[1].destination = Position{25, 0};
+    state.fleets[1].warp = 5;
+    state.shipDesigns[1].hull = ShipHullType::SmallFreighter;
+    state.shipDesigns.push_back({21, 2, "Escort", ShipHullType::Destroyer, {C::QuickJump5, C::Laser}});
+    auto escort = state.fleets[1];
+    escort.id = 3;
+    escort.design = 21;
+    escort.ships = {{21, 1}};
+    escort.battlePlan = {false, BattleTarget::Any, true, BattleTactic::Escort};
+    state.fleets.push_back(escort);
+    state.nextFleetId = 4;
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    const auto& report = *battle_event(result, 2).battle;
+    const auto unit = std::find_if(report.units.begin(), report.units.end(), [](const auto& u) { return u.fleet == 3; });
+    assert(unit != report.units.end() && !unit->initiated);
+    assert(std::any_of(report.shots.begin(), report.shots.end(), [&](const auto& shot) {
+        return report.units[shot.attacker].fleet == 3;
+    }));
+}
+
+void withdrawals_near_stations()
+{
+    auto state = arena({}, {});
+    state.fleets.pop_back();
+    state.shipDesigns[0].hull = ShipHullType::SmallFreighter;
+    state.shipDesigns.push_back({11, 1, "Escort", ShipHullType::Destroyer, {C::QuickJump5, C::ManeuveringJet}});
+    state.stars = {{1, "Station", {0, 0}}};
+    state.planets = {{1, 1, "Station", 100, 0, 0}};
+    state.orbitalStations = {{1, 2, 1, "Enemy dock", OrbitalStationHullType::OrbitalDock, {}, {C::Laser}}};
+    state.nextOrbitalStationId = 2;
+    auto& freighter = state.fleets.front();
+    freighter.ships.push_back({11, 1});
+    freighter.colonists = 500;
+    freighter.minerals = {2, 3, 4};
+    freighter.fuel = 100.5;
+    freighter.warp = 5;
+    freighter.destination = Position{25, 0};
+    freighter.waypointQueue = {{{30, 0}, 5}};
+    freighter.battlePlan = {false, BattleTarget::Any, true, BattleTactic::Withdraw};
+    const auto escaped = TurnProcessor{}.process_with_events(state, {});
+    const auto& report = *battle_event(escaped).battle;
+    assert(report.units.size() == 3 && report.units.back().station == 1 && report.units.back().initiated);
+    assert(!report.stalemate && !report.units[0].initiated && report.units[0].withdrawalRound > 0);
+    assert(report.units[0].withdrawalRound == report.units[1].withdrawalRound);
+    const auto* survivor = fleet(escaped.state, 1);
+    assert(survivor && distance_between(survivor->position, {0, 0}) > kFleetEncounterRadius);
+    assert(!survivor->destination && survivor->waypointQueue.empty());
+    assert(survivor->colonists == freighter.colonists && near(survivor->fuel, freighter.fuel)
+        && near(survivor->minerals.ironium, freighter.minerals.ironium));
+    const auto following = TurnProcessor{}.process_with_events(escaped.state, {});
+    assert(std::none_of(following.events.begin(), following.events.end(), [](const auto& e) { return e.battle.has_value(); }));
+
+    freighter.damagePercent = 100;
+    const auto caught = TurnProcessor{}.process_with_events(state, {});
+    const auto& loss = *battle_event(caught).battle;
+    assert(!fleet(caught.state, 1) && loss.units[0].attemptedWithdrawal && !loss.units[0].withdrawalRound);
+
+    // Station targeting and initiation are independent of landing rights.
+    freighter.damagePercent = 0;
+    state.orbitalStations.front().components.clear();
+    state.shipDesigns.back().components.push_back(C::Laser);
+    freighter.battlePlan = {true, BattleTarget::ArmedShips, false};
+    const auto passed = TurnProcessor{}.process_with_events(state, {});
+    assert(same_position(fleet(passed.state, 1)->position, {25, 0}));
+    freighter.battlePlan.preferredTarget = BattleTarget::Stations;
+    const auto struck = TurnProcessor{}.process_with_events(state, {});
+    const auto& assault = *battle_event(struck).battle;
+    assert(assault.units[1].initiated && !assault.units.back().initiated);
+    assert(std::any_of(assault.shots.begin(), assault.shots.end(),
+        [&](const auto& shot) { return assault.units[shot.target].station == 1; }));
+}
+
+void newer_battle_plan_survives_overtaken_packet()
+{
+    auto state = arena({C::Laser}, {});
+    state.stars = {{1, "Home", {0, 0}}};
+    state.planets = {{1, 1, "Home", 100, 1, 1000000}};
+    state.planets.front().homeworld = true;
+    state.planets.front().radar = PlanetaryRadarLevel::Full;
+    auto& guard = state.fleets.front();
+    guard.position = guard.telemetry.position = {600, 0};
+    const FleetBattlePlan withdrawal{false, BattleTarget::Any, true, BattleTactic::Withdraw};
+    const FleetBattlePlan escort{true, BattleTarget::ArmedShips, true, BattleTactic::Escort};
+    assert(!submit_battle_plan_command(state, 2, guard.id, withdrawal));
+    assert(submit_battle_plan_command(state, 1, guard.id, withdrawal));
+    assert(guard.battlePlan == FleetBattlePlan{} && guard.battlePlansInTransit.size() == 1);
+    const auto delivery = guard.battlePlansInTransit.front().deliveryTurn;
+    auto ordered = state;
+    ordered.turn = delivery;
+    deliver_due_fleet_commands(ordered);
+    assert(ordered.fleets.front().battlePlan == withdrawal);
+    assert(fleet_player_view(ordered, ordered.fleets.front()).battlePlan == FleetBattlePlan{});
+
+    guard.position = {0, 0}; // The fleet re-enters its local communication mesh.
+    assert(submit_fleet_route_command(state, 1, guard.id, guard.position, 5, {}, {}, false, 0, true));
+    assert(guard.battlePlansInTransit.size() == 1);
+    assert(submit_battle_plan_command(state, 1, guard.id, escort));
+    state.turn = delivery;
+    deliver_due_fleet_commands(state);
+    assert(guard.battlePlan == escort && guard.battlePlansInTransit.empty());
+}
+
 int main()
 {
     simultaneous_and_initiative();
@@ -429,4 +630,10 @@ int main()
     founding_cannot_evade_combat();
     yearly_battle_totals();
     overdue_reports_keep_receipt_year();
+    attack_policy_controls_route_contact();
+    preferred_and_strict_targets();
+    ranged_and_escort_tactics();
+    separate_escort_joins_moving_cargo();
+    withdrawals_near_stations();
+    newer_battle_plan_survives_overtaken_packet();
 }

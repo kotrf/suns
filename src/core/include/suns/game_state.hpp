@@ -970,6 +970,9 @@ struct SpaceBattleUnit {
     double remainingArmor{};
     double remainingShields{};
     OrbitalStationId station{}; // Exactly one of fleet/station identifies the combat unit.
+    bool initiated{};
+    bool attemptedWithdrawal{};
+    std::uint8_t withdrawalRound{};
 };
 
 struct SpaceBattleShot {
@@ -1715,6 +1718,24 @@ struct OrbitalBaseState {
     std::optional<OrbitalBaseCommand> retirement; // Received intent; waits for safe evacuation/recovery.
 };
 
+enum class BattleTarget : std::uint8_t { Any, ArmedShips, CargoShips, Stations };
+enum class BattleTactic : std::uint8_t { Approach, KeepDistance, Escort, Withdraw };
+
+struct FleetBattlePlan {
+    bool attackOnContact{true};
+    BattleTarget preferredTarget{BattleTarget::Any};
+    bool allowOtherTargets{true};
+    BattleTactic tactic{BattleTactic::Approach};
+
+    friend bool operator==(const FleetBattlePlan&, const FleetBattlePlan&) = default;
+};
+
+struct PendingBattlePlan {
+    FleetBattlePlan plan;
+    std::uint64_t deliveryTurn{};
+    std::uint64_t sequence{};
+};
+
 struct FleetTelemetry {
     std::uint64_t observedTurn{};
     Position position;
@@ -1742,6 +1763,7 @@ struct FleetTelemetry {
     ProbeMission probe;
     VisitorMission visitor;
     UnknownObjectId recoveryTarget{};
+    FleetBattlePlan battlePlan;
 };
 
 struct PendingFleetCommand {
@@ -1807,6 +1829,9 @@ struct Fleet {
     VisitorMission visitor;
     bool orbitalShipyardBirth{}; // Host provenance: hide a new remote ship until first received telemetry.
     UnknownObjectId recoveryTarget{};
+    FleetBattlePlan battlePlan;
+    std::uint64_t appliedBattlePlanSequence{};
+    std::vector<PendingBattlePlan> battlePlansInTransit;
 };
 
 struct Minefield {

@@ -6,6 +6,7 @@
 #include "suns/stations.hpp"
 #include "suns/production.hpp"
 #include "suns/terraforming.hpp"
+#include <QDataStream>
 #include <QFile>
 #include <QTemporaryDir>
 #include <algorithm>
@@ -824,7 +825,14 @@ void history_date_bounds_and_genuine_v116_migration()
     }
     assert(write_save_game_file(path, envelope(state), error));
     QFile file(path); assert(file.open(QIODevice::ReadOnly)); auto raw = file.readAll(); file.close();
-    raw[raw.size()-17] = char(2); // Last row's strict boolean, followed by two u64 dates.
+    const auto nativeSection = raw.lastIndexOf("NORB");
+    assert(nativeSection >= 0);
+    QDataStream nativeHeader(raw.mid(nativeSection, 8));
+    quint32 magic{}, payloadSize{};
+    nativeHeader >> magic >> payloadSize;
+    const auto nativeEnd = nativeSection + 8 + payloadSize;
+    assert(magic == 0x4e4f5242 && payloadSize >= 17 && nativeEnd <= raw.size());
+    raw[nativeEnd - 17] = char(2); // Last row's strict boolean, followed by two u64 dates.
     assert(file.open(QIODevice::WriteOnly) && file.write(raw) == raw.size()); file.close();
     assert(!read_save_game_file(path, loaded, error));
     assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-orbital-v116-asynchronous.suns"), loaded, error));
