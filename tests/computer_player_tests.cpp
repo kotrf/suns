@@ -95,6 +95,8 @@ void same_plan(const ComputerTurnPlan& a, const ComputerTurnPlan& b)
                 assert(order.colony==other.colony && order.action==other.action && order.active==other.active);
             else if constexpr (std::is_same_v<T, EncounterVisitorOrder>)
                 assert(order.fleet==other.fleet && order.visitor==other.visitor && order.warp==other.warp);
+            else if constexpr (std::is_same_v<T, SetFleetBattlePlanOrder>)
+                assert(order.fleet == other.fleet && order.plan == other.plan);
             else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>)
                 assert(order.colony==other.colony && order.fleet==other.fleet && order.minerals.ironium==other.minerals.ironium
                     && order.minerals.boranium==other.minerals.boranium && order.minerals.germanium==other.minerals.germanium);
@@ -138,6 +140,10 @@ void integration_and_fairness()
     const auto plan = plan_computer_turn(view);
     assert(plan.orders.player == 2 && plan.orders.orders.size() >= 2);
     assert(std::get<SetResearchAllocationOrder>(plan.orders.orders[0]).percent == 20);
+    assert(std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& order) {
+        const auto* battle = std::get_if<SetFleetBattlePlanOrder>(&order);
+        return battle && !battle->plan.attackOnContact && battle->plan.tactic == BattleTactic::Withdraw;
+    }));
     assert(plan.nextState.initialized && plan.nextState.decisions.back().turn == 1);
     rejects([&] { (void)plan_computer_turn(make_player_view(state, 1)); });
     rejects([&] { (void)plan_computer_turn(PlayerView{2, state}); });

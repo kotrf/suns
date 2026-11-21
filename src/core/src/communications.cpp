@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/communications.hpp"
+#include "suns/combat.hpp"
 #include "suns/survey_probes.hpp"
 #include "suns/intergalactic_visitors.hpp"
 #include "suns/mobile_base.hpp"
@@ -369,6 +370,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.fuel = fleet.fuel;
     result.damagePercent = fleet.damagePercent;
     result.electronics = fleet.electronics;
+    result.battlePlan = fleet.battlePlan;
     result.outpost = fleet.outpost;
     result.orbitalBase = fleet.orbitalBase;
     result.mobileBase = fleet.mobileBase;
@@ -717,6 +719,9 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.fuel = telemetry.fuel;
     view.damagePercent = telemetry.damagePercent;
     view.electronics = telemetry.electronics;
+    view.battlePlan = telemetry.battlePlan;
+    view.appliedBattlePlanSequence = 0;
+    view.battlePlansInTransit.clear();
     view.outpost = telemetry.outpost;
     view.orbitalBase = telemetry.orbitalBase;
     view.mobileBase = telemetry.mobileBase;
@@ -864,10 +869,41 @@ bool submit_fleet_task_command(
     return true;
 }
 
+bool submit_battle_plan_command(GameState& state, PlayerId player, FleetId id, FleetBattlePlan plan)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const auto& candidate) { return candidate.id == id && candidate.owner == player; });
+    if (fleet == state.fleets.end() || !fleet_battle_plan_valid(plan)) return false;
+    auto sequence = fleet->appliedBattlePlanSequence;
+    for (const auto& pending : fleet->battlePlansInTransit)
+        sequence = std::max(sequence, pending.sequence);
+    if (sequence == std::numeric_limits<std::uint64_t>::max()) return false;
+
+    record_command_transmission(state, player, fleet->position, state.turn);
+    const auto delay = communication_delay_turns(state, player, fleet->position);
+    if (!delay) {
+        fleet->battlePlan = plan;
+        fleet->appliedBattlePlanSequence = sequence + 1;
+    } else {
+        fleet->battlePlansInTransit.push_back({plan, state.turn + delay, sequence + 1});
+    }
+    return true;
+}
+
 void deliver_due_fleet_commands(GameState& state)
 {
     for (auto& fleet : state.fleets) {
         if (fleet.electronics.resumeTurn && state.turn >= fleet.electronics.resumeTurn) fleet.electronics = {};
+        // A flight-program Stop leaves plan updates in transit. A slow
+        // update can be overtaken by a more recent transmission.
+        std::erase_if(fleet.battlePlansInTransit, [&](const auto& pending) {
+            if (pending.deliveryTurn > state.turn) return false;
+            if (pending.sequence > fleet.appliedBattlePlanSequence) {
+                fleet.battlePlan = pending.plan;
+                fleet.appliedBattlePlanSequence = pending.sequence;
+            }
+            return true;
+        });
         std::stable_sort(fleet.pendingCommands.begin(), fleet.pendingCommands.end(),
             [](const PendingFleetCommand& lhs, const PendingFleetCommand& rhs) {
                 if (lhs.deliveryTurn != rhs.deliveryTurn) return lhs.deliveryTurn < rhs.deliveryTurn;

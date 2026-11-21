@@ -365,24 +365,49 @@ QString space_battle_text(const GameEvent& event)
     if (!event.battle) return "Battle report unavailable.";
     const auto& battle = *event.battle;
     std::uint64_t ownBefore = 0, ownAfter = 0, enemyAfter = 0, stationBefore=0, stationAfter=0;
+    std::uint64_t ownWithdrawn = 0, enemyWithdrawn = 0;
     for (const auto& unit : battle.units) {
         if (unit.owner == event.recipient) { if(unit.station) { stationBefore+=unit.initialShips; stationAfter+=unit.survivingShips; } else { ownBefore += unit.initialShips; ownAfter += unit.survivingShips; } }
         else enemyAfter += unit.survivingShips;
+        if (unit.withdrawalRound)
+            (unit.owner == event.recipient ? ownWithdrawn : enemyWithdrawn) += unit.survivingShips;
     }
-    const QString outcome = battle.stalemate ? "Unresolved after round limit"
-        : (ownAfter || stationAfter) ? "Victory" : enemyAfter ? "Defeat" : "Mutual destruction";
+    QString outcome;
+    if (battle.stalemate) outcome = "Unresolved after round limit";
+    else if (!ownAfter && !stationAfter) outcome = enemyAfter ? "Defeat" : "Mutual destruction";
+    else if (!enemyAfter) outcome = "Victory";
+    else if (ownWithdrawn && enemyWithdrawn) outcome = "Both sides withdrew";
+    else if (ownWithdrawn) outcome = "Own ships withdrew";
+    else if (enemyWithdrawn) outcome = "Opposing ships withdrew";
+    else outcome = "Engagement ended";
     QString text = QString("<b>Space battle — %1</b><br>Observation: turn %2. Report received: turn %3.<br>"
         "Position: %4, %5. Rounds: %6. Own ships lost: %7 of %8.<br><br>")
         .arg(outcome).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
         .arg(battle.position.x, 0, 'f', 1).arg(battle.position.y, 0, 'f', 1).arg(battle.rounds)
         .arg(qulonglong(ownBefore - ownAfter)).arg(qulonglong(ownBefore));
     text += QString("Own stations lost: %1 of %2.<br><br>").arg(qulonglong(stationBefore-stationAfter)).arg(qulonglong(stationBefore));
-    text += "<table cellspacing='4'><tr><th>Empire / Fleet or station / Design</th><th>Before</th><th>Lost</th><th>After</th><th>Armor left</th></tr>";
-    for (const auto& unit : battle.units) text += QString("<tr><td>%1%2 / %3 / %4</td><td>%5</td><td>%6</td><td>%7</td><td>%8</td></tr>")
+    QStringList initiators;
+    std::set<std::pair<bool, std::uint32_t>> shownInitiators;
+    for (const auto& unit : battle.units) if (unit.initiated
+        && shownInitiators.emplace(bool(unit.station), unit.station ? unit.station : unit.fleet).second) {
+        initiators << QString("%1%2 / %3")
+            .arg(unit.owner == event.recipient ? "Own " : "Empire ").arg(unit.owner)
+            .arg(QString::fromStdString(unit.fleetName).toHtmlEscaped());
+    }
+    if (!initiators.empty())
+        text += QString("Initiated on contact by %1.<br><br>").arg(initiators.join(", "));
+    text += "<table cellspacing='4'><tr><th>Empire / Fleet or station / Design</th><th>Before</th><th>Lost</th><th>After</th><th>Armor left</th><th>Withdrawal</th></tr>";
+    for (const auto& unit : battle.units) {
+        QString withdrawal;
+        if (unit.withdrawalRound) withdrawal = QString("Escaped in round %1").arg(unit.withdrawalRound);
+        else if (unit.attemptedWithdrawal)
+            withdrawal = unit.survivingShips ? "Still in combat area" : "Destroyed before escaping";
+        text += QString("<tr><td>%1%2 / %3 / %4</td><td>%5</td><td>%6</td><td>%7</td><td>%8</td><td>%9</td></tr>")
         .arg(unit.owner == event.recipient ? "Own " : "Empire ").arg(unit.owner)
         .arg(QString::fromStdString(unit.fleetName).toHtmlEscaped(), QString::fromStdString(unit.designName).toHtmlEscaped())
         .arg(unit.initialShips).arg(unit.initialShips - unit.survivingShips).arg(unit.survivingShips)
-        .arg(unit.remainingArmor, 0, 'f', 1);
+        .arg(unit.remainingArmor, 0, 'f', 1).arg(withdrawal);
+    }
     text += "</table><br><b>Volley log</b><br>";
     text += "<table cellspacing='4'><tr><th>Round</th><th>Shot</th><th>Range</th><th>Hits</th><th>Shield / Armor damage</th><th>Lost</th></tr>";
     const auto shown = std::min(std::size_t(256), battle.shots.size());
@@ -401,8 +426,7 @@ QString space_battle_text(const GameEvent& event)
     text += "</table>";
     if (shown < battle.shots.size() || battle.logTruncated)
         text += "<br>Volley display is limited; the fleet totals above include the entire battle.";
-    text += "<br><br>Survivors interrupt their route. Armor damage persists and can be repaired; shields recharge for the next battle. "
-        "All different empires are hostile in this first combat model. Stations remain fixed in orbit and are repaired by paid refitting. Battle doctrines are pending.";
+    text += "<br><br>Battle interrupts routes. Escaped ships regroup in open space near the encounter. Armor damage persists and can be repaired. Shields recharge for the next battle.";
     return text;
 }
 
