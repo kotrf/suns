@@ -294,7 +294,7 @@ five habitability points gained, fund the full recipe and send normal orders.
 A fully funded radiation-raising project is an option for a high-radiation race;
 an equally useful cheaper fixed shield keeps priority for lowering radiation.
 
-Current formats are **save132 / orders58 / portable race3**. Kind IDs append;
+Current formats are **save133 / orders59 / portable race3**. Kind IDs append;
 temperature and radiation targets have separate defaults and validation. Only
 Atmospheric regulator records/orders carry a radiation-target byte. Existing
 Climate records retain their temperature byte and other types retain their old

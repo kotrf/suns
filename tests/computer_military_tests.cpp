@@ -69,6 +69,9 @@ std::string fingerprint(const ComputerTurnPlan& plan)
             } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) out << x.colony << ',' << x.fleet << ',' << x.colonists;
             else if constexpr (std::is_same_v<T, MergeFleetsOrder>) out << x.destination << ',' << x.source;
             else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) out << x.fleet << ',' << int(x.task);
+            else if constexpr (std::is_same_v<T, SetFleetBattlePlanOrder>)
+                out << x.fleet << ',' << x.plan.attackOnContact << ',' << int(x.plan.preferredTarget)
+                    << ',' << x.plan.allowOtherTargets << ',' << int(x.plan.tactic);
             else if constexpr (std::is_same_v<T, SetResearchAllocationOrder>) out << unsigned(x.percent);
             else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) { out << int(x.focus) << ',' << x.active; for (auto f : x.queuedFocuses) out << ',' << int(f); }
             else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
