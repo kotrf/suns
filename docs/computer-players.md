@@ -22,7 +22,12 @@ baseline armed station fit and larger native housing at 80% capacity. It preserv
 existing components/services and reserves support before paying the ordinary full
 refit bill. Crowded housing targets Construction after the original startup
 sequence. [Station policy and acceptance](asymmetric-empires.md#implementation-stage-9-paid-computer-station-defense-and-housing).
-Native combat-fleet planning and comparative military balance remain later work.
+When a recent received fleet contact threatens an inhabited orbit, the
+native policy dispatches an available armed fleet or queues a paid guard
+that fits the local yard. It leaves station support and the first civilian
+builds ahead of the guard in the budget. Assigned guards wait for normal
+movement acknowledgements and use the ordinary fleet battle plan.
+[Guard fleet policy](asymmetric-empires.md#paid-guard-fleets-for-native-computer-empires).
 
 ## Shared controller foundation
 

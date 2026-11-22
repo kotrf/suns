@@ -1,4 +1,5 @@
 #include "computer_policy.hpp"
+#include "suns/combat.hpp"
 #include "suns/native_orbital.hpp"
 #include "suns/native_orbital_support.hpp"
 #include "suns/mining.hpp"
@@ -101,10 +102,19 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
     });
     const auto reserved=[&](FleetId id){return std::any_of(goals.begin(),goals.end(),[&](const auto& g){return g.fleet==id;});};
     const auto occupied=[&](StarId id,ComputerFleetGoalKind kind){return std::any_of(goals.begin(),goals.end(),[&](const auto& g){return g.target==id && g.kind==kind;});};
+    std::vector<const StarSystem*> threatened;
+    for (const auto* colony : colonies) {
+        const auto* star = find_star(state, colony->star);
+        if (star && colony->nativeOrbit.population && colony_threatened(view, star->position)) threatened.push_back(star);
+    }
+    std::vector<const Fleet*> guards;
     std::size_t miners=0,scouts=0,founders=0;
     for(const auto& f:state.fleets)if(f.owner==view.player && f.outpost==OutpostKind::None) {
         if(mining_rate(state,f)>0)miners+=fleet_ship_count(f);
         else if(fleet_can_found_native_orbit(state,f))founders+=fleet_ship_count(f);
+        else if(fleet_has_space_weapons(state,f)) {
+            if (!f.colonists) guards.push_back(&f);
+        }
         else if(fleet_sensor_range(state,f)>0)scouts+=fleet_ship_count(f);
     }
     auto focus=ResearchField::Energy;
@@ -116,8 +126,12 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
     if(technology_level(state,view.player,ResearchField::Energy)>=4
         && technology_level(state,view.player,ResearchField::Construction)>=6
         && technology_level(state,view.player,ResearchField::Propulsion)>=3)
+    {
+        if (!threatened.empty() && technology_level(state,view.player,ResearchField::Weapons)<3)
+            focus=ResearchField::Weapons;
         for(const auto* p:colonies)if(const auto next=needed_housing(*p,*native_orbital_station(state,*p));
             next && !station_hull_available(state,view.player,*next))focus=ResearchField::Construction;
+    }
     const std::uint8_t allocation=miners<2?0:20;
     if(player->technology.researchAllocationPercent!=allocation)plan.orders.orders.push_back(SetResearchAllocationOrder{allocation});
     if(!player->technology.researchActive || player->technology.focus!=focus)
@@ -142,12 +156,16 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
         return best;
     };
     const auto mission=[&](const Fleet& fleet,const StarSystem& target,FleetArrivalAction action,ComputerFleetGoalKind kind) {
-        if(goals.size()>=kMaximumComputerFleetGoals)return;
+        if(goals.size()>=kMaximumComputerFleetGoals)return false;
         if(const auto warp=route_warp(state,fleet,{target.position})) {
             plan.orders.orders.push_back(MoveFleetOrder{fleet.id,target.position,*warp,action});
             goals.push_back({fleet.id,kind,target.id,state.turn,review_turn(state,fleet)});
-            explain(reason,"Dispatch native fleet "+std::to_string(fleet.id)+" from received evidence");
+            explain(reason,kind==ComputerFleetGoalKind::Defend
+                ? "Dispatch native guard "+std::to_string(fleet.id)+" to orbit "+std::to_string(target.id)
+                : "Dispatch native fleet "+std::to_string(fleet.id)+" from received evidence");
+            return true;
         }
+        return false;
     };
     // Assign real miners to received inhabited orbits. Keep established mining
     // running; a newly founded colony receives an idle/new ship, not free output.
@@ -210,9 +228,44 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             }
             if(fleet.colonists)if(const auto* target=safe_target(fleet,false))
                 mission(fleet,*target,{FleetArrivalActionKind::Colonize},ComputerFleetGoalKind::Colonize);
-        } else if(fleet_sensor_range(state,fleet)>0) {
+        } else if(!fleet_has_space_weapons(state,fleet) && fleet_sensor_range(state,fleet)>0) {
             if(const auto* target=safe_target(fleet,true))mission(fleet,*target,{},ComputerFleetGoalKind::Survey);
         }
+    }
+    std::unordered_set<StarId> covered;
+    std::vector<const Fleet*> available;
+    for (const auto* guard : guards) {
+        const auto assignment = std::find_if(goals.begin(), goals.end(), [&](const auto& goal) {
+            return goal.fleet == guard->id;
+        });
+        if (assignment != goals.end()) {
+            if (assignment->kind == ComputerFleetGoalKind::Defend) covered.insert(assignment->target);
+            continue;
+        }
+        if (!idle(*guard) || !confirmed_idle(*guard, 0) || !guard->pendingCommands.empty()) continue;
+        const auto* local = colony_at(state, view.player, guard->telemetry.position);
+        if (local && std::any_of(threatened.begin(), threatened.end(), [&](const auto* star) {
+                return star->id == local->star;
+            })) {
+            covered.insert(local->star);
+        } else if (guard->telemetry.observedTurn == state.turn && guard->damagePercent <= 40) {
+            available.push_back(guard);
+        }
+    }
+    for (const auto* original : available) {
+        auto guard = *original;
+        guard.position = guard.telemetry.position;
+        const StarSystem* target = nullptr;
+        double nearest = std::numeric_limits<double>::infinity();
+        for (const auto* star : threatened) {
+            if (covered.contains(star->id)) continue;
+            const auto distance = distance_between(guard.position, star->position);
+            if (distance < nearest && route_warp(state, guard, {star->position})) {
+                nearest = distance;
+                target = star;
+            }
+        }
+        if (target && mission(guard, *target, {}, ComputerFleetGoalKind::Defend)) covered.insert(target->id);
     }
     std::unordered_set<FleetId> departing;
     for(const auto& order:plan.orders.orders)if(const auto* move=std::get_if<MoveFleetOrder>(&order))departing.insert(move->fleet);
@@ -224,6 +277,39 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
         {ShipComponentType::QuickJump5,ShipComponentType::RhinoScanner}};
     const ShipDesign founder{state.nextShipDesignId,view.player,"Orbital Settler",ShipHullType::ColonyShip,
         {ShipComponentType::QuickJump5,ShipComponentType::OrbitalConstructionModule}};
+    const auto queue_ship=[&](const Planet& p,const ShipDesign& design) {
+        const auto existing=std::find_if(state.shipDesigns.begin(),state.shipDesigns.end(),[&](const auto& d){
+            return !d.retired && d.owner==view.player && d.name==design.name && d.components==design.components
+                && d.hull==design.hull && (design.placements.empty() || d.placements==design.placements);
+        });
+        if (existing!=state.shipDesigns.end()) {
+            plan.orders.orders.push_back(QueueShipDesignOrder{p.id,existing->id});
+        } else {
+            // Two yards can select different fits with the same hull, engine and weapon name.
+            const auto matching = std::find_if(plan.orders.orders.begin(), plan.orders.orders.end(), [&](const auto& order) {
+                const auto* create = std::get_if<CreateShipDesignOrder>(&order);
+                return create && create->hull == design.hull && create->components == design.components
+                    && create->placements == design.placements;
+            });
+            auto name = matching == plan.orders.orders.end()
+                ? design.name : std::get<CreateShipDesignOrder>(*matching).name;
+            if (matching == plan.orders.orders.end()) {
+                const auto name_taken = [&](const std::string& candidate) {
+                    return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const auto& d) {
+                        return !d.retired && d.owner == view.player && d.name == candidate;
+                    }) || std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [&](const auto& order) {
+                        const auto* create = std::get_if<CreateShipDesignOrder>(&order);
+                        return create && create->name == candidate;
+                    });
+                };
+                for (unsigned suffix = 2; name_taken(name); ++suffix)
+                    name = design.name.substr(0, 40) + " " + std::to_string(suffix);
+                plan.orders.orders.push_back(CreateShipDesignOrder{name,design.hull,design.components,design.placements});
+            }
+            plan.orders.orders.push_back(QueueShipDesignOrder{p.id,0,name});
+        }
+        explain(reason,"Build paid "+design.name+" at colony "+std::to_string(p.id));
+    };
     const auto build=[&](const Planet& p,const ShipDesign& design,MineralCargo reserve=MineralCargo{}) {
         if(!shipyard_can_build(state,p,design) || !ship_design_valid(design)
             || !ship_design_available_to_player(state,view.player,design))return false;
@@ -245,14 +331,7 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
         cost.boranium+=reserve.boranium+runway(concentration.boranium);
         cost.germanium+=reserve.germanium+runway(concentration.germanium);
         if(!mineral_cargo_sufficient(stock,cost))return false;
-        const auto existing=std::find_if(state.shipDesigns.begin(),state.shipDesigns.end(),[&](const auto& d){return !d.retired && d.owner==view.player && d.name==design.name && d.components==design.components && d.hull==design.hull;});
-        if(existing!=state.shipDesigns.end())plan.orders.orders.push_back(QueueShipDesignOrder{p.id,existing->id});
-        else {
-            if(std::none_of(plan.orders.orders.begin(),plan.orders.orders.end(),[&](const auto& o){const auto* c=std::get_if<CreateShipDesignOrder>(&o);return c && c->name==design.name;}))
-                plan.orders.orders.push_back(CreateShipDesignOrder{design.name,design.hull,design.components});
-            plan.orders.orders.push_back(QueueShipDesignOrder{p.id,0,design.name});
-        }
-        explain(reason,"Build paid "+design.name+" at colony "+std::to_string(p.id));return true;
+        queue_ship(p,design);return true;
     };
     for(const auto* p:colonies) {
         // Without a current received queue, wait for evidence rather than
@@ -296,16 +375,21 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             }
         }
         if(shortage || pendingMiner || miners<2 || !scouts)continue;
-        if(const auto work=station_improvement(state,*p)) {
+        const auto work=station_improvement(state,*p);
+        std::optional<ShipDesign> guard;
+        if (!work && !covered.contains(p->star) && std::find(threatened.begin(), threatened.end(), star) != threatened.end())
+            guard=guard_design(state,*p);
+        if (work || guard) {
             const auto quote=native_orbital_support_quote(state,*p);
             if(quote.service!=HabitatService::Normal || !quote.output)continue;
-            const auto years=std::ceil(double(station_build_cost(work->loadout))
+            const auto workUnits=work ? station_build_cost(work->loadout) : ship_design_cost(*guard);
+            const auto years=std::ceil(double(workUnits)
                 /std::max(1.0,double(quote.output)*(100-allocation)/100));
             const auto* current=native_orbital_station(state,*p);
             const auto bill=double((native_orbital_capacity(current->hull)+kNativeSupportPopulationPerUnit-1)
                 /kNativeSupportPopulationPerUnit);
-            const auto completionBill=double((native_orbital_capacity(work->loadout.hull)+kNativeSupportPopulationPerUnit-1)
-                /kNativeSupportPopulationPerUnit);
+            const auto completionBill=work ? double((native_orbital_capacity(work->loadout.hull)
+                +kNativeSupportPopulationPerUnit-1)/kNativeSupportPopulationPerUnit) : bill;
             double producing=0;
             // Telemetry can predate last year's dispatch. Retained assignments
             // are HQ intent even when the received fleet still appears to mine here.
@@ -319,7 +403,7 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             const auto remainingYears=std::max(0.0,years-1);
             const auto missingKits=std::max(0.0,kNativeSupportReserveBills*bill-quote.reserveAfter);
             const auto fillingYears=std::min(remainingYears,std::floor(missingKits/bill));
-            auto cost=station_mineral_cost(work->loadout);
+            auto cost=work ? station_mineral_cost(work->loadout) : ship_design_mineral_cost(*guard);
             const auto reserve=[&](double c) {
                 const auto deficit=[&](double n){return (bill-producing*c/100)*n+std::min(missingKits,bill*n);};
                 // Peak cumulative shortfall occurs at the horizon or either
@@ -330,8 +414,10 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             cost.ironium+=reserve(concentration.ironium);cost.boranium+=reserve(concentration.boranium);
             cost.germanium+=reserve(concentration.germanium);
             if(!mineral_cargo_sufficient(p->minerals,cost))continue;
-            plan.orders.orders.push_back(QueueStationOrder{p->id,*work});
-            explain(reason,"Refit paid native station at colony "+std::to_string(p->id));
+            if (work) {
+                plan.orders.orders.push_back(QueueStationOrder{p->id,*work});
+                explain(reason,"Refit paid native station at colony "+std::to_string(p->id));
+            } else queue_ship(*p,*guard);
         }
     }
 }

@@ -286,6 +286,173 @@ void paid_station_weapons_can_engage_the_initial_attack_range()
         if(weapons==7)assert(std::count(expected.components.begin(),expected.components.end(),ShipComponentType::YakimoraLightPhaser)==2);
     }
 }
+
+GameState native_guard_fixture()
+{
+    auto state = test::native_orbital_defense_fixture(25'000);
+    auto& colony = test::native_defense_home(state);
+    auto fit = station_loadout(*native_orbital_station(state, colony));
+    fit.components.push_back(ShipComponentType::Laser);
+    assert(complete_station_construction(state, colony, {fit, colony.nativeOrbit.station}));
+    set_survey_level(state, 1, colony.star, SurveyLevel::DeepSurvey, state.turn);
+    return state;
+}
+
+ReconContact nearby_contact(const GameState& state)
+{
+    const auto& colony = *std::find_if(state.planets.begin(), state.planets.end(), [](const auto& p) { return p.owner == 1; });
+    const auto orbit = find_star(state, colony.star)->position;
+    return {900, 0, {orbit.x + 65, orbit.y}, 2, ContactQuality::Probable, ContactSensor::Active,
+        state.turn, state.turn, state.turn, 0, colony.id, 0, 100, 160};
+}
+
+const QueueShipDesignOrder* ship_order(const ComputerTurnPlan& plan, PlanetId colony)
+{
+    for (const auto& order : plan.orders.orders)
+        if (const auto* ship = std::get_if<QueueShipDesignOrder>(&order); ship && ship->colony == colony) return ship;
+    return nullptr;
+}
+
+void guard_requires_delivered_threat_and_survival_budget()
+{
+    auto state = native_guard_fixture();
+    auto& player = state.players.front();
+    auto& colony = test::native_defense_home(state);
+    const auto plan = [&] { return plan_computer_turn(make_player_view(state, 1)); };
+    assert(!ship_order(plan(), colony.id));
+
+    auto pending = nearby_contact(state);
+    ++pending.deliveryTurn;
+    player.pendingEnemyContacts.push_back(pending);
+    assert(!ship_order(plan(), colony.id));
+
+    auto contact = nearby_contact(state);
+    contact.observedTurn = contact.lastSeenTurn = state.turn - 7;
+    player.enemyContacts = {contact};
+    assert(!ship_order(plan(), colony.id));
+
+    contact = nearby_contact(state);
+    contact.quality = ContactQuality::Identified;
+    contact.hulls = {ShipHullType::StarsScout};
+    player.enemyContacts = {contact};
+    assert(!ship_order(plan(), colony.id));
+
+    player.enemyContacts = {nearby_contact(state)};
+    player.technology.levels[std::size_t(ResearchField::Weapons)] = 0;
+    const auto funded = plan();
+    assert(funded.nextState.researchGoal && funded.nextState.researchGoal->field == ResearchField::Weapons);
+    const auto* build = ship_order(funded, colony.id);
+    assert(build && !build->pendingDesignName.empty());
+    const auto blueprint = std::find_if(funded.orders.orders.begin(), funded.orders.orders.end(), [&](const auto& order) {
+        const auto* design = std::get_if<CreateShipDesignOrder>(&order);
+        return design && design->name == build->pendingDesignName;
+    });
+    assert(blueprint != funded.orders.orders.end());
+    const auto& order = std::get<CreateShipDesignOrder>(*blueprint);
+    ShipDesign design{1, 1, order.name, order.hull, order.components};
+    design.placements = order.placements;
+    const auto cost = ship_design_mineral_cost(design);
+    assert(ship_design_valid(design) && shipyard_can_build(state, colony, design));
+
+    const auto upkeep = native_orbital_support_quote(state, colony).mineralUnitsPaid;
+    colony.minerals = {cost.ironium + upkeep, cost.boranium + upkeep, cost.germanium + upkeep};
+    set_survey_level(state, 1, colony.star, SurveyLevel::DeepSurvey, state.turn);
+    assert(!ship_order(plan(), colony.id));
+
+    colony.minerals = {10000, 10000, 10000};
+    colony.nativeOrbit.servicedTurn = state.turn - 1;
+    set_survey_level(state, 1, colony.star, SurveyLevel::DeepSurvey, state.turn);
+    assert(!ship_order(plan(), colony.id));
+}
+
+void paid_guard_build_dispatch_and_battle()
+{
+    auto state = native_guard_fixture();
+    const auto& colony = test::native_defense_home(state);
+    const auto home = colony.id;
+    const auto star = colony.star;
+    const auto position = find_star(state, star)->position;
+    state.players.front().enemyContacts = {nearby_contact(state)};
+    auto control = state;
+    FleetId guardId = 0;
+    for (unsigned year = 0; year < 8 && !guardId; ++year) {
+        const auto plan = plan_computer_turn(make_player_view(state, 1));
+        if (!year) assert(ship_order(plan, home));
+        auto unarmedBudget = plan.orders;
+        std::erase_if(unarmedBudget.orders, [](const auto& order) {
+            return std::holds_alternative<QueueShipDesignOrder>(order);
+        });
+        state = resolve_controlled_campaign_turn(state, {}).state;
+        control = TurnProcessor{}.process(control, {unarmedBudget});
+        const auto& habitat = *find_planet(state, home);
+        assert(habitat.nativeOrbit.service == HabitatService::Normal && !habitat.nativeOrbit.populationLost);
+        for (const auto& fleet : state.fleets) {
+            if (!fleet_has_space_weapons(state, fleet)) continue;
+            assert(!guardId && same_position(fleet.position, position));
+            guardId = fleet.id;
+            const auto cost = ship_design_mineral_cost(*find_ship_design(state, fleet.design));
+            const auto& other = *find_planet(control, home);
+            assert(std::abs(other.minerals.ironium - habitat.minerals.ironium - cost.ironium) < 1e-6);
+            assert(std::abs(other.minerals.boranium - habitat.minerals.boranium - cost.boranium) < 1e-6);
+            assert(std::abs(other.minerals.germanium - habitat.minerals.germanium - cost.germanium) < 1e-6);
+        }
+    }
+    assert(guardId);
+    state.players.front().enemyContacts = {nearby_contact(state)};
+    assert(!ship_order(plan_computer_turn(make_player_view(state, 1)), home));
+
+    // A previously built guard is available nearby while the station is under threat.
+    auto& guard = *std::find_if(state.fleets.begin(), state.fleets.end(), [&](const auto& f) { return f.id == guardId; });
+    guard.position = {position.x + 8, position.y};
+    guard.telemetry = {};
+    guard.telemetry = confirmed_fleet_telemetry(state, guard);
+    const auto dispatch = plan_computer_turn(make_player_view(state, 1));
+    assert(!ship_order(dispatch, home));
+    const auto move = std::find_if(dispatch.orders.orders.begin(), dispatch.orders.orders.end(), [&](const auto& order) {
+        const auto* route = std::get_if<MoveFleetOrder>(&order);
+        return route && route->fleet == guardId;
+    });
+    assert(move != dispatch.orders.orders.end());
+    const auto& route = std::get<MoveFleetOrder>(*move);
+    assert(same_position(route.destination, position) && route.arrivalAction.kind == FleetArrivalActionKind::None);
+    assert(std::any_of(dispatch.nextState.fleetGoals.begin(), dispatch.nextState.fleetGoals.end(), [&](const auto& goal) {
+        return goal.fleet == guardId && goal.kind == ComputerFleetGoalKind::Defend && goal.target == star;
+    }));
+    state = resolve_controlled_campaign_turn(state, {}).state;
+    const auto afterDispatch = plan_computer_turn(make_player_view(state, 1));
+    assert(!ship_order(afterDispatch, home));
+    const auto arrived = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const auto& f) { return f.id == guardId; });
+    assert(arrived != state.fleets.end() && same_position(arrived->position, position) && !arrived->destination);
+    assert(arrived->battlePlan.preferredTarget == BattleTarget::ArmedShips);
+
+    Player attacker{2, "Raider"};
+    attacker.race = race_preset(RacePreset::Terran);
+    state.players.push_back(attacker);
+    ShipDesign design{state.nextShipDesignId++, 2, "Raider", ShipHullType::Destroyer,
+        {ShipComponentType::QuickJump5, ShipComponentType::Laser}};
+    normalize_ship_design_placement(design);
+    state.shipDesigns.push_back(design);
+    Fleet raider;
+    raider.id = state.nextFleetId++;
+    raider.owner = 2;
+    raider.design = design.id;
+    raider.ships = {{design.id, 1}};
+    raider.name = "Raider";
+    raider.position = position;
+    raider.fuel = fleet_fuel_capacity(state, raider);
+    state.fleets.push_back(raider);
+    const auto result = resolve_controlled_campaign_turn(state, {{2, {}}});
+    assert(std::none_of(result.state.fleets.begin(), result.state.fleets.end(), [&](const auto& f) { return f.id == raider.id; }));
+    assert(find_planet(result.state, home)->nativeOrbit.population > 0);
+    const auto report = std::find_if(result.events.begin(), result.events.end(), [&](const auto& event) {
+        return event.kind == GameEventKind::SpaceBattle && event.recipient == 1 && event.battle;
+    });
+    assert(report != result.events.end());
+    const auto& battle = *report->battle;
+    assert(std::any_of(battle.shots.begin(), battle.shots.end(), [&](const auto& shot) {
+        return battle.units[shot.attacker].fleet == guardId && shot.armorDamage > 0;
+    }));
+}
 }
 int main()
 {
@@ -299,5 +466,7 @@ int main()
     last_years_miner_assignment_survives_delayed_telemetry();
     station_budget_covers_finite_emergency_kit_replenishment();
     paid_station_weapons_can_engage_the_initial_attack_range();
-    std::cout<<"Native station policy passed\n";
+    guard_requires_delivered_threat_and_survival_budget();
+    paid_guard_build_dispatch_and_battle();
+    std::cout<<"Native station and guard policies passed\n";
 }

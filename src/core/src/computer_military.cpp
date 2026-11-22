@@ -89,7 +89,8 @@ std::optional<ShipComponentType> best_component(const GameState& state, PlayerId
     return best;
 }
 
-std::optional<ShipDesign> military_design(const GameState& state, PlayerId owner, Role role)
+std::optional<ShipDesign> military_design(const GameState& state, PlayerId owner, Role role,
+    const Planet* yard = nullptr)
 {
     const auto weapon = best_component(state, owner, ShipComponentKind::BeamWeapon);
     const auto bomb = best_component(state, owner, ShipComponentKind::Bomb);
@@ -118,7 +119,8 @@ std::optional<ShipDesign> military_design(const GameState& state, PlayerId owner
         const auto fit = [&](ShipComponentType c) {
             auto candidate = design; candidate.components.push_back(c); candidate.placements.clear();
             normalize_ship_design_placement(candidate);
-            if (!ship_design_valid(candidate) || !ship_design_available_to_player(state, owner, candidate)) return false;
+            if (!ship_design_valid(candidate) || !ship_design_available_to_player(state, owner, candidate)
+                || (yard && !shipyard_can_build(state, *yard, candidate))) return false;
             design = std::move(candidate); return true;
         };
         if (role == Role::Guard && component_available_to_player(state, owner, ShipComponentType::RhinoScanner))
@@ -152,6 +154,16 @@ std::optional<ShipDesign> military_design(const GameState& state, PlayerId owner
     return best;
 }
 } // namespace
+
+bool colony_threatened(const PlayerView& view, Position orbit)
+{
+    return contact_threat(view, orbit, 100) > 0;
+}
+
+std::optional<ShipDesign> guard_design(const GameState& state, const Planet& colony)
+{
+    return military_design(state, colony.owner, Role::Guard, &colony);
+}
 
 bool military_fleet(const GameState& state, const Fleet& fleet)
 {
