@@ -126,6 +126,8 @@ segments at the same time with the normal 0.01 ly envelope. Crossing a stale
 coordinate or crossing the visitor's path at a different time is not contact.
 The courier stops at contact; the visitor continues for the rest of the year.
 Faster visitor speed never tows a courier or waives its fuel cost.
+A hostile attack at the same moment resolves before the exchange. A courier
+can trade if it survives and stays at the encounter.
 
 No reachable intercept, an expired announced window or unusable Warp ends the
 programme with a receipt. Fuel exhaustion uses ordinary movement/stall rules.

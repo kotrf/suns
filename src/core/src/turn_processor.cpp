@@ -2014,7 +2014,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         bool active{};
         bool intercepted{};
         bool anchored{};
-        std::optional<double> rendezvousTime;
+        std::optional<std::size_t> rendezvous;
         std::optional<std::size_t> spaceBattle;
         BattleContact battle;
         bool mineRestricted{};
@@ -2202,17 +2202,27 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             battle.escorts.push_back(escort.fleet);
         }
     };
+    const auto sameRendezvous = [&](const MotionPlan& plan, const EncounterCandidate& meeting, double time) {
+        // Match the shared fleet on its original trajectory. The battle and
+        // the rendezvous can use different objects as their position reference.
+        return std::abs(meeting.timeFraction - time) <= encounterTimeEpsilon
+            && distance_between(plan.position_at(time), meeting.position) <= kFleetEncounterRadius + epsilon;
+    };
     for (const auto& encounter : encounters) {
         auto* first = motion_plan(encounter.pursuer);
         auto* second = encounter.target ? motion_plan(encounter.target) : nullptr;
         if (!first || (encounter.target && !second)) continue;
         if (!encounter.fleetInitiated && !encounter.otherInitiated) {
-            if (first->intercepted || (second && second->intercepted)) continue;
-            intercept(*first, encounter.position);
+            // A visitor exchange belongs to the arrival phase, even if the
+            // simultaneous attack was the first candidate to be selected.
+            const bool visitorAtBattle = encounter.visitor && first->spaceBattle && !first->rendezvous
+                && sameRendezvous(*first, encounter, spaceBattles[*first->spaceBattle].timeFraction);
+            if ((first->intercepted && !visitorAtBattle) || (second && second->intercepted)) continue;
+            if (!first->intercepted) intercept(*first, encounter.position);
+            first->rendezvous = resolvedEncounters.size();
             if (second) {
                 intercept(*second, encounter.position);
-                first->rendezvousTime = encounter.timeFraction;
-                second->rendezvousTime = encounter.timeFraction;
+                second->rendezvous = first->rendezvous;
             }
             resolvedEncounters.push_back(encounter);
             continue;
@@ -2222,12 +2232,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             if (!plan.intercepted) return true;
             if (plan.spaceBattle)
                 return std::abs(spaceBattles[*plan.spaceBattle].timeFraction - encounter.timeFraction) <= encounterTimeEpsilon;
-            // The original path is valid through a simultaneous rendezvous.
-            // Compare the shared fleet's position with the selected stop,
-            // since each candidate's anchor can belong to a different ship.
-            return plan.rendezvousTime
-                && std::abs(*plan.rendezvousTime - encounter.timeFraction) <= encounterTimeEpsilon
-                && distance_between(plan.position_at(encounter.timeFraction), plan.endpoint) <= kFleetEncounterRadius + epsilon;
+            return plan.rendezvous && sameRendezvous(plan, resolvedEncounters[*plan.rendezvous], encounter.timeFraction);
         };
         if (!canJoin(*first) || (second && !canJoin(*second))) continue;
         const auto otherBattle = second ? second->spaceBattle : std::nullopt;
@@ -2235,8 +2240,8 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         if (index == spaceBattles.size()) {
             auto position = encounter.position;
             if (!encounter.station && !first->anchored && !(second && second->anchored)) {
-                if (first->rendezvousTime) position = first->endpoint;
-                else if (second && second->rendezvousTime) position = second->endpoint;
+                if (first->rendezvous) position = resolvedEncounters[*first->rendezvous].position;
+                else if (second && second->rendezvous) position = resolvedEncounters[*second->rendezvous].position;
             }
             spaceBattles.push_back({position, encounter.timeFraction});
         } else if (otherBattle && *otherBattle != index) {
@@ -2359,7 +2364,10 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     resolve_space_battles(state, state.turn + 1, spaceBattles);
     for (const auto& contact : resolvedEncounters) if (contact.visitor) {
         auto* fleet = fleet_by_id(state, contact.pursuer);
-        if (fleet && same_position(fleet->position, contact.position))
+        const auto* plan = motion_plan(contact.pursuer);
+        // A shared battle can supply the fleet's stop position. A surviving
+        // courier that is still there can complete the confirmed rendezvous.
+        if (fleet && plan && same_position(fleet->position, plan->endpoint))
             complete_visitor_encounter(state, *fleet, contact.visitor, contact.position);
     }
     std::sort(fixedArrivals.begin(), fixedArrivals.end());

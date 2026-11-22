@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cassert>
 #include <iostream>
+#include <utility>
 using namespace suns;
 namespace {
 // Clip a segment against the central half of the galaxy, independently of the
@@ -497,6 +498,78 @@ void simultaneous_customers_and_spawn_are_deterministic()
         && generated.visitors[n].departureTurn==replay.visitors[n].departureTurn && generated.visitors[n].profile==replay.visitors[n].profile
         && generated.visitors[n].velocity==replay.visitors[n].velocity && generated.visitors[n].courseChanged==replay.visitors[n].courseChanged);
 }
+void simultaneous_attack_precedes_exchange()
+{
+    using C = ShipComponentType;
+    const auto run = [](FleetId courierId, double visitorX, double raidOffset, C weapon, BattleTactic tactic) {
+        GameState state;
+        state.players = {{1, "Courier"}, {2, "Raider"}};
+        state.wormholeRules.spawnChancePerTurn = 0;
+        state.shipDesigns = {{10, 1, "Courier", ShipHullType::SmallFreighter, {C::QuickJump5, C::CompletePhaseShield}},
+            {20, 2, "Raider", ShipHullType::Destroyer, {C::QuickJump5, weapon}}};
+        state.nextShipDesignId = 21;
+        Fleet courier;
+        courier.id = courierId;
+        courier.owner = 1;
+        courier.design = 10;
+        courier.ships = {{10, 1}};
+        courier.minerals.germanium = 50;
+        courier.battlePlan.tactic = tactic;
+        Fleet raider;
+        raider.id = 3 - courierId;
+        raider.owner = 2;
+        raider.design = 20;
+        raider.ships = {{20, 1}};
+        raider.position = {visitorX + raidOffset, 0};
+        raider.destination = Position{raider.position.x - 25, 0};
+        raider.warp = 5;
+        raider.battlePlan = {true, BattleTarget::CargoShips, false};
+        state.fleets = {courier, raider};
+        state.nextFleetId = 3;
+        state.visitors = {{1, {visitorX, 0}, {-25, 0}, state.turn, state.turn + 4}};
+        state.nextVisitorId = 2;
+        const auto& visitor = state.visitors.front();
+        state.players.front().visitorKnowledge = {{1, visitor.position, visitor.velocity,
+            state.turn, state.turn, visitor.departureTurn, true}};
+        return TurnProcessor{}.process_with_events(state, {{1, {EncounterVisitorOrder{courierId, 1, 5}}}});
+    };
+    const auto battle = [](const TurnResult& result) {
+        return std::any_of(result.events.begin(), result.events.end(), [](const auto& event) {
+            return event.kind == GameEventKind::SpaceBattle && event.recipient == 1;
+        });
+    };
+    const auto exchanged = [](const TurnResult& result) {
+        return std::any_of(result.events.begin(), result.events.end(), [](const auto& event) {
+            return event.kind == GameEventKind::VisitorExchangeCompleted && event.recipient == 1;
+        });
+    };
+    for (const FleetId courierId : {1U, 2U}) {
+        // The contacts are simultaneous at the start. Near midyear, a 2e-11
+        // offset lets each contact come first in the encounter sort.
+        for (const auto& [visitorX, offset] : {std::pair{0.0, 0.0}, std::pair{25.01, 1e-9}, std::pair{25.01, -1e-9}}) {
+            const auto lost = run(courierId, visitorX, offset, C::AntiMatterPulverizer, BattleTactic::Approach);
+            assert(battle(lost));
+            assert(std::none_of(lost.state.fleets.begin(), lost.state.fleets.end(),
+                [&](const auto& fleet) { return fleet.id == courierId; }));
+            assert(!exchanged(lost) && !lost.state.visitors.front().customer
+                && lost.state.players.front().acquiredEquipment.empty());
+
+            const auto survivor = run(courierId, visitorX, offset, C::Laser, BattleTactic::Approach);
+            assert(battle(survivor) && exchanged(survivor) && survivor.state.visitors.front().customer == 1);
+            assert(survivor.state.players.front().acquiredEquipment == std::vector<ShipComponentType>{kVisitorGift});
+        }
+    }
+
+    const auto withdrew = run(1, 25.01, -1e-9, C::Laser, BattleTactic::Withdraw);
+    assert(battle(withdrew) && !exchanged(withdrew) && !withdrew.state.visitors.front().customer);
+    assert(std::any_of(withdrew.state.fleets.begin(), withdrew.state.fleets.end(), [](const auto& fleet) {
+        return fleet.id == 1 && fleet.minerals.germanium == 50;
+    }));
+    const auto earlierExchange = run(1, 25.01, 0.1, C::AntiMatterPulverizer, BattleTactic::Approach);
+    assert(!battle(earlierExchange) && exchanged(earlierExchange));
+    const auto earlierBattle = run(1, 25.01, -0.1, C::Laser, BattleTactic::Approach);
+    assert(battle(earlierBattle) && !exchanged(earlierBattle) && !earlierBattle.state.visitors.front().customer);
+}
 }
 int main()
 {
@@ -509,5 +582,6 @@ int main()
     demo_exchange_and_real_payment(); gift_and_sightings_travel_as_immutable_packets();
     physical_refusal_delivers_evidence_but_navigation_failure_keeps_its_age();
     delayed_commands_and_hidden_truth_do_not_change_navigation(); silent_receipts_and_old_measurements(); manual_control_and_computer_exchange(); simultaneous_customers_and_spawn_are_deterministic();
+    simultaneous_attack_precedes_exchange();
     std::cout<<"Visitor physical encounters, payment, delayed knowledge/control and determinism passed\n";
 }
