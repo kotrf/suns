@@ -110,10 +110,12 @@ Groups that reach eight squares from the center escape after that round's
 volleys. Anchored outposts and fleets at 100% damage cannot withdraw.
 
 Escaped ships regroup in open space 0.04 ly from the encounter. The fleet's
-route and mission end, including bombardment. This tactical maneuver uses no
-additional strategic fuel. The fleet keeps the cargo and fuel left after
-normal battle losses. If the battle ends before the fleet escapes, survivors
-remain at the encounter and follow the ordinary post-battle rules.
+route and active mission end. A visitor mission is cancelled. An autonomous
+survey programme pauses with its settings and survey notebook available
+for Resume. This tactical maneuver uses no additional strategic fuel. The
+fleet keeps the cargo and fuel left after normal battle losses. If the battle
+ends before the fleet escapes, survivors remain at the encounter and follow
+the ordinary post-battle rules.
 
 ## Persistent losses and logistics
 

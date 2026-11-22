@@ -7,6 +7,7 @@
 #include "suns/equipment.hpp"
 #include "suns/campaign.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/survey_probes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -509,6 +510,8 @@ void apply_battle(GameState& state, const BattleResult& result)
         if (exit != result.withdrawalExits.end()) {
             fleet.position = exit->second;
             fleet.lastMovedTurn = report.observedTurn;
+            fleet.visitor = {};
+            if (fleet.probe.enabled) pause_probe(fleet);
         }
         // An encounter interrupts the current onboard programme; new commands
         // already in flight retain their ordinary delivery semantics.

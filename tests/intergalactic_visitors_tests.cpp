@@ -501,7 +501,8 @@ void simultaneous_customers_and_spawn_are_deterministic()
 void simultaneous_attack_precedes_exchange()
 {
     using C = ShipComponentType;
-    const auto run = [](FleetId courierId, double visitorX, double raidOffset, C weapon, BattleTactic tactic) {
+    const auto run = [](FleetId courierId, double visitorX, double raidOffset, C weapon, BattleTactic tactic,
+        double visitorVelocity = -25) {
         GameState state;
         state.players = {{1, "Courier"}, {2, "Raider"}};
         state.wormholeRules.spawnChancePerTurn = 0;
@@ -526,7 +527,7 @@ void simultaneous_attack_precedes_exchange()
         raider.battlePlan = {true, BattleTarget::CargoShips, false};
         state.fleets = {courier, raider};
         state.nextFleetId = 3;
-        state.visitors = {{1, {visitorX, 0}, {-25, 0}, state.turn, state.turn + 4}};
+        state.visitors = {{1, {visitorX, 0}, {visitorVelocity, 0}, state.turn, state.turn + 4}};
         state.nextVisitorId = 2;
         const auto& visitor = state.visitors.front();
         state.players.front().visitorKnowledge = {{1, visitor.position, visitor.velocity,
@@ -569,6 +570,19 @@ void simultaneous_attack_precedes_exchange()
     assert(!battle(earlierExchange) && exchanged(earlierExchange));
     const auto earlierBattle = run(1, 25.01, -0.1, C::Laser, BattleTactic::Approach);
     assert(battle(earlierBattle) && !exchanged(earlierBattle) && !earlierBattle.state.visitors.front().customer);
+
+    // The courier retreats before reaching a slower visitor. Its original
+    // track would allow it to catch up and pay for the offer next year.
+    const auto fled = run(1, 18, -8, C::Laser, BattleTactic::Withdraw, 5);
+    assert(battle(fled) && !exchanged(fled) && fled.state.fleets.size() == 2);
+    const auto& courier = fled.state.fleets.front();
+    assert(courier.id == 1 && courier.minerals.germanium == 50 && !courier.destination && courier.pendingCommands.empty());
+    const auto following = TurnProcessor{}.process_with_events(fled.state, {});
+    const auto& idle = following.state.fleets.front();
+    assert(idle.id == 1 && same_position(idle.position, courier.position) && idle.minerals.germanium == 50);
+    assert(!courier.visitor.track.id && !idle.visitor.track.id && !idle.destination);
+    assert(!exchanged(following) && !following.state.visitors.front().customer
+        && following.state.players.front().acquiredEquipment.empty());
 }
 }
 int main()
