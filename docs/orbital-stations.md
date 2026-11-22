@@ -110,9 +110,9 @@ owner/planet references. Capturing orbital assets is not implemented.
 
 ## Station combat and knowledge
 
-Hostile armed encounters along fleet movement include stationary stations.
-A station can intercept an unarmed bomber, and an armed fleet can attack an
-unarmed dock. Stations remain fixed at the tactical origin; fleets begin one
+Armed stations intercept foreign fleets, including unarmed bombers. A fleet
+can attack an unarmed dock when its [battle plan](space-combat.md) allows it.
+Stations remain fixed at the tactical origin, and fleets begin one
 tactical square away so short-range guns can defend orbit. Fleet-only battles
 retain their previous four-square starting radius. Weapons, shields, initiative,
 computers, jammers and dampeners use the shared deterministic combat resolver.

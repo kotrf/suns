@@ -1,5 +1,9 @@
 #include "main_window.hpp"
+#include "suns/mobile_base.hpp"
 
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -12,6 +16,41 @@
 #include <QVBoxLayout>
 
 namespace suns {
+
+namespace {
+
+const QStringList attackPolicies{"Attack on contact", "Return fire only"};
+const QStringList battleTargets{"Any target", "Armed ships", "Cargo ships", "Orbital stations"};
+const QStringList battleTactics{"Approach", "Keep distance", "Escort transports", "Withdraw"};
+
+QString battlePlanSummary(const FleetBattlePlan& plan)
+{
+    auto text = QString("%1 · %2 · %3")
+        .arg(attackPolicies.at(plan.attackOnContact ? 0 : 1), battleTactics.at(int(plan.tactic)),
+            battleTargets.at(int(plan.preferredTarget)));
+    if (plan.preferredTarget != BattleTarget::Any && !plan.allowOtherTargets) text += " only";
+    return text;
+}
+
+const SetFleetBattlePlanOrder* pendingBattlePlan(const PlayerOrders& orders, FleetId fleet)
+{
+    for (auto it = orders.orders.rbegin(); it != orders.orders.rend(); ++it)
+        if (const auto* plan = std::get_if<SetFleetBattlePlanOrder>(&*it); plan && plan->fleet == fleet) return plan;
+    return nullptr;
+}
+
+QString battlePlanStatus(const Fleet* received, const SetFleetBattlePlanOrder* pending)
+{
+    QString text;
+    if (!received) text = "A new detachment inherits its source fleet’s plan.";
+    else if (!received->telemetry.observedTurn) text = "Awaiting the first onboard plan report.";
+    else text = QString("Reported in year %1 — %2").arg(qulonglong(received->telemetry.observedTurn))
+        .arg(battlePlanSummary(received->battlePlan));
+    if (pending) text += QString("\nQueued this year — %1").arg(battlePlanSummary(pending->plan));
+    return text;
+}
+
+} // namespace
 
 void MainWindow::installFleetOperationsPanel()
 {
@@ -90,6 +129,18 @@ void MainWindow::installFleetOperationsPanel()
     detailsButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     detailsButton->setToolTip("Ship composition, dockside loading, rename, merge, split and colonize");
     actions->addWidget(detailsButton, 1);
+    auto* battleButton = new QPushButton("Battle plan…", header);
+    battleButton->setObjectName("fleetBattlePlanButton");
+    actions->addWidget(battleButton);
+    connect(battleButton, &QPushButton::clicked, this, &MainWindow::openFleetBattlePlan);
+    const auto refreshBattleButton = [this, battleButton] {
+        const auto* fleet = selectedFleet();
+        battleButton->setEnabled(fleet != nullptr);
+        battleButton->setToolTip(fleet ? battlePlanStatus(find_service_fleet(receivedPlayerState(), fleet->id),
+            pendingBattlePlan(pendingOrders_, fleet->id)) : QString("Select one of your fleets"));
+    };
+    connect(this, &MainWindow::routeProgramContextChanged, battleButton, refreshBattleButton);
+    refreshBattleButton();
     headerLayout->addLayout(actions);
     layout->addWidget(header);
 
@@ -130,6 +181,70 @@ void MainWindow::installFleetOperationsPanel()
     delete routeDock;
     addDockWidget(Qt::RightDockWidgetArea, fleetDock);
     resizeDocks({fleetDock}, {400}, Qt::Horizontal);
+}
+
+void MainWindow::openFleetBattlePlan()
+{
+    const auto* fleet = selectedFleet();
+    if (!fleet) return;
+    const auto id = fleet->id;
+    const auto name = QString::fromStdString(fleet->name);
+    const auto* received = find_service_fleet(receivedPlayerState(), id);
+    const auto* pending = pendingBattlePlan(pendingOrders_, id);
+    const auto plan = pending ? pending->plan : received ? received->battlePlan : fleet->battlePlan;
+
+    QDialog dialog(this);
+    dialog.setObjectName("fleetBattlePlanDialog");
+    dialog.setWindowTitle(QString("Battle plan — %1").arg(name));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* status = new QLabel(battlePlanStatus(received, pending), &dialog);
+    status->setObjectName("fleetBattlePlanStatus");
+    status->setTextFormat(Qt::PlainText);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+
+    auto* form = new QFormLayout;
+    auto* attack = new QComboBox(&dialog);
+    attack->setObjectName("battleAttackCombo");
+    attack->addItems(attackPolicies);
+    attack->setCurrentIndex(plan.attackOnContact ? 0 : 1);
+    attack->setToolTip("An armed fleet can start an engagement with an eligible target. Return fire only lets the fleet react when attacked.");
+    form->addRow("On contact", attack);
+    auto* target = new QComboBox(&dialog);
+    target->setObjectName("battleTargetCombo");
+    target->addItems(battleTargets);
+    target->setCurrentIndex(int(plan.preferredTarget));
+    target->setToolTip("Cargo ships include hulls and fittings with cargo capacity. Armed ships carry beams or torpedoes.");
+    form->addRow("Preferred target", target);
+    auto* fallback = new QComboBox(&dialog);
+    fallback->setObjectName("battleTargetFallbackCombo");
+    fallback->addItems({"Use other targets", "Engage preferred targets only"});
+    fallback->setCurrentIndex(plan.allowOtherTargets ? 0 : 1);
+    fallback->setEnabled(plan.preferredTarget != BattleTarget::Any);
+    connect(target, &QComboBox::currentIndexChanged, fallback,
+        [fallback](int index) { fallback->setEnabled(index != int(BattleTarget::Any)); });
+    form->addRow("Other targets", fallback);
+    auto* tactic = new QComboBox(&dialog);
+    tactic->setObjectName("battleTacticCombo");
+    tactic->addItems(battleTactics);
+    tactic->setCurrentIndex(int(plan.tactic));
+    tactic->setToolTip("Approach to weapon range, keep enemies at long range, screen nearby friendly cargo ships, or fly out of the combat area.");
+    form->addRow("In battle", tactic);
+    layout->addLayout(form);
+    auto* delivery = new QLabel("The new plan takes effect when its order reaches the fleet.", &dialog);
+    delivery->setWordWrap(true);
+    layout->addWidget(delivery);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText("Queue plan");
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const FleetBattlePlan edited{attack->currentIndex() == 0, BattleTarget(target->currentIndex()),
+        !fallback->isEnabled() || fallback->currentIndex() == 0, BattleTactic(tactic->currentIndex())};
+    appendPendingOrder(SetFleetBattlePlanOrder{id, edited},
+        QString("%1 — %2").arg(name, battlePlanSummary(edited)));
 }
 
 } // namespace suns

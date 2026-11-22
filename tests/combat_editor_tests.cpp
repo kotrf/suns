@@ -1,12 +1,18 @@
 #include "main_window.hpp"
+#include "route_program_dock.hpp"
 #include "save_game.hpp"
 #include "suns/combat.hpp"
+#include "suns/communications.hpp"
+#include "suns/deep_space.hpp"
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDataStream>
 #include <QDockWidget>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QEventLoop>
+#include <QFile>
 #include <QGraphicsView>
 #include <QListWidget>
 #include <QLabel>
@@ -35,7 +41,149 @@ struct MainWindowTestAccess {
         window.appendTurnMessages(result.events);
         window.rebuildScene();
     }
+    static const auto& orders(const MainWindow& window) { return window.pendingOrders_.orders; }
+    static auto previewBuilds(const MainWindow& window) { return window.movementPreviewBuildCount_; }
 };
+
+void battle_plan_files(GameState state, const QTemporaryDir& dir)
+{
+    state.planets = {{1, 1, "Home", 100, 2, 100000}};
+    state.planets.front().homeworld = true;
+    state.planets.front().radar = PlanetaryRadarLevel::Full;
+    state.fleets[1].position = state.fleets[1].telemetry.position = {680, 120};
+    SaveGameData host;
+    host.mode = SessionMode::Host;
+    host.campaignId = 17;
+    host.turnToken = 18;
+    host.playerTokens = {{1, 18}, {2, 19}};
+    host.pendingOrders = {1, {}};
+    host.state = std::move(state);
+    const auto savePath = dir.filePath("plan.suns");
+    QString error;
+
+    // v132 had the same layout up to the new fleet-plan tail in a campaign
+    // with no battle reports. Drop the tail to exercise its legacy defaults.
+    assert(write_save_game_file(savePath, host, error));
+    QFile legacy(savePath);
+    assert(legacy.open(QIODevice::ReadWrite));
+    auto bytes = legacy.readAll();
+    const auto offset = bytes.lastIndexOf("BPLN");
+    assert(offset > 0);
+    bytes.truncate(offset);
+    QDataStream header(&bytes, QIODevice::ReadWrite);
+    assert(header.device()->seek(4));
+    header << quint32{132};
+    assert(legacy.resize(0) && legacy.seek(0) && legacy.write(bytes) == bytes.size());
+    legacy.close();
+    SaveGameData loaded;
+    assert(read_save_game_file(savePath, loaded, error));
+    assert(loaded.state.fleets[1].battlePlan == FleetBattlePlan{});
+    assert(loaded.state.fleets[1].telemetry.battlePlan == FleetBattlePlan{});
+
+    const FleetBattlePlan plan{false, BattleTarget::Stations, false, BattleTactic::Withdraw};
+    auto player = make_player_turn(host, 2);
+    player.pendingOrders.orders = {SetFleetBattlePlanOrder{2, plan}};
+    player.pendingDescriptions = {"Flee if attacked"};
+    assert(write_save_game_file(savePath, player, error));
+    assert(read_save_game_file(savePath, loaded, error));
+    assert(loaded.state.fleets.front().battlePlan == FleetBattlePlan{});
+    assert(std::get<SetFleetBattlePlanOrder>(loaded.pendingOrders.orders.front()).plan == plan);
+
+    const auto ordersPath = dir.filePath("plan.sunsorders");
+    const TurnOrderFileData packet{loaded.campaignId, loaded.state.turn, loaded.turnToken,
+        loaded.pendingOrders, loaded.pendingDescriptions};
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(ordersPath, imported, error) && validate_turn_submission(host, imported).isEmpty());
+    host.state = TurnProcessor{}.process(host.state, {imported.orders});
+    assert(host.state.fleets[1].battlePlan == FleetBattlePlan{});
+    const auto& inflight = host.state.fleets[1].battlePlansInTransit;
+    assert(inflight.size() == 1 && inflight.front().plan == plan);
+    const auto delivery = inflight.front().deliveryTurn;
+    assert(write_save_game_file(savePath, host, error));
+    assert(read_save_game_file(savePath, loaded, error));
+    assert(loaded.state.fleets[1].battlePlansInTransit.front().deliveryTurn == delivery);
+    auto fromDisk = std::move(loaded.state);
+    while (host.state.turn < delivery) {
+        assert(host.state.fleets[1].battlePlan == FleetBattlePlan{});
+        host.state = TurnProcessor{}.process(host.state, {});
+        fromDisk = TurnProcessor{}.process(fromDisk, {});
+        assert(host.state.fleets[1].battlePlan == fromDisk.fleets[1].battlePlan);
+    }
+    assert(host.state.fleets[1].battlePlan == plan);
+    assert(host.state.fleets[1].telemetry.battlePlan == FleetBattlePlan{});
+    const auto& outgoing = host.state.fleets[1].telemetryInTransit;
+    const auto confirmation = std::find_if(outgoing.begin(), outgoing.end(),
+        [&](const auto& telemetry) { return telemetry.telemetry.battlePlan == plan; });
+    assert(confirmation != outgoing.end());
+    const auto receipt = confirmation->deliveryTurn;
+    auto beforeReceipt = make_player_turn(host, 2);
+    assert(beforeReceipt.state.fleets.front().battlePlan == FleetBattlePlan{});
+    assert(beforeReceipt.state.fleets.front().battlePlansInTransit.empty()
+        && beforeReceipt.state.fleets.front().telemetryInTransit.empty());
+    assert(write_save_game_file(savePath, host, error));
+    assert(read_save_game_file(savePath, loaded, error));
+    host = std::move(loaded);
+    while (host.state.turn < receipt) host.state = TurnProcessor{}.process(host.state, {});
+    assert(write_save_game_file(savePath, make_player_turn(host, 2), error));
+    assert(read_save_game_file(savePath, loaded, error));
+    const auto& received = loaded.state.fleets.front();
+    assert(received.battlePlan == plan && received.telemetry.battlePlan == plan);
+    assert(received.appliedBattlePlanSequence == 0 && received.battlePlansInTransit.empty());
+}
+
+void anchored_escort_save(GameState state, const QTemporaryDir& dir)
+{
+    using C = ShipComponentType;
+    const Position anchor{kOutpostStellarClearanceLy, 0};
+    state.stars.front().position = {0, 0};
+    state.fleets[0].position = {anchor.x - 0.014, 0};
+    state.fleets[0].battlePlan = {true, BattleTarget::CargoShips, false};
+    state.shipDesigns.push_back({21, 2, "Cargo ship", ShipHullType::SmallFreighter, {C::QuickJump5}});
+    auto& transport = state.fleets[1];
+    transport.design = 21;
+    transport.ships = {{21, 1}};
+    transport.position = {anchor.x - 0.005, 0};
+    transport.destination = Position{transport.position.x, 25};
+    transport.warp = 5;
+
+    ShipDesign design{22, 2, "Armed depot", ShipHullType::Scout, {C::QuickJump5, C::FuelDepotKit, C::Laser}};
+    normalize_ship_design_placement(design);
+    assert(ship_design_valid(design));
+    state.shipDesigns.push_back(design);
+    Fleet depot;
+    depot.id = 3;
+    depot.owner = 2;
+    depot.name = "Clearance boundary depot";
+    depot.design = design.id;
+    depot.ships = {{design.id, 1}};
+    depot.position = anchor;
+    depot.outpost = OutpostKind::FuelDepot;
+    depot.battlePlan = {false, BattleTarget::Any, true, BattleTactic::Escort};
+    state.fleets.push_back(depot);
+    state.nextFleetId = 4;
+    state.nextShipDesignId = 23;
+    publish_fleet_telemetry(state, state.turn);
+
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    SaveGameData save;
+    save.campaignId = 17;
+    save.turnToken = 18;
+    save.mode = SessionMode::Host;
+    save.playerTokens = {{1, 18}, {2, 19}};
+    save.pendingOrders = {1, {}};
+    save.state = result.state;
+    save.strategicMessages = result.events;
+    QString error;
+    const auto path = dir.filePath("anchored-escort.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    const auto anchored = std::find_if(loaded.state.fleets.begin(), loaded.state.fleets.end(),
+        [](const auto& fleet) { return fleet.id == 3; });
+    assert(anchored != loaded.state.fleets.end() && anchored->outpost == OutpostKind::FuelDepot
+        && same_position(anchored->position, anchor) && anchored->battlePlan == depot.battlePlan);
+}
 } // namespace suns
 
 int main(int argc, char** argv)
@@ -65,11 +213,36 @@ int main(int argc, char** argv)
         fleet.telemetry.observedTurn = 1; fleet.telemetry.position = fleet.position; fleet.telemetry.ships = fleet.ships;
         state.fleets.push_back(fleet);
     }
+    battle_plan_files(state, dir);
+    anchored_escort_save(state, dir);
     const auto result = TurnProcessor{}.process_with_events(state, {});
     assert(result.state.fleets.empty());
     MainWindow window;
+    attachRouteProgramDock(window);
+    window.installUiPolish();
+    window.installFleetReadabilityPolish();
+    window.installPanelLayoutFixes();
     window.resize(1200, 850);
     window.show();
+    MainWindowTestAccess::install(window, {state, {}});
+    auto* planButton = window.findChild<QPushButton*>("fleetBattlePlanButton");
+    assert(planButton && planButton->isEnabled() && planButton->toolTip().contains("Attack on contact"));
+    const auto previews = MainWindowTestAccess::previewBuilds(window);
+    QTimer::singleShot(0, &window, [&] {
+        auto* dialog = window.findChild<QDialog*>("fleetBattlePlanDialog");
+        assert(dialog);
+        dialog->findChild<QComboBox*>("battleAttackCombo")->setCurrentIndex(1);
+        dialog->findChild<QComboBox*>("battleTargetCombo")->setCurrentIndex(int(BattleTarget::CargoShips));
+        dialog->findChild<QComboBox*>("battleTargetFallbackCombo")->setCurrentIndex(1);
+        dialog->findChild<QComboBox*>("battleTacticCombo")->setCurrentIndex(int(BattleTactic::Escort));
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    });
+    planButton->click();
+    const auto queued = std::get<SetFleetBattlePlanOrder>(MainWindowTestAccess::orders(window).back());
+    assert(queued.fleet == 1 && !queued.plan.attackOnContact && !queued.plan.allowOtherTargets
+        && queued.plan.tactic == BattleTactic::Escort && queued.plan.preferredTarget == BattleTarget::CargoShips);
+    assert(planButton->toolTip().contains("Queued this year") && planButton->toolTip().contains("Attack on contact"));
+    assert(MainWindowTestAccess::previewBuilds(window) == previews);
     MainWindowTestAccess::install(window, result);
     auto* dock = window.findChild<QDockWidget*>("turnMessagesDock");
     auto* filter = window.findChild<QComboBox*>("turnMessageTypeFilter");
@@ -87,6 +260,7 @@ int main(int argc, char** argv)
     if (!text.contains("Mutual destruction") || !text.contains("Gun <one>")) std::cerr << text.toStdString() << '\n';
     assert(text.contains("Mutual destruction") && text.contains("Gun <one>"));
     assert(text.contains("Volley log") && text.contains("Anti-Matter Pulverizer"));
+    assert(text.contains("Initiated on contact by"));
     assert(!text.contains("Natural wormholes"));
     auto* locate = window.findChild<QPushButton*>("showTurnMessageOnMap");
     assert(locate && locate->isEnabled());
@@ -188,6 +362,7 @@ int main(int argc, char** argv)
     assert(read_save_game_file(path, loaded, error));
     assert(loaded.strategicMessages.size() == 2 && loaded.strategicMessages.front().battle);
     assert(loaded.strategicMessages.front().battle->shots.size() == 2);
+    assert(loaded.strategicMessages.front().battle->units.front().initiated);
     assert(write_save_game_file(path, make_player_turn(loaded, 1), error));
     assert(read_save_game_file(path, loaded, error));
     assert(loaded.strategicMessages.size() == 1 && loaded.strategicMessages.front().recipient == 1);

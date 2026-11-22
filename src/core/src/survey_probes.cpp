@@ -195,7 +195,7 @@ std::string probe_status_name(ProbeStatus status)
     case ProbeStatus::AwaitingFuel: return "Awaiting fuel / return route unavailable";
     case ProbeStatus::Damaged: return "Holding for repair (damage >=25%)";
     case ProbeStatus::MissingEquipment: return "Autonomy stopped: equipment lost";
-    case ProbeStatus::ManualPause: return "Autonomy paused by manual control/reorganization";
+    case ProbeStatus::ManualPause: return "Autonomy paused (Resume to continue)";
     case ProbeStatus::Stopped: return "Stopped by delivered command";
     }
     return "Unknown";

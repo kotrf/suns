@@ -324,8 +324,8 @@ QString ownFleetMapTooltip(const GameState& state, const Fleet& fleet)
 
 bool panelOnlyOrder(const Order& order)
 {
-    // Immediate fleet manifests ignore these orders. Production/research
-    // panels still need their normal planning revision and refresh.
+    // These orders leave immediate fleet manifests and map geometry alone.
+    // The corresponding panels still need their normal planning refresh.
     return std::holds_alternative<QueueProductionOrder>(order)
         || std::holds_alternative<QueueProductionBatchOrder>(order)
         || std::holds_alternative<QueueShipDesignOrder>(order)
@@ -336,7 +336,8 @@ bool panelOnlyOrder(const Order& order)
         || std::holds_alternative<ApplyProductionTemplateOrder>(order)
         || std::holds_alternative<SetColonyResearchOrder>(order)
         || std::holds_alternative<SetResearchPlanOrder>(order)
-        || std::holds_alternative<SetResearchAllocationOrder>(order);
+        || std::holds_alternative<SetResearchAllocationOrder>(order)
+        || std::holds_alternative<SetFleetBattlePlanOrder>(order);
 }
 
 QColor fleetColor(FleetRole role, int alpha = 255)

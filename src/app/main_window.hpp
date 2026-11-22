@@ -119,6 +119,7 @@ public:
     void openSplitFleetDialog();
     void openRenameFleetDialog();
     void openFleetSummaryDialog();
+    void openFleetBattlePlan();
     void openColonyTemplates();
     [[nodiscard]] std::vector<ProductionTemplate> colonyTemplatesForOrders() const;
     [[nodiscard]] bool colonyPlanApplicableForOrders(const ProductionTemplate& plan) const;

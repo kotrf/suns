@@ -172,6 +172,21 @@ bool hostile_intel(const PlayerView& view)
     return false;
 }
 
+void plan_battle_plans(const PlayerView& view, PlayerOrders& orders)
+{
+    for (const auto& fleet : view.state.fleets) {
+        // Wait for a fresh own manifest before revising a plan. Older reports
+        // may predate an update that is still travelling.
+        if (fleet.owner != view.player || fleet.telemetry.observedTurn != view.state.turn
+            || fleet.outpost != OutpostKind::None) continue;
+        const bool armed = fleet_has_space_weapons(view.state, fleet);
+        const FleetBattlePlan plan = armed
+            ? FleetBattlePlan{true, BattleTarget::ArmedShips}
+            : FleetBattlePlan{false, BattleTarget::Any, true, BattleTactic::Withdraw};
+        if (fleet.battlePlan != plan) orders.orders.push_back(SetFleetBattlePlanOrder{fleet.id, plan});
+    }
+}
+
 void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& reason)
 {
     const auto& state = view.state;

@@ -114,6 +114,8 @@ void transfer_fleet_report_outbox(GameState&, PlayerId, FleetId source, FleetId 
     FleetId fleet,
     FleetTask task, UnknownObjectId recoveryTarget = 0);
 
+[[nodiscard]] bool submit_battle_plan_command(GameState&, PlayerId, FleetId, FleetBattlePlan);
+
 void deliver_due_fleet_commands(GameState& state);
 void deliver_due_fleet_telemetry(GameState& state);
 void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn);

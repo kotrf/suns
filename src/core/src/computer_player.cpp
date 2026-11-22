@@ -1201,6 +1201,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
         move->queuedWaypoints.assign(output.begin()+1,output.end());
         explain(reason,"Fund received cloud route with fleet "+std::to_string(move->fleet));
     }
+    plan_battle_plans(view, plan.orders);
     std::sort(plan.nextState.fleetGoals.begin(),plan.nextState.fleetGoals.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
     plan.nextState.initialized = true;
     if (reason.empty()) reason = plan.nextState.fleetGoals.empty()

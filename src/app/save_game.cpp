@@ -42,11 +42,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 132;
+constexpr quint32 kSaveFormatVersion = 133;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 58;
+constexpr quint32 kTurnOrderFormatVersion = 59;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -959,6 +959,7 @@ void writeBattle(QDataStream& stream, const std::optional<SpaceBattleReport>& va
         writeString(stream, u.designName);
         stream << quint32(u.initialShips) << quint32(u.survivingShips) << u.remainingArmor << u.remainingShields;
         stream << quint32(u.station);
+        stream << quint8(u.initiated) << quint8(u.attemptedWithdrawal) << quint8(u.withdrawalRound);
     }
     stream << quint32(value->shots.size());
     for (const auto& s : value->shots) {
@@ -997,6 +998,17 @@ void readBattle(QDataStream& stream, std::optional<SpaceBattleReport>& value)
         readString(stream, u.designName);
         stream >> initial >> surviving >> u.remainingArmor >> u.remainingShields;
         if(gReadSaveFormatVersion >= 65) stream >> u.station;
+        if (gReadSaveFormatVersion >= 133) {
+            quint8 initiated{}, attempted{};
+            stream >> initiated >> attempted >> u.withdrawalRound;
+            if (initiated > 1 || attempted > 1 || (attempted && u.station)
+                || (u.withdrawalRound && (!attempted || !surviving || u.withdrawalRound > rounds))) {
+                markCorrupt(stream);
+                return;
+            }
+            u.initiated = initiated != 0;
+            u.attemptedWithdrawal = attempted != 0;
+        }
         if (!owner || (u.station ? (fleet || design || initial!=1) : (!fleet || !design)) || !initial || surviving > initial
             || !validAmount(u.remainingArmor) || !validAmount(u.remainingShields)
             || (surviving == 0 && (u.remainingArmor != 0 || u.remainingShields != 0))) { markCorrupt(stream); return; }
@@ -2454,6 +2466,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "surface_minerals_save.inc"
 #include "economy_save.inc"
 #include "production_queue_save.inc"
+#include "battle_plans_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -2748,6 +2761,10 @@ void writeOrder(QDataStream& stream, const Order& order)
             writeRecoveryTarget(stream,concrete.task==FleetTask::RecoverSample,concrete.recoveryTarget);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
             stream << quint8{22} << quint32(concrete.fleet); writeElectronics(stream, concrete.program);
+        } else if constexpr (std::is_same_v<T, SetFleetBattlePlanOrder>) {
+            if (!concrete.fleet) { stream.setStatus(QDataStream::WriteFailed); return; }
+            stream << quint8{40} << quint32(concrete.fleet);
+            writeBattlePlan(stream, concrete.plan);
         } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
             stream << quint8{17} << quint32(concrete.fleet);
             writeString(stream, concrete.name);
@@ -2762,6 +2779,15 @@ bool readOrder(QDataStream& stream, Order& order)
     if (stream.status() != QDataStream::Ok) return false;
 
     switch (tag) {
+    case 40: {
+        if (gReadSaveFormatVersion < 133) { markCorrupt(stream); return false; }
+        SetFleetBattlePlanOrder value;
+        stream >> value.fleet;
+        readBattlePlan(stream, value.plan);
+        if (!value.fleet) markCorrupt(stream);
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
     case 38: {
         if(gReadSaveFormatVersion<127){markCorrupt(stream);return false;}
         DeleteShipDesignOrder v;stream>>v.design;if(!v.design)markCorrupt(stream);order=v;return stream.status()==QDataStream::Ok;
@@ -3409,6 +3435,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writePopulationRules(stream,data.state);
     writeNativeOrbit(stream,data.state);
     writeProductionQueueIds(stream,data.state);
+    writeBattlePlans(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3547,6 +3574,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     else for (auto& player : loaded.state.players) player.race.populationGrowthRate = 10;
     if(version>=115) readNativeOrbit(stream,loaded.state);
     if(version>=128) readProductionQueueIds(stream,loaded.state);
+    if (version >= 133) readBattlePlans(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     loaded.galaxyConfig.slowResearch = loaded.state.slowResearch;
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
@@ -3757,7 +3785,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 58 ? 132 : version >= 57 ? 131 : version >= 56 ? 129 : version >= 55 ? 127 : version >= 54 ? 126 : version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 59 ? 133 : version >= 58 ? 132 : version >= 57 ? 131 : version >= 56 ? 129 : version >= 55 ? 127 : version >= 54 ? 126 : version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

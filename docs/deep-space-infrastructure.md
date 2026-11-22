@@ -119,7 +119,7 @@ field. Enemy sites initially appear as ordinary uncertain fleet contacts; this
 slice does not disclose an enemy's installation kind, fittings or stock through
 the owner panel. Computer empires exclude anchored sites from mobile missions.
 
-Current save **v132**, orders **v58**, portable race **v3**. The Cargo Cache Kit
+Current save **v133**, orders **v59**, portable race **v3**. The Cargo Cache Kit
 and anchored kind append IDs after the sensor array; old identities retain their
 values and record layouts. Older packets reject the new component. Complete
 physical, received, in-flight and delayed-loss cache manifests are validated

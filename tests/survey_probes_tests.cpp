@@ -159,11 +159,56 @@ void computer_builds_and_launches_paid_probe()
     s.players[0].computer = plan.nextState; plan = plan_computer_turn(make_player_view(s, 1));
     assert(std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& o) { return std::holds_alternative<SetProbeProgramOrder>(o); }));
 }
+void withdrawal_pauses_probe_until_resume_arrives()
+{
+    auto s = world();
+    configure(s);
+    record_probe_survey(s.fleets.front(), 2, SurveyLevel::DeepSurvey, s.turn);
+    s.fleets.front().battlePlan = {false, BattleTarget::Any, true, BattleTactic::Withdraw};
+    s.players.push_back({2, "Raider"});
+    using C = ShipComponentType;
+    s.shipDesigns.push_back({201, 2, "Raider", ShipHullType::Destroyer, {C::QuickJump5, C::Laser}});
+    s.nextShipDesignId = 202;
+    Fleet raider;
+    raider.id = 2;
+    raider.owner = 2;
+    raider.design = 201;
+    raider.ships = {{201, 1}};
+    raider.position = {910, 0};
+    s.fleets.push_back(raider);
+    s.nextFleetId = 3;
+
+    const auto fled = next(s);
+    assert(fled.fleets.size() == 2 && fled.fleets.front().id == 1);
+    const auto retreatPosition = fled.fleets.front().position;
+    assert(distance_between(retreatPosition, raider.position) > kFleetEncounterRadius
+        && distance_between(retreatPosition, raider.position) < 0.1);
+    const auto following = next(fled);
+    const auto& idle = following.fleets.front();
+    assert(same_position(idle.position, retreatPosition) && !idle.destination && !idle.probe.enabled);
+    assert(idle.probe.configured && idle.probe.status == ProbeStatus::ManualPause);
+    assert(probe_survey_level(idle, 2) == SurveyLevel::DeepSurvey);
+
+    auto dispatched = next(s, {SetProbeProgramOrder{1, ProbeAction::Resume}});
+    const auto& inTransit = dispatched.fleets.front().pendingCommands;
+    assert(inTransit.size() == 1 && inTransit.front().probe && inTransit.front().probe->action == ProbeAction::Resume);
+    const auto deliveryTurn = inTransit.front().deliveryTurn;
+    while (dispatched.turn < deliveryTurn) {
+        assert(!dispatched.fleets.front().probe.enabled
+            && same_position(dispatched.fleets.front().position, retreatPosition));
+        dispatched = next(dispatched);
+    }
+    assert(dispatched.fleets.front().pendingCommands.empty() && dispatched.fleets.front().probe.enabled);
+    assert(same_position(dispatched.fleets.front().position, retreatPosition));
+    const auto resumed = next(dispatched);
+    assert(!same_position(resumed.fleets.front().position, retreatPosition));
+}
 }
 int main()
 {
     paid_design_and_technology(); autonomous_expedition_and_knowledge_delay();
     hidden_world_and_other_notebooks_do_not_plan_for_this_probe(); delayed_manual_control_stop_and_knowledge_upload();
     fuel_damage_equipment_and_reorganization(); computer_builds_and_launches_paid_probe();
+    withdrawal_pauses_probe_until_resume_arrives();
     std::cout << "Autonomous survey programmes, local knowledge and physical logistics passed\n";
 }
