@@ -53,8 +53,9 @@ at the moment of contact. Anchored outposts support the battle from their
 existing coordinates. A supporting escort counts as an initiator only if
 its own attack also triggers at that time.
 
-Combat resolves after movement and before movement-arrival actions. A destroyed
-fleet cannot subsequently unload, colonize or enter a wormhole. Surviving
+Combat resolves after movement and before movement-arrival actions. An attack
+that coincides with a rendezvous during movement resolves before the planned
+merge. A destroyed fleet cannot subsequently unload, colonize or enter a wormhole. Surviving
 participants interrupt their onboard route, repetition and mining task. Surviving
 bombers retain their mission; an armed hostile station must be neutralized
 before they can bomb. New

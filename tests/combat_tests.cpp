@@ -448,6 +448,68 @@ void attack_policy_controls_route_contact()
     assert(battle_event(againstUnarmed).battle->units[0].initiated);
 }
 
+void battle_precedes_simultaneous_merge()
+{
+    auto state = arena({C::AntiMatterPulverizer}, {});
+    state.shipDesigns[1].hull = ShipHullType::SmallFreighter;
+    state.shipDesigns.push_back({21, 2, "Scout", ShipHullType::Scout, {C::QuickJump5}});
+    auto& raider = state.fleets[0];
+    raider.warp = 5;
+    raider.battlePlan = {true, BattleTarget::CargoShips, false};
+    auto& transport = state.fleets[1];
+    transport.warp = 5;
+    transport.targetFleet = 3;
+    transport.destination = Position{10, 0};
+    transport.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};
+    auto scout = transport;
+    scout.id = 3;
+    scout.design = 21;
+    scout.ships = {{21, 1}};
+    scout.position = {10, 0};
+    scout.targetFleet = 0;
+    scout.destination.reset();
+    scout.arrivalAction.reset();
+    state.fleets.push_back(scout);
+    state.nextFleetId = 4;
+
+    const auto rendezvous = analyze_fleet_encounter({0, 0}, {10, 0}, {10, 0}, {10, 0});
+    assert(rendezvous.encounterTimeFraction);
+    for (const double offset : {1e-9, -1e-9}) {
+        auto& attacker = state.fleets[0];
+        attacker.position = {34.975 + offset, 0};
+        attacker.destination = Position{9.975 + offset, 0};
+        const auto attack = analyze_fleet_encounter(attacker.position, *attacker.destination, {0, 0}, {10, 0});
+        assert(attack.encounterTimeFraction);
+        const auto difference = *attack.encounterTimeFraction - *rendezvous.encounterTimeFraction;
+        assert(std::abs(difference) < 1e-9 && (difference > 0) == (offset > 0));
+
+        const auto result = TurnProcessor{}.process_with_events(state, {});
+        const auto& report = *battle_event(result, 2).battle;
+        const auto loss = std::find_if(report.units.begin(), report.units.end(),
+            [](const auto& unit) { return unit.fleet == 2; });
+        assert(loss != report.units.end() && loss->survivingShips == 0);
+        assert(!fleet(result.state, 2));
+        const auto* survivor = fleet(result.state, 3);
+        assert(survivor && fleet_ship_count(*survivor) == 1);
+        assert(std::none_of(result.events.begin(), result.events.end(),
+            [](const auto& event) { return event.kind == GameEventKind::FleetsMerged; }));
+    }
+
+    // A separately timed encounter cannot use the transport's old path
+    // after the earlier rendezvous has interrupted it.
+    state.fleets[0].position = {34.980, 0};
+    state.fleets[0].destination = Position{9.980, 0};
+    const auto later = analyze_fleet_encounter({34.980, 0}, {9.980, 0}, {0, 0}, {10, 0});
+    assert(later.encounterTimeFraction && *later.encounterTimeFraction - *rendezvous.encounterTimeFraction > 1e-9);
+    const auto earlierMerge = TurnProcessor{}.process_with_events(state, {});
+    assert(std::none_of(earlierMerge.events.begin(), earlierMerge.events.end(),
+        [](const auto& event) { return event.kind == GameEventKind::SpaceBattle; }));
+    assert(std::any_of(earlierMerge.events.begin(), earlierMerge.events.end(),
+        [](const auto& event) { return event.kind == GameEventKind::FleetsMerged; }));
+    const auto* joined = fleet(earlierMerge.state, 3);
+    assert(joined && fleet_ship_count(*joined) == 2);
+}
+
 void preferred_and_strict_targets()
 {
     auto state = arena({C::GatlingGun, C::CompletePhaseShield}, {C::Laser, C::CompletePhaseShield});
@@ -706,6 +768,7 @@ int main()
     yearly_battle_totals();
     overdue_reports_keep_receipt_year();
     attack_policy_controls_route_contact();
+    battle_precedes_simultaneous_merge();
     preferred_and_strict_targets();
     ranged_and_escort_tactics();
     sapper_closes_on_an_affectable_target();
