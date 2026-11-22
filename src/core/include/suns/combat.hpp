@@ -2,6 +2,8 @@
 
 #include "suns/game_state.hpp"
 
+#include <span>
+
 namespace suns {
 
 inline constexpr std::uint8_t kSpaceBattleRoundLimit = 30;
@@ -24,7 +26,23 @@ struct BattleContact {
 [[nodiscard]] bool can_start_space_battle(const BattleContact& attacker, const BattleContact& target);
 [[nodiscard]] bool space_battle_between(const BattleContact&, const BattleContact&);
 
+struct SpaceBattleEngagement {
+    FleetId fleet{};
+    FleetId otherFleet{};
+    OrbitalStationId station{};
+    bool fleetInitiated{};
+    bool otherInitiated{};
+};
+
+struct SpaceBattleEncounter {
+    Position position;
+    double timeFraction{};
+    std::vector<SpaceBattleEngagement> engagements;
+    std::vector<FleetId> escorts;
+};
+
 // Only physical encounters invoke the tactical resolver.
-void resolve_space_battles(GameState&, std::uint64_t observationTurn);
+void resolve_space_battles(GameState&, std::uint64_t observationTurn,
+    std::span<const SpaceBattleEncounter> encounters = {});
 
 } // namespace suns

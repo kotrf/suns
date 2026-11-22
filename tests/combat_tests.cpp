@@ -1,5 +1,6 @@
 #include "suns/combat.hpp"
 #include "suns/communications.hpp"
+#include "suns/deep_space.hpp"
 #include "suns/equipment.hpp"
 #include "suns/campaign.hpp"
 #include "suns/turn_processor.hpp"
@@ -512,6 +513,23 @@ void ranged_and_escort_tactics()
     assert(!battle_event(withoutCargo).battle->shots.empty());
 }
 
+void sapper_closes_on_an_affectable_target()
+{
+    auto state = arena({C::PulsedSapper}, {C::Laser, C::MoleSkinShield});
+    state.shipDesigns.push_back({21, 2, "Unshielded cargo ship", ShipHullType::SmallFreighter, {C::QuickJump5}});
+    state.fleets[1].ships.push_back({21, 1});
+    state.fleets[1].battlePlan = {false, BattleTarget::Stations, false}; // Hold both targets in place.
+    state.fleets[0].battlePlan = {true, BattleTarget::CargoShips, true};
+    const auto fallback = TurnProcessor{}.process_with_events(state, {});
+    const auto& report = *battle_event(fallback).battle;
+    assert(std::any_of(report.shots.begin(), report.shots.end(), [&](const auto& shot) {
+        return report.units[shot.target].design == 20 && shot.shieldDamage > 0;
+    }));
+    state.fleets[0].battlePlan.allowOtherTargets = false;
+    const auto strict = TurnProcessor{}.process_with_events(state, {});
+    assert(battle_event(strict).battle->shots.empty());
+}
+
 void separate_escort_joins_moving_cargo()
 {
     auto state = arena({C::Laser}, {});
@@ -525,16 +543,73 @@ void separate_escort_joins_moving_cargo()
     escort.id = 3;
     escort.design = 21;
     escort.ships = {{21, 1}};
-    escort.battlePlan = {false, BattleTarget::Any, true, BattleTactic::Escort};
+    escort.position = {0, 0.008};
+    escort.destination = Position{25, 0.008};
+    escort.battlePlan = {false, BattleTarget::ArmedShips, false, BattleTactic::Escort};
     state.fleets.push_back(escort);
     state.nextFleetId = 4;
-    const auto result = TurnProcessor{}.process_with_events(state, {});
-    const auto& report = *battle_event(result, 2).battle;
-    const auto unit = std::find_if(report.units.begin(), report.units.end(), [](const auto& u) { return u.fleet == 3; });
-    assert(unit != report.units.end() && !unit->initiated);
-    assert(std::any_of(report.shots.begin(), report.shots.end(), [&](const auto& shot) {
-        return report.units[shot.attacker].fleet == 3;
-    }));
+    const auto verify = [](const GameState& start, bool escortInitiated) {
+        const auto result = TurnProcessor{}.process_with_events(start, {});
+        const auto& report = *battle_event(result, 2).battle;
+        const auto guard = std::find_if(report.units.begin(), report.units.end(), [](const auto& u) { return u.fleet == 3; });
+        assert(guard != report.units.end() && guard->initiated == escortInitiated);
+        assert(std::any_of(report.shots.begin(), report.shots.end(), [&](const auto& shot) {
+            return report.units[shot.attacker].fleet == 3;
+        }));
+    };
+    for (const auto attackOnContact : {false, true}) {
+        state.fleets.back().battlePlan.attackOnContact = attackOnContact;
+        // Parallel tracks 0.008 ly apart: the raider meets the cargo fleet
+        // first under either ID ordering. The escort is close to its cargo
+        // at that moment, although its own opposing contact comes later.
+        verify(state, false);
+        std::swap(state.fleets[0].id, state.fleets[1].id);
+        verify(state, false);
+        std::swap(state.fleets[0].id, state.fleets[1].id);
+    }
+
+    // A genuine simultaneous attack by an escort still counts as initiation.
+    state.fleets.back().position = state.fleets[1].position;
+    state.fleets.back().destination = state.fleets[1].destination;
+    verify(state, true);
+}
+
+void anchored_escort_stays_in_place()
+{
+    auto state = arena({C::Laser}, {});
+    const Position anchor{kOutpostStellarClearanceLy, 0};
+    state.stars = {{1, "Clearance boundary", {0, 0}}};
+    state.fleets[0].position = {anchor.x - 0.014, 0};
+    state.fleets[0].battlePlan = {true, BattleTarget::CargoShips, false};
+    state.shipDesigns[1].hull = ShipHullType::SmallFreighter;
+    state.fleets[1].position = {anchor.x - 0.005, 0};
+    state.fleets[1].destination = Position{state.fleets[1].position.x, 25};
+    state.fleets[1].warp = 5;
+    state.shipDesigns.push_back({21, 2, "Armed depot", ShipHullType::Scout,
+        {C::QuickJump5, C::FuelDepotKit, C::Laser}});
+    auto depot = state.fleets[1];
+    depot.id = 3;
+    depot.design = 21;
+    depot.ships = {{21, 1}};
+    depot.position = anchor;
+    depot.destination.reset();
+    depot.fuel = 100;
+    depot.outpost = OutpostKind::FuelDepot;
+    depot.battlePlan = {false, BattleTarget::Any, true, BattleTactic::Escort};
+    state.fleets.push_back(depot);
+    state.nextFleetId = 4;
+    assert(outpost_state_valid(state, depot));
+    for (int order = 0; order < 2; ++order) {
+        const auto result = TurnProcessor{}.process_with_events(state, {});
+        const auto& report = *battle_event(result, 2).battle;
+        assert(std::any_of(report.units.begin(), report.units.end(), [](const auto& u) {
+            return u.fleet == 3 && !u.initiated;
+        }));
+        const auto* anchored = fleet(result.state, 3);
+        assert(anchored && same_position(anchored->position, anchor));
+        assert(outpost_state_valid(result.state, *anchored) && anchored->lastMovedTurn == depot.lastMovedTurn);
+        std::swap(state.fleets[0].id, state.fleets[1].id);
+    }
 }
 
 void withdrawals_near_stations()
@@ -633,7 +708,9 @@ int main()
     attack_policy_controls_route_contact();
     preferred_and_strict_targets();
     ranged_and_escort_tactics();
+    sapper_closes_on_an_affectable_target();
     separate_escort_joins_moving_cargo();
+    anchored_escort_stays_in_place();
     withdrawals_near_stations();
     newer_battle_plan_survives_overtaken_packet();
 }

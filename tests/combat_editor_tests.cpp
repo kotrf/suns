@@ -3,6 +3,7 @@
 #include "save_game.hpp"
 #include "suns/combat.hpp"
 #include "suns/communications.hpp"
+#include "suns/deep_space.hpp"
 
 #include <QApplication>
 #include <QComboBox>
@@ -130,6 +131,59 @@ void battle_plan_files(GameState state, const QTemporaryDir& dir)
     assert(received.battlePlan == plan && received.telemetry.battlePlan == plan);
     assert(received.appliedBattlePlanSequence == 0 && received.battlePlansInTransit.empty());
 }
+
+void anchored_escort_save(GameState state, const QTemporaryDir& dir)
+{
+    using C = ShipComponentType;
+    const Position anchor{kOutpostStellarClearanceLy, 0};
+    state.stars.front().position = {0, 0};
+    state.fleets[0].position = {anchor.x - 0.014, 0};
+    state.fleets[0].battlePlan = {true, BattleTarget::CargoShips, false};
+    state.shipDesigns.push_back({21, 2, "Cargo ship", ShipHullType::SmallFreighter, {C::QuickJump5}});
+    auto& transport = state.fleets[1];
+    transport.design = 21;
+    transport.ships = {{21, 1}};
+    transport.position = {anchor.x - 0.005, 0};
+    transport.destination = Position{transport.position.x, 25};
+    transport.warp = 5;
+
+    ShipDesign design{22, 2, "Armed depot", ShipHullType::Scout, {C::QuickJump5, C::FuelDepotKit, C::Laser}};
+    normalize_ship_design_placement(design);
+    assert(ship_design_valid(design));
+    state.shipDesigns.push_back(design);
+    Fleet depot;
+    depot.id = 3;
+    depot.owner = 2;
+    depot.name = "Clearance boundary depot";
+    depot.design = design.id;
+    depot.ships = {{design.id, 1}};
+    depot.position = anchor;
+    depot.outpost = OutpostKind::FuelDepot;
+    depot.battlePlan = {false, BattleTarget::Any, true, BattleTactic::Escort};
+    state.fleets.push_back(depot);
+    state.nextFleetId = 4;
+    state.nextShipDesignId = 23;
+    publish_fleet_telemetry(state, state.turn);
+
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    SaveGameData save;
+    save.campaignId = 17;
+    save.turnToken = 18;
+    save.mode = SessionMode::Host;
+    save.playerTokens = {{1, 18}, {2, 19}};
+    save.pendingOrders = {1, {}};
+    save.state = result.state;
+    save.strategicMessages = result.events;
+    QString error;
+    const auto path = dir.filePath("anchored-escort.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    const auto anchored = std::find_if(loaded.state.fleets.begin(), loaded.state.fleets.end(),
+        [](const auto& fleet) { return fleet.id == 3; });
+    assert(anchored != loaded.state.fleets.end() && anchored->outpost == OutpostKind::FuelDepot
+        && same_position(anchored->position, anchor) && anchored->battlePlan == depot.battlePlan);
+}
 } // namespace suns
 
 int main(int argc, char** argv)
@@ -160,6 +214,7 @@ int main(int argc, char** argv)
         state.fleets.push_back(fleet);
     }
     battle_plan_files(state, dir);
+    anchored_escort_save(state, dir);
     const auto result = TurnProcessor{}.process_with_events(state, {});
     assert(result.state.fleets.empty());
     MainWindow window;

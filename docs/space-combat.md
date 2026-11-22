@@ -48,8 +48,10 @@ Each attack engages its two empires. Other fleets and stations of those
 empires at the encounter can support them, including idle fleets. A third
 empire enters if it starts or receives an attack. In a battle with several
 empires, weapons can target only empires directly engaged against their own.
-Armed escorts travelling alongside a cargo fleet join its encounter when
-their paths reach it at the same time.
+An armed escort joins if it is within encounter range of its cargo fleet
+at the moment of contact. Anchored outposts support the battle from their
+existing coordinates. A supporting escort counts as an initiator only if
+its own attack also triggers at that time.
 
 Combat resolves after movement and before movement-arrival actions. A destroyed
 fleet cannot subsequently unload, colonize or enter a wormhole. Surviving
@@ -73,6 +75,8 @@ fleet would start a battle. Orbital control also governs landing rights.
   of a nearby friendly cargo group in the direction of the enemy. With no
   transport to screen, escorts approach normally. Unarmed groups hold position
   in these three plans.
+- Movement considers targets the group's weapons can affect. Sappers can
+  close on other shielded targets when the plan permits fallback.
 - The preferred category ranks first. Within a category, target priority is
   fitted weapon power times surviving ships, then distance, then stable IDs.
 - Movement is simultaneous: one square per round, plus fitted jets and

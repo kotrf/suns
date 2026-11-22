@@ -2012,15 +2012,24 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         bool routed{};
         bool active{};
         bool intercepted{};
+        bool anchored{};
+        std::optional<std::size_t> spaceBattle;
         BattleContact battle;
         bool mineRestricted{};
         Position start;
+
+        Position position_at(double fraction) const
+        {
+            return {std::lerp(start.x, uninterruptedEndpoint.x, fraction),
+                std::lerp(start.y, uninterruptedEndpoint.y, fraction)};
+        }
     };
     std::vector<MotionPlan> plans;
     plans.reserve(state.fleets.size());
     for (const auto& fleet : state.fleets) {
         MotionPlan plan{fleet.id};
         plan.battle = battle_contact(state, fleet);
+        plan.anchored = fleet.outpost != OutpostKind::None;
         plan.start = fleet.position;
         if (fleet.lastMovedTurn <= state.turn && !fleet_id_list_contains(skipMovement, fleet.id) && fleet.destination
             && fleet_warp_valid(state, fleet, fleet.warp)) {
@@ -2076,6 +2085,8 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         bool targetRouted{};
         OrbitalStationId station{};
         VisitorId visitor{};
+        bool fleetInitiated{};
+        bool otherInitiated{};
     };
     std::vector<EncounterCandidate> encounters;
     for (const auto& plan : plans) {
@@ -2117,21 +2128,29 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         const auto* star = planet ? find_star(state, planet->star) : nullptr;
         if (!star) continue;
         for (const auto& plan : plans) {
-            if (!space_battle_between(plan.battle, stationContact)) continue;
+            const bool fleetInitiated = can_start_space_battle(plan.battle, stationContact);
+            const bool stationInitiated = can_start_space_battle(stationContact, plan.battle);
+            if (!fleetInitiated && !stationInitiated) continue;
             const auto geometry = analyze_fleet_encounter(plan.start, plan.endpoint, star->position, star->position);
             if (geometry.encounterTimeFraction)
-                encounters.push_back({plan.fleet, 0, *geometry.encounterTimeFraction, geometry.encounterPosition, {}, false, station.id});
+                encounters.push_back({plan.fleet, 0, *geometry.encounterTimeFraction, geometry.encounterPosition,
+                    {}, false, station.id, 0, fleetInitiated, stationInitiated});
         }
     }
     // Armed hostile fleets also meet along their continuous motion segments,
     // including flybys of an idle fleet. Different-time path crossings do not.
     for (std::size_t i = 0; i < plans.size(); ++i) {
         for (std::size_t j = i + 1; j < plans.size(); ++j) {
-            if (!space_battle_between(plans[i].battle, plans[j].battle)) continue;
-            const auto geometry = analyze_fleet_encounter(plans[i].start, plans[i].endpoint,
-                plans[j].start, plans[j].endpoint);
-            if (geometry.encounterTimeFraction) encounters.push_back({plans[i].fleet, plans[j].fleet,
-                *geometry.encounterTimeFraction, geometry.encounterPosition, {}, false});
+            const auto& first = plans[i];
+            const auto& second = plans[j];
+            const bool firstInitiated = can_start_space_battle(first.battle, second.battle);
+            const bool secondInitiated = can_start_space_battle(second.battle, first.battle);
+            if (!firstInitiated && !secondInitiated) continue;
+            const auto geometry = analyze_fleet_encounter(first.start, first.endpoint, second.start, second.endpoint);
+            if (!geometry.encounterTimeFraction) continue;
+            const auto position = first.anchored ? first.start : geometry.encounterPosition;
+            encounters.push_back({first.fleet, second.fleet, *geometry.encounterTimeFraction, position,
+                {}, false, 0, 0, firstInitiated, secondInitiated});
         }
     }
     std::sort(encounters.begin(), encounters.end(), [](const EncounterCandidate& left, const EncounterCandidate& right) {
@@ -2148,90 +2167,93 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     // not depend on storage order.
     std::vector<FleetId> encounteredFleets;
     std::vector<EncounterCandidate> resolvedEncounters;
-    const auto bringEscorts = [&](const EncounterCandidate& encounter, const MotionPlan& cargo) {
+    std::vector<SpaceBattleEncounter> spaceBattles;
+    const auto motion_plan = [&](FleetId id) -> MotionPlan* {
+        const auto plan = std::lower_bound(plans.begin(), plans.end(), id,
+            [](const MotionPlan& candidate, FleetId id) { return candidate.fleet < id; });
+        return plan == plans.end() || plan->fleet != id ? nullptr : &*plan;
+    };
+    const auto intercept = [&](MotionPlan& plan, Position position) {
+        if (!plan.anchored) {
+            plan.endpoint = position;
+            plan.active = true;
+        }
+        plan.intercepted = true;
+        encounteredFleets.push_back(plan.fleet);
+    };
+    const auto placeBattle = [&](std::size_t index, Position position) {
+        spaceBattles[index].position = position;
+        for (auto& plan : plans)
+            if (plan.spaceBattle == index && !plan.anchored) plan.endpoint = position;
+    };
+    const auto bringEscorts = [&](std::size_t index, const MotionPlan& cargo) {
         if (!cargo.battle.cargoShips) return;
+        auto& battle = spaceBattles[index];
+        const auto cargoPosition = cargo.position_at(battle.timeFraction);
         for (auto& escort : plans) {
             if (escort.battle.owner != cargo.battle.owner || !escort.battle.armed
-                || escort.battle.plan.tactic != BattleTactic::Escort
-                || fleet_id_list_contains(encounteredFleets, escort.fleet)) continue;
-            // Compare both ships at the actual contact time, using movement
-            // before interceptions truncated any of the planned segments.
-            const Position position{
-                std::lerp(escort.start.x, escort.uninterruptedEndpoint.x, encounter.timeFraction),
-                std::lerp(escort.start.y, escort.uninterruptedEndpoint.y, encounter.timeFraction)};
-            if (distance_between(position, encounter.position) > kFleetEncounterRadius + epsilon) continue;
-            escort.endpoint = encounter.position;
-            escort.active = true;
-            escort.intercepted = true;
-            encounteredFleets.push_back(escort.fleet);
-            auto joined = encounter;
-            joined.pursuer = escort.fleet;
-            joined.target = cargo.fleet;
-            resolvedEncounters.push_back(joined);
+                || escort.battle.plan.tactic != BattleTactic::Escort || escort.intercepted) continue;
+            // Formation is measured relative to the cargo ship at contact,
+            // independent of which fleet supplies the map's battle position.
+            if (distance_between(escort.position_at(battle.timeFraction), cargoPosition)
+                > kFleetEncounterRadius + epsilon) continue;
+            intercept(escort, battle.position);
+            escort.spaceBattle = index;
+            battle.escorts.push_back(escort.fleet);
         }
     };
     for (const auto& encounter : encounters) {
-        if (encounter.station || encounter.visitor) {
-            if (fleet_id_list_contains(encounteredFleets,encounter.pursuer)) continue;
-            const auto plan = std::find_if(plans.begin(),plans.end(),[&](const auto& p) { return p.fleet==encounter.pursuer; });
-            if (plan == plans.end()) continue;
-            plan->endpoint=encounter.position; plan->active=true; plan->intercepted=true;
-            encounteredFleets.push_back(encounter.pursuer); resolvedEncounters.push_back(encounter);
-            if (encounter.station) bringEscorts(encounter, *plan);
+        auto* first = motion_plan(encounter.pursuer);
+        auto* second = encounter.target ? motion_plan(encounter.target) : nullptr;
+        if (!first || (encounter.target && !second)) continue;
+        if (!encounter.fleetInitiated && !encounter.otherInitiated) {
+            if (first->intercepted || (second && second->intercepted)) continue;
+            intercept(*first, encounter.position);
+            if (second) intercept(*second, encounter.position);
+            resolvedEncounters.push_back(encounter);
             continue;
         }
-        if (fleet_id_list_contains(encounteredFleets, encounter.pursuer)
-            || fleet_id_list_contains(encounteredFleets, encounter.target)) {
-            // A third hostile fleet meeting the same participants at the same
-            // instant joins that encounter, rather than flying through it.
-            const auto* first = fleet_by_id(state, encounter.pursuer);
-            const auto* second = fleet_by_id(state, encounter.target);
-            const bool firstUsed = fleet_id_list_contains(encounteredFleets, encounter.pursuer);
-            const bool secondUsed = fleet_id_list_contains(encounteredFleets, encounter.target);
-            if (first && second && first->owner != second->owner && firstUsed != secondUsed) {
-                const auto used = firstUsed ? encounter.pursuer : encounter.target;
-                const auto joining = firstUsed ? encounter.target : encounter.pursuer;
-                const auto existing = std::find_if(resolvedEncounters.begin(), resolvedEncounters.end(), [&](const auto& prior) {
-                    return (prior.pursuer == used || prior.target == used)
-                        && std::abs(prior.timeFraction - encounter.timeFraction) <= 1e-9
-                        && distance_between(prior.position, encounter.position) <= kFleetEncounterRadius + epsilon;
-                });
-                if (existing != resolvedEncounters.end()) {
-                    const auto plan = std::find_if(plans.begin(), plans.end(), [&](const auto& p) { return p.fleet == joining; });
-                    if (plan != plans.end()) {
-                        plan->endpoint = existing->position;
-                        plan->active = true;
-                        plan->intercepted = true;
-                        encounteredFleets.push_back(joining);
-                        auto joined = encounter;
-                        joined.position = existing->position;
-                        resolvedEncounters.push_back(joined);
-                        bringEscorts(joined, *plan);
-                    }
-                }
+
+        const auto canJoin = [&](const MotionPlan& plan) {
+            return !plan.intercepted || (plan.spaceBattle
+                && std::abs(spaceBattles[*plan.spaceBattle].timeFraction - encounter.timeFraction) <= 1e-9);
+        };
+        if (!canJoin(*first) || (second && !canJoin(*second))) continue;
+        const auto otherBattle = second ? second->spaceBattle : std::nullopt;
+        auto index = first->spaceBattle.value_or(otherBattle.value_or(spaceBattles.size()));
+        if (index == spaceBattles.size()) {
+            spaceBattles.push_back({encounter.position, encounter.timeFraction});
+        } else if (otherBattle && *otherBattle != index) {
+            // Two selected groups can meet through a shared attack at this
+            // instant. Keep the first location and combine their real pairs.
+            const auto later = std::max(index, *otherBattle);
+            index = std::min(index, *otherBattle);
+            auto& source = spaceBattles[later];
+            auto& destination = spaceBattles[index];
+            const bool atStation = std::any_of(source.engagements.begin(), source.engagements.end(),
+                [](const auto& engagement) { return engagement.station != 0; });
+            destination.engagements.insert(destination.engagements.end(), source.engagements.begin(), source.engagements.end());
+            destination.escorts.insert(destination.escorts.end(), source.escorts.begin(), source.escorts.end());
+            source.engagements.clear();
+            source.escorts.clear();
+            for (auto& plan : plans) if (plan.spaceBattle == later) plan.spaceBattle = index;
+            placeBattle(index, atStation ? source.position : destination.position);
+        }
+        auto& battle = spaceBattles[index];
+        if (encounter.station && !same_position(battle.position, encounter.position))
+            placeBattle(index, encounter.position);
+        battle.engagements.push_back({encounter.pursuer, encounter.target, encounter.station,
+            encounter.fleetInitiated, encounter.otherInitiated});
+        const auto join = [&](MotionPlan& plan) {
+            if (!plan.intercepted) {
+                intercept(plan, battle.position);
+                plan.spaceBattle = index;
             }
-            continue;
-        }
-        const auto pursuerPlan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
-            return candidate.fleet == encounter.pursuer;
-        });
-        const auto targetPlan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
-            return candidate.fleet == encounter.target;
-        });
-        if (pursuerPlan == plans.end() || targetPlan == plans.end()) continue;
-        pursuerPlan->endpoint = encounter.position;
-        targetPlan->endpoint = encounter.position;
-        pursuerPlan->active = true;
-        targetPlan->active = true;
-        pursuerPlan->intercepted = true;
-        targetPlan->intercepted = true;
-        encounteredFleets.push_back(encounter.pursuer);
-        encounteredFleets.push_back(encounter.target);
-        resolvedEncounters.push_back(encounter);
-        if (pursuerPlan->battle.owner != targetPlan->battle.owner) {
-            bringEscorts(encounter, *pursuerPlan);
-            bringEscorts(encounter, *targetPlan);
-        }
+        };
+        join(*first);
+        if (second) join(*second);
+        bringEscorts(index, *first);
+        if (second) bringEscorts(index, *second);
     }
 
     std::vector<FleetId> fixedArrivals;
@@ -2318,7 +2340,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     // Battles precede arrival actions, so a destroyed fleet cannot unload,
     // found a colony or escape an encounter by entering a wormhole.
     std::erase_if(state.fleets, [&](const auto& f) { return fleet_id_list_contains(mineDestroyedFleets,f.id); });
-    resolve_space_battles(state, state.turn + 1);
+    resolve_space_battles(state, state.turn + 1, spaceBattles);
     for (const auto& contact : resolvedEncounters) if (contact.visitor) {
         auto* fleet = fleet_by_id(state, contact.pursuer);
         if (fleet && same_position(fleet->position, contact.position))

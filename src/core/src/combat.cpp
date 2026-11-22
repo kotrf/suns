@@ -114,12 +114,29 @@ bool combat_continues(const std::vector<Unit>& units, const BattleOpponents& opp
     return false;
 }
 
+bool weapon_can_affect(const ShipComponentSpec& weapon, const Unit& target)
+{
+    return !weapon.shieldOnly || target.shields > epsilon;
+}
+
+double effective_weapon_range(const Unit& source, const Unit& target)
+{
+    double range = 0;
+    for (const auto& weapon : source.weapons)
+        if (weapon_can_affect(weapon.spec, target)) range = std::max(range, double(weapon.spec.weaponRange));
+    return range;
+}
+
 std::optional<bool> target_priority(const Unit& source, const Unit& target,
     const std::set<PlayerId>& opponents, const ShipComponentSpec* weapon)
 {
     if (!active(target) || !opponents.contains(target.owner)) return std::nullopt;
-    if (weapon && (distance_between(source.position, target.position) > weapon->weaponRange + epsilon
-        || (weapon->shieldOnly && target.shields <= epsilon))) return std::nullopt;
+    if (weapon) {
+        if (!weapon_can_affect(*weapon, target)
+            || distance_between(source.position, target.position) > weapon->weaponRange + epsilon) return std::nullopt;
+    } else if (effective_weapon_range(source, target) <= 0) {
+        return std::nullopt;
+    }
     const bool preferred = matches_target(source.plan.preferredTarget, !target.weapons.empty(),
         target.cargoShip, target.station != 0);
     if (preferred || source.plan.allowOtherTargets) return preferred;
@@ -184,11 +201,7 @@ Position combat_movement(const std::vector<Unit>& units, std::size_t index,
         }
     }
 
-    double range = 0;
-    for (const auto& weapon : unit.weapons)
-        if (!weapon.spec.shieldOnly || enemy.shields > epsilon)
-            range = std::max(range, double(weapon.spec.weaponRange));
-    if (range <= 0) return unit.position;
+    const auto range = effective_weapon_range(unit, enemy);
     const auto distance = distance_between(unit.position, enemy.position);
     if (distance > range + epsilon)
         return move_towards(unit.position, enemy.position, std::min(unit.movement, distance - range));
@@ -563,7 +576,8 @@ bool space_battle_between(const BattleContact& a, const BattleContact& b)
     return can_start_space_battle(a, b) || can_start_space_battle(b, a);
 }
 
-void resolve_space_battles(GameState& state, std::uint64_t observationTurn)
+void resolve_space_battles(GameState& state, std::uint64_t observationTurn,
+    std::span<const SpaceBattleEncounter> encounters)
 {
     struct Contact {
         std::uint32_t id;
@@ -580,6 +594,49 @@ void resolve_space_battles(GameState& state, std::uint64_t observationTurn)
         if (star) contacts.push_back({station.id, star->position, battle_contact(station)});
     }
     std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.key() < b.key(); });
+
+    const auto contact_by_key = [&](ContactKey key) -> Contact* {
+        const auto it = std::lower_bound(contacts.begin(), contacts.end(), key,
+            [](const Contact& contact, ContactKey key) { return contact.key() < key; });
+        return it == contacts.end() || it->key() != key ? nullptr : &*it;
+    };
+    std::map<ContactKey, std::set<ContactKey>> attacks;
+    std::set<ContactKey> intercepted;
+    const auto join = [&](Contact& contact, Position encounter) {
+        intercepted.insert(contact.key());
+        // A tactical participant shares the battle location even when its
+        // strategic position, such as an anchored outpost, cannot change.
+        contact.position = encounter;
+    };
+    for (const auto& encounter : encounters) {
+        bool hasSurvivingPair = false;
+        for (const auto& engagement : encounter.engagements) {
+            auto* first = contact_by_key({false, engagement.fleet});
+            auto* second = engagement.station ? contact_by_key({true, engagement.station})
+                : contact_by_key({false, engagement.otherFleet});
+            // A mine can destroy a ship before it reaches its selected contact.
+            if (!first || !second) continue;
+            hasSurvivingPair = true;
+            join(*first, encounter.position);
+            join(*second, encounter.position);
+            if (engagement.fleetInitiated) attacks[first->key()].insert(second->key());
+            if (engagement.otherInitiated) attacks[second->key()].insert(first->key());
+        }
+        if (!hasSurvivingPair) continue;
+        for (const auto id : encounter.escorts)
+            if (auto* escort = contact_by_key({false, id})) join(*escort, encounter.position);
+    }
+    const auto starts_battle = [&](const Contact& attacker, const Contact& target) {
+        // For an intercepted fleet, only an admitted contact on its original
+        // trajectory can initiate combat. Endpoints can make escorts look
+        // co-located with an enemy they had not yet encountered.
+        if (intercepted.contains(attacker.key()) || intercepted.contains(target.key())) {
+            const auto found = attacks.find(attacker.key());
+            return found != attacks.end() && found->second.contains(target.key());
+        }
+        return can_start_space_battle(attacker.profile, target.profile)
+            && distance_between(attacker.position, target.position) <= kFleetEncounterRadius + 1e-6;
+    };
     std::set<ContactKey> resolved;
     for (const auto& anchor : contacts) {
         if (resolved.contains(anchor.key()) || !anchor.profile.armed || !anchor.profile.plan.attackOnContact) continue;
@@ -589,15 +646,14 @@ void resolve_space_battles(GameState& state, std::uint64_t observationTurn)
             if (resolved.contains(other.key())
                 || distance_between(anchor.position, other.position) > kFleetEncounterRadius + 1e-6) continue;
             local.push_back(&other);
-            beginsBattle |= can_start_space_battle(anchor.profile, other.profile);
+            beginsBattle |= starts_battle(anchor, other);
         }
         if (!beginsBattle) continue;
 
         BattleOpponents opponents;
         std::set<ContactKey> initiators;
         for (const auto* attacker : local) for (const auto* target : local) {
-            if (!can_start_space_battle(attacker->profile, target->profile)
-                || distance_between(attacker->position, target->position) > kFleetEncounterRadius + 1e-6) continue;
+            if (!starts_battle(*attacker, *target)) continue;
             initiators.insert(attacker->key());
             opponents[attacker->profile.owner].insert(target->profile.owner);
             opponents[target->profile.owner].insert(attacker->profile.owner);
