@@ -597,10 +597,9 @@ QString event_text(const GameState& state, const GameEvent& event)
     }
     if (event.kind == GameEventKind::RemoteGeologyObserved) {
         const auto c = event.deliveredMinerals;
-        return (event_subject(state, event) + QString("\nObserved by fleet #%1 in year %2. Received in year %3.\nDeposit estimates: I %4 / B %5 / G %6.")
+        return event_subject(state, event) + QString("\nObserved by fleet #%1 in year %2. Received in year %3.\nDeposit estimates: I %4 / B %5 / G %6.")
             .arg(event.fleet).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
-            .arg(geology_band_text(c.ironium), geology_band_text(c.boranium), geology_band_text(c.germanium)))
-            .toHtmlEscaped().replace("\n", "<br>");
+            .arg(geology_band_text(c.ironium), geology_band_text(c.boranium), geology_band_text(c.germanium));
     }
     if (event.kind == GameEventKind::SystemSurveyed) {
         QString detail;
@@ -1058,13 +1057,12 @@ void MainWindow::installTurnMessages()
             return candidate.id == event->fleet;
         });
         const bool ownedFleet = fleet != state_.fleets.end() && fleet->owner == pendingOrders_.player;
-        // Mining output belongs to its recorded world. Keep the source fleet
-        // ID for communications/identity without following its later voyage.
-        const bool focusFleet = ownedFleet && event->kind != GameEventKind::RemoteMiningOutput;
-        // Preserve the report's system as the star context even if its fleet
-        // has travelled since the event was recorded.
-        if (star && ownedFleet) selection_.star = starId;
+        // A world report keeps its source fleet ID while focusing the surveyed system.
+        const bool worldReport = event->kind == GameEventKind::RemoteMiningOutput
+            || event->kind == GameEventKind::RemoteGeologyObserved;
+        const bool focusFleet = ownedFleet && !worldReport;
         if (focusFleet) {
+            if (star) selection_.star = starId;
             selectWorkspaceObject(2, fleet->id);
         } else if (star) {
             selectWorkspaceObject(1, starId);

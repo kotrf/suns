@@ -59,9 +59,13 @@ with this scanner than with a Mole Scanner, raising fuel use at the same Warp.
 
 An active scanner measures during real flight and from the fleet's final
 position, with interference and interstellar medium applied at the scan.
+On a flyby, each portion of the path uses its own interference and cloud
+attenuation, so a clear portion may provide a reading even when the closest
+pass is blocked.
 It reports ten-point bands of underground I/B/G concentration, with the
 source fleet and observation year. Use the concentration display in System
-Details or the Exploration filter in Turn Messages. A geological survey in
+Details or the Exploration filter in Turn Messages. **Show on map** opens the
+surveyed system. A geological survey in
 orbit gives exact concentrations and the appropriate surface evidence.
 Delivered estimates use their own record and respect transmission delays.
 Unchanged estimates refresh the observation year quietly.
