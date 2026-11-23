@@ -81,7 +81,9 @@ std::optional<ShipComponentType> best_component(const GameState& state, PlayerId
     for (const auto& equipment : equipment_technologies()) {
         if (equipment.kind != kind || !component_available_to_player(state, owner, equipment.component)) continue;
         const auto s = component_spec(equipment.component);
-        const auto score = kind == ShipComponentKind::BeamWeapon ? (s.shieldOnly ? 0 : s.weaponPower * (1 + 0.2 * s.weaponRange))
+        // A zero-range beam alone leaves an approaching fleet without a movement target.
+        if (kind == ShipComponentKind::BeamWeapon && (s.shieldOnly || s.weaponRange == 0)) continue;
+        const auto score = kind == ShipComponentKind::BeamWeapon ? s.weaponPower * (1 + 0.2 * s.weaponRange)
             : kind == ShipComponentKind::Bomb ? (s.unterraformingBomb ? 0 : s.bombPopulationPercent + s.bombMinimumKills / 1000.0)
             : s.shields;
         if (score > value) { value = score; best = equipment.component; }

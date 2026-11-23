@@ -911,20 +911,22 @@ not require a guard. Once the startup research is complete, a threat can
 prioritize Weapons 3 for the X-Ray Laser, after any locked housing upgrade.
 
 An idle armed fleet without settlers, mining equipment or a native founding
-module can hold a threatened orbit. An available guard with current telemetry
-and no more than 40% damage can move to the nearest uncovered threatened orbit
-that its fuel can reach. An assigned guard counts towards coverage until the
-normal fleet goal is resolved. Guard scanners remain available during defense.
-All movement and fighting use ordinary fleet orders, delivery and battle plans.
+module can hold a threatened orbit. One confirmed defender remains on orbit.
+Other guards with current telemetry and no more than
+40% damage can move to the nearest uncovered threatened orbit within their
+fuel range. A guard assignment reserves the destination until the normal fleet
+goal is resolved. Guard scanners remain available during defense. All movement
+and fighting use ordinary fleet orders, delivery and battle plans.
 
 An uncovered threatened colony can commission one guard in its local shipyard
 with an empty, current received queue. Miners, the first surveyor and settler,
-and station upgrades have priority. The ordinary military design policy uses
-researched equipment and fits within the yard's mass limit. The mineral budget
-includes current support, the construction-interval deficit at local mining
-rates and a full bill for the inhabited hull's capacity after completion.
+and station upgrades have priority. The ordinary military design policy fits
+researched hull-damaging beams with positive range within the yard's mass limit.
+The mineral budget includes current support, the construction-interval deficit
+at local mining rates and a full bill for the inhabited hull's capacity after
+completion.
 The colony pays the actual hull and component costs through its production queue.
 
 Coverage includes stale and undelivered threat reports, station support
-reserves, actual paid construction, assignment to an inhabited orbit and
-the guard firing in a resolved battle.
+reserves, actual paid construction, confirmed and incoming defense assignments,
+reserve transfers and guard fire in open-space battles.

@@ -233,20 +233,32 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
         }
     }
     std::unordered_set<StarId> covered;
-    std::vector<const Fleet*> available;
+    std::unordered_set<StarId> stationed;
+    std::vector<const Fleet*> idleGuards;
     for (const auto* guard : guards) {
         const auto assignment = std::find_if(goals.begin(), goals.end(), [&](const auto& goal) {
             return goal.fleet == guard->id;
         });
-        if (assignment != goals.end()) {
-            if (assignment->kind == ComputerFleetGoalKind::Defend) covered.insert(assignment->target);
+        const auto issuedTurn = assignment == goals.end() ? 0 : assignment->issuedTurn;
+        const bool stationary = idle(*guard) && confirmed_idle(*guard, issuedTurn) && guard->pendingCommands.empty();
+        if (assignment == goals.end()) {
+            if (stationary) idleGuards.push_back(guard);
             continue;
         }
-        if (!idle(*guard) || !confirmed_idle(*guard, 0) || !guard->pendingCommands.empty()) continue;
+        if (assignment->kind != ComputerFleetGoalKind::Defend) continue;
+        covered.insert(assignment->target);
+        // An incoming assignment reserves its destination. Relieving a local
+        // defender also requires a received arrival.
+        const auto* target = find_star(state, assignment->target);
+        if (stationary && target && same_position(guard->telemetry.position, target->position))
+            stationed.insert(target->id);
+    }
+    std::vector<const Fleet*> available;
+    for (const auto* guard : idleGuards) {
         const auto* local = colony_at(state, view.player, guard->telemetry.position);
         if (local && std::any_of(threatened.begin(), threatened.end(), [&](const auto* star) {
                 return star->id == local->star;
-            })) {
+            }) && stationed.insert(local->star).second) {
             covered.insert(local->star);
         } else if (guard->telemetry.observedTurn == state.turn && guard->damagePercent <= 40) {
             available.push_back(guard);
