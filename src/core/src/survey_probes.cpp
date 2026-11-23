@@ -2,7 +2,9 @@
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
 #include "suns/interstellar_medium.hpp"
+#include "suns/deep_space.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -35,14 +37,41 @@ std::optional<std::uint8_t> flight_warp(const GameState& s, const Fleet& f, Posi
         if (!fleet_warp_valid(s, check, warp) || fleet_overdrive_damage_rate(s, check, warp) > 0) continue;
         const auto fuel = leg_cost(s, check, f.position, target, warp);
         const auto home = !returning && f.probe.program.returnHome ? leg_cost(s, check, target, f.probe.origin, warp) : 0.0;
-        if (fuel + home + (returning ? 0.0 : f.probe.program.fuelReserve) > f.fuel + 1e-6) continue;
+        const auto reserve = f.probe.program.deployRelay
+            ? std::max(f.probe.program.fuelReserve, kOutpostUpkeepMg) : f.probe.program.fuelReserve;
+        if (fuel + home + (returning ? 0.0 : reserve) > f.fuel + 1e-6) continue;
         if (f.probe.program.flight == ProbeFlightMode::SafeCruise || fuel < bestFuel - 1e-6) { best = warp; bestFuel = fuel; }
     }
     return best;
 }
+
 void return_or_hold(const GameState& s, Fleet& f, bool fuelShortage)
 {
     auto& m = f.probe; clear_route(f); m.target = 0;
+    if (m.program.deployRelay && !m.completed.empty()) {
+        constexpr double diagonal = 0.7071067811865475;
+        constexpr std::array<Position, 9> directions{{
+            {0, 0}, {1, 0}, {0, 1}, {-1, 0}, {0, -1},
+            {diagonal, diagonal}, {-diagonal, diagonal}, {-diagonal, -diagonal}, {diagonal, -diagonal}
+        }};
+        const auto offset = kOutpostStellarClearanceLy + 1.0;
+        for (const auto direction : directions) {
+            const Position site{f.position.x + direction.x * offset, f.position.y + direction.y * offset};
+            if (!outpost_deployment_error(s, f, site).empty()) continue;
+            if (const auto warp = flight_warp(s, f, site, false)) {
+                m.status = ProbeStatus::DeployingRelay;
+                if (same_position(f.position, site)) f.task = FleetTask::DeployOutpost;
+                else {
+                    f.destination = site;
+                    f.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::DeployOutpost};
+                    f.warp = *warp;
+                }
+                return;
+            }
+        }
+        pause_probe(f, ProbeStatus::RelayUnavailable);
+        return;
+    }
     if (m.program.returnHome && !same_position(f.position, m.origin)) {
         if (const auto warp = flight_warp(s, f, m.origin, true)) {
             f.destination = m.origin; f.warp = *warp; m.status = ProbeStatus::Returning; return;
@@ -60,7 +89,8 @@ bool probe_program_valid(const ProbeProgram& p)
         && p.depth >= SurveyLevel::OrbitalSurvey && p.depth <= SurveyLevel::DeepSurvey
         && p.flight <= ProbeFlightMode::Economical && p.maxWarp >= 1 && p.maxWarp <= kMaxWarp
         && std::isfinite(p.fuelReserve) && p.fuelReserve >= 0 && p.fuelReserve <= 1e9
-        && p.maxSystems > 0 && p.maxSystems <= 1000 && p.maxTurns > 0 && p.maxTurns <= 10000;
+        && p.maxSystems > 0 && p.maxSystems <= 1000 && p.maxTurns > 0 && p.maxTurns <= 10000
+        && !(p.returnHome && p.deployRelay);
 }
 bool probe_capable(const GameState& s, const Fleet& f)
 {
@@ -72,6 +102,11 @@ bool probe_capable(const GameState& s, const Fleet& f)
             || std::find(d->components.begin(), d->components.end(), ShipComponentType::SurveyAutopilot) == d->components.end()) return false;
     }
     return true;
+}
+bool probe_relay_capable(const GameState& state, const Fleet& fleet)
+{
+    return probe_capable(state, fleet) && fleet_construction_kit(state, fleet) == OutpostKind::CommunicationsRelay
+        && !fleet.colonists;
 }
 ShipDesign basic_survey_probe_design(PlayerId owner, ShipDesignId id)
 {
@@ -108,7 +143,8 @@ void apply_probe_command(const GameState& s, Fleet& f, const ProbeCommand& comma
 {
     if (command.action == ProbeAction::Stop) { f.visitor = {}; clear_route(f); pause_probe(f, ProbeStatus::Stopped); return; }
     if (command.action == ProbeAction::Configure) {
-        if (!probe_program_valid(command.program) || !probe_capable(s, f)) return;
+        if (!probe_program_valid(command.program) || !probe_capable(s, f)
+            || (command.program.deployRelay && !probe_relay_capable(s, f))) return;
         auto notebook = std::move(f.probe.surveys);
         f.probe = {}; f.probe.configured = true; f.probe.program = command.program;
         f.probe.surveys = std::move(notebook);
@@ -127,6 +163,7 @@ bool submit_probe_command(GameState& s, PlayerId owner, const SetProbeProgramOrd
     const auto f = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == order.fleet && f.owner == owner; });
     if (f == s.fleets.end() || order.action > ProbeAction::UpdateKnowledge || !probe_program_valid(order.program)) return false;
     if (order.action != ProbeAction::Stop && !probe_capable(s, *f)) return false;
+    if (order.action == ProbeAction::Configure && order.program.deployRelay && !probe_relay_capable(s, *f)) return false;
     ProbeCommand command{order.action, order.program, {}};
     const auto* player = find_player(s, owner);
     for (const auto& k : player->surveyKnowledge) if (k.observedTurn <= s.turn) command.knowledge.push_back({k.star, k.level, k.observedTurn});
@@ -144,6 +181,18 @@ void advance_survey_probes(GameState& s)
     for (auto& f : s.fleets) {
         auto& m = f.probe; if (!m.enabled) continue;
         if (!probe_capable(s, f)) { clear_route(f); pause_probe(f, ProbeStatus::MissingEquipment); continue; }
+        if (m.program.deployRelay && !probe_relay_capable(s, f)) {
+            clear_route(f); pause_probe(f, ProbeStatus::MissingEquipment); continue;
+        }
+        if (m.status == ProbeStatus::DeployingRelay) {
+            if (f.destination && f.damagePercent < 25) {
+                if (const auto warp = flight_warp(s, f, *f.destination, false)) {
+                    f.warp = *warp;
+                    continue;
+                }
+            }
+            clear_route(f); pause_probe(f, ProbeStatus::RelayUnavailable); continue;
+        }
         if (f.damagePercent >= 25) { clear_route(f); m.status = ProbeStatus::Damaged; continue; }
         if (m.status == ProbeStatus::Returning) {
             if (same_position(f.position, m.origin)) { clear_route(f); m.enabled = false; m.status = ProbeStatus::Complete; }
@@ -197,6 +246,8 @@ std::string probe_status_name(ProbeStatus status)
     case ProbeStatus::MissingEquipment: return "Autonomy stopped: equipment lost";
     case ProbeStatus::ManualPause: return "Autonomy paused (Resume to continue)";
     case ProbeStatus::Stopped: return "Stopped by delivered command";
+    case ProbeStatus::DeployingRelay: return "Travelling to relay site";
+    case ProbeStatus::RelayUnavailable: return "Relay deployment unavailable (Resume to retry)";
     }
     return "Unknown";
 }

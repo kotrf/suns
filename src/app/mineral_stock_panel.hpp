@@ -16,7 +16,9 @@ struct MineralDisplayData {
     std::optional<MineralCargo> concentration;
     std::optional<MineralCargo> mining;
     std::optional<std::uint64_t> observedTurn;
+    std::optional<RemoteGeologyObservation> remoteGeology;
 };
+QString geology_band_text(double lower);
 // Inputs must already be a player view; never consult hidden host quantities.
 MineralDisplayData mineral_display_data(const GameState& received, const GameState& planned, PlayerId, PlanetId);
 

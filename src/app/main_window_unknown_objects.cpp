@@ -31,6 +31,9 @@ QString description(const ObjectObservation& x,std::uint64_t turn)
     if(x.kind) text+=QString("\nStudy objective: %1 research points in %2, once per empire, after data delivery.")
         .arg(unknown_object_research_points(*x.kind)).arg(QString::fromStdString(research_field_name(unknown_object_research_field(*x.kind))));
     else text+="\nApproach with active scanners to classify; no contents or scientific value identified yet.";
+    if (x.kind == UnknownObjectKind::IonVortex)
+        text += QString("\nSensor interference %1% within %2 ly.")
+            .arg(kIonVortexInterference * 100).arg(kIonVortexRadiusLy);
     if(x.kind && unknown_object_is_moving(*x.kind)) {
         text+=x.velocity ? QString("\nReported course: %1, %2 ly/year. Routes use an approximate intercept from this dated course.")
             .arg(x.velocity->x,0,'f',2).arg(x.velocity->y,0,'f',2)

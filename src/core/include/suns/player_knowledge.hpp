@@ -9,6 +9,8 @@ namespace suns {
 
 // Received surface evidence only. Absence is unknown, distinct from a known zero.
 [[nodiscard]] std::optional<SurfaceMineralObservation> known_surface_minerals(const GameState&, PlayerId, PlanetId);
+[[nodiscard]] const RemoteGeologyObservation* known_remote_geology(const GameState&, PlayerId, PlanetId);
+[[nodiscard]] bool remote_geology_bands_valid(const MineralCargo&);
 void publish_surface_mineral_reports(GameState&, std::uint64_t observationTurn);
 
 // Delivery routing/dates do not identify an award. Finite objectives can supply

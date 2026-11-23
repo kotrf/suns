@@ -634,8 +634,9 @@ std::string ship_design_validation_error(const ShipDesign& design)
             && design.hull != ShipHullType::ExpeditionBase) return "Orbital base equipment requires an Expedition Base hull.";
         if (component == ShipComponentType::SurveyAutopilot && design.hull != ShipHullType::SurveyProbe)
             return "Survey Autopilot requires a Survey Probe hull.";
-        if (design.hull == ShipHullType::SurveyProbe && construction_kit_kind(component) != OutpostKind::None)
-            return "Survey Probes cannot carry construction kits.";
+        if (design.hull == ShipHullType::SurveyProbe && construction_kit_kind(component) != OutpostKind::None
+            && component != ShipComponentType::DeepSpaceRelayKit)
+            return "Survey Probes can carry a Deep-space Relay Kit.";
         if ((component == ShipComponentType::ExpeditionDock || component == ShipComponentType::ExpeditionWorkshop)
             && design.hull != ShipHullType::ExpeditionBase)
             return "Expedition service modules require an Expedition Base hull.";

@@ -21,6 +21,8 @@ double science_sample_mass(std::span<const ScienceSample> samples)
 const char* science_sample_name(UnknownObjectKind kind)
 { return kind==UnknownObjectKind::RoguePlanetoid ? "Prebiotic ice"
     :kind==UnknownObjectKind::DriftingDerelict ? "Architectural core"
+    :kind==UnknownObjectKind::IonVortex ? "Ionized dust"
+    :kind==UnknownObjectKind::RogueComet ? "Cometary condensate"
     :kind == UnknownObjectKind::AncientProbe ? "Ancient archive" : "Compact-matter specimen"; }
 std::uint32_t science_sample_research_points(UnknownObjectKind kind)
 { return unknown_object_is_moving(kind) ? 80U : kind == UnknownObjectKind::AncientProbe ? 64U : 96U; }

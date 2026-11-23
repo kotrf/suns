@@ -21,7 +21,9 @@ ShipDesign design(std::initializer_list<ShipComponentType> scanners)
 
 void catalog_and_prerequisites()
 {
-    assert(scanner_technologies().size() == 16);
+    assert(scanner_technologies().size() == 17);
+    const auto* geology = scanner_technology(ShipComponentType::GeologicalScanner);
+    assert(geology && geology->geologicalRange == 80 && geology->mass == 60);
     const auto* rhino = scanner_technology(ShipComponentType::RhinoScanner);
     assert(rhino && rhino->ordinaryRange == 50 && rhino->penetratingRange == 0);
     assert(rhino->mass == 5 && rhino->electronics == 1 && rhino->cost == 3);

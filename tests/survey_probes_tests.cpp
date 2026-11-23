@@ -3,6 +3,8 @@
 #include "suns/communications.hpp"
 #include "suns/computer_player.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/deep_space.hpp"
+#include "suns/propulsion.hpp"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -44,6 +46,36 @@ void paid_design_and_technology()
     const auto built = next(s, {QueueShipDesignOrder{p.id, 200}});
     assert(built.fleets.size() == 2 && built.planets[0].minerals.ironium < minerals.ironium);
     assert(built.fleets.back().design == 200 && !built.fleets.back().probe.configured);
+}
+void survey_probe_anchors_as_a_paid_relay()
+{
+    auto s = world();
+    ProbeProgram program;
+    program.center = {920, 0};
+    program.radius = 1;
+    program.depth = SurveyLevel::OrbitalSurvey;
+    program.maxSystems = 1;
+    program.returnHome = false;
+    program.deployRelay = true;
+    const SetProbeProgramOrder order{1, ProbeAction::Configure, program};
+    assert(!submit_probe_command(s, 1, order));
+    s.shipDesigns.back().components.push_back(ShipComponentType::DeepSpaceRelayKit);
+    assert(ship_design_valid(s.shipDesigns.back()) && probe_relay_capable(s, s.fleets.front()));
+    const auto initialFuel = s.fleets.front().fuel;
+    s = next(s, {order});
+    assert(!s.fleets.front().probe.configured && s.fleets.front().pendingCommands.front().probe->program.deployRelay);
+    for (unsigned year = 0; year < 35 && s.fleets.front().outpost == OutpostKind::None; ++year) s = next(s);
+    assert(s.fleets.size() == 1);
+    const auto& relay = s.fleets.front();
+    assert(relay.id == 1 && relay.outpost == OutpostKind::CommunicationsRelay && outpost_state_valid(s, relay));
+    assert(!relay.probe.enabled && relay.probe.status == ProbeStatus::Complete);
+    assert(relay.probe.completed == std::vector<StarId>{3});
+    assert(relay.fuel < initialFuel && relay.fuel >= kOutpostUpkeepMg);
+    assert(fleet_communication_range(s, relay) == kOutpostRelayRangeLy);
+    const auto fuel = relay.fuel;
+    const auto followed = next(s);
+    assert(same_position(followed.fleets.front().position, relay.position));
+    assert(followed.fleets.front().fuel == fuel_after_consumption(fuel, kOutpostUpkeepMg));
 }
 void autonomous_expedition_and_knowledge_delay()
 {
@@ -207,6 +239,7 @@ void withdrawal_pauses_probe_until_resume_arrives()
 int main()
 {
     paid_design_and_technology(); autonomous_expedition_and_knowledge_delay();
+    survey_probe_anchors_as_a_paid_relay();
     hidden_world_and_other_notebooks_do_not_plan_for_this_probe(); delayed_manual_control_stop_and_knowledge_upload();
     fuel_damage_equipment_and_reorganization(); computer_builds_and_launches_paid_probe();
     withdrawal_pauses_probe_until_resume_arrives();

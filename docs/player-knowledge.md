@@ -49,6 +49,23 @@ Reports use the same ordinary-scanner components and physical transceiver-to-tra
 
 Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range also supports transient enemy-fleet contacts, separate from permanent planetary knowledge. Detached scouts now deliver immutable dated hull snapshots; see [reconnaissance](reconnaissance.md).
 
+## Remote geological survey
+
+The Deep Geological Scanner needs Electronics 14 and Energy 8. It weighs 60 kt
+and costs 100 production and 15/20/40 kt of I/B/G. Its ordinary, penetrating and
+geological ranges are 120, 60 and 80 ly. A separate fitting puts the cost of remote
+geology on the ships that use it. A Scout with Quick Jump 5 is 58 kt heavier
+with this scanner than with a Mole Scanner, raising fuel use at the same Warp.
+
+An active scanner measures during real flight and from the fleet's final
+position, with interference and interstellar medium applied at the scan.
+It reports ten-point bands of underground I/B/G concentration, with the
+source fleet and observation year. Use the concentration display in System
+Details or the Exploration filter in Turn Messages. A geological survey in
+orbit gives exact concentrations and the appropriate surface evidence.
+Delivered estimates use their own record and respect transmission delays.
+Unchanged estimates refresh the observation year quietly.
+
 ## Delivery and events
 
 At a planning boundary, due reports:

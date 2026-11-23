@@ -10,7 +10,7 @@ namespace suns {
 std::span<const ScannerTechnology> scanner_technologies()
 {
     using C = ShipComponentType;
-    static const std::array<ScannerTechnology, 16> technologies{{
+    static const std::array<ScannerTechnology, 17> technologies{{
         {C::BatScanner, "Bat Scanner", 0, 0, 2, 0, 0, 0, 0, {1, 0, 1}, 1},
         {C::RhinoScanner, "Rhino Scanner", 50, 0, 5, 1, 0, 0, 0, {3, 0, 2}, 3},
         {C::MoleScanner, "Mole Scanner", 100, 0, 2, 4, 0, 0, 0, {2, 0, 2}, 9},
@@ -27,6 +27,8 @@ std::span<const ScannerTechnology> scanner_technologies()
         {C::EagleEyeScanner, "Eagle Eye Scanner", 335, 0, 3, 14, 6, 0, 0, {3, 2, 21}, 64},
         {C::RobberBaronScanner, "Robber Baron Scanner", 220, 120, 20, 15, 10, 10, 0, {10, 10, 10}, 90, true},
         {C::PeerlessScanner, "Peerless Scanner", 500, 0, 4, 24, 7, 0, 0, {3, 2, 30}, 90},
+        {C::GeologicalScanner, "Deep Geological Scanner", 120, 60, 60, 14, 8, 0, 0,
+            {15, 20, 40}, 100, false, 80},
     }};
     return technologies;
 }

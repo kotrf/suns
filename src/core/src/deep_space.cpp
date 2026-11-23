@@ -4,6 +4,7 @@
 #include "suns/propulsion.hpp"
 #include "suns/stations.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/survey_probes.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -122,14 +123,21 @@ void deploy_outposts(GameState& state, std::uint64_t turn)
     for (const auto id : builders) {
         auto& fleet = *std::find_if(state.fleets.begin(), state.fleets.end(), [=](const auto& f) { return f.id == id; });
         const auto kind = fleet_construction_kit(state, fleet);
+        const bool probeDeployment = fleet.probe.enabled && fleet.probe.status == ProbeStatus::DeployingRelay;
         bool valid = !fleet.destination && !fleet.targetFleet && fleet.waypointQueue.empty()
             && !fleet.repeatOrders && outpost_deployment_error(state, fleet, fleet.position).empty();
+        if (probeDeployment)
+            valid = valid && kind == OutpostKind::CommunicationsRelay && fleet.damagePercent < 25
+                && fuel_in_complete_containers(fleet.fuel) >= kOutpostUpkeepMg;
         for (const auto& other : state.fleets) if (other.id != fleet.id && other.outpost != OutpostKind::None
             && distance_between(other.position, fleet.position) < 1.0) valid = false;
         fleet.task = FleetTask::None;
         if (valid) {
             fleet.outpost = fleet_construction_kit(state, fleet);
             fleet.arrivalAction.reset(); fleet.routeTemplate.clear();
+            pause_probe(fleet, ProbeStatus::Complete);
+        } else if (probeDeployment) {
+            pause_probe(fleet, ProbeStatus::RelayUnavailable);
         }
         queue_player_report(state, fleet.owner, valid ? PlayerReportKind::OutpostDeployed : PlayerReportKind::OutpostDeploymentFailed,
             fleet.position, turn, 0, 0, fleet.id, 0, ProductionKind::ColonyShip, std::uint32_t(kind));

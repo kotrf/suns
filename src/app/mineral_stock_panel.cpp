@@ -17,15 +17,23 @@ QString exact(std::optional<double> value, const QString& unit)
     return value ? QString::number(*value, 'f', 1) + unit : QString("unknown");
 }
 }
+QString geology_band_text(double lower)
+{
+    return QString("%1–%2%").arg(lower).arg(lower + 10);
+}
+
 MineralDisplayData mineral_display_data(const GameState& received, const GameState& planned, PlayerId player, PlanetId id)
 {
     MineralDisplayData result;
     const auto* p = find_planet(received, id);
     if (!p) return result;
     const auto owner = known_planet_owner(received, player, id);
+    if (owner && (*owner == player || planet_geology_known(received, player, id)))
+        result.concentration = planet_mineral_concentration(received, *p);
+    else if (const auto* estimate = known_remote_geology(received, player, id))
+        result.remoteGeology = *estimate;
     if (!owner) return result;
     const bool own = *owner == player;
-    if (own || planet_geology_known(received, player, id)) result.concentration = planet_mineral_concentration(received, *p);
     const auto evidence = known_surface_minerals(received, player, id);
     if (evidence && (own || !*owner)) {
         result.stock = evidence->minerals;
@@ -143,6 +151,14 @@ void MineralStockPanel::refresh()
     ageLabel_->setText(data_.stock ? ageText : QString("Surface stock unknown"));
     const auto stock = components(data_.stock.value_or(MineralCargo{}));
     const auto mining = components(data_.mining.value_or(MineralCargo{}));
+    if (data_.remoteGeology) {
+        const auto& estimate = *data_.remoteGeology;
+        const auto bands = components(estimate.bandLower);
+        ageLabel_->setText(ageLabel_->text() + QString("\nRemote geology from fleet #%1, year %2 (age %3)\nI %4  ·  B %5  ·  G %6")
+            .arg(estimate.source).arg(qulonglong(estimate.observedTurn))
+            .arg(qulonglong(turn_ - std::min(turn_, estimate.observedTurn)))
+            .arg(geology_band_text(bands[0]), geology_band_text(bands[1]), geology_band_text(bands[2])));
+    }
     const auto conc = components(data_.concentration.value_or(MineralCargo{}));
     for (int i = 0; i < 3; ++i) bars_[i]->setMineral(data_.stock ? std::optional(stock[i]) : std::nullopt,
         data_.mining ? std::optional(mining[i]) : std::nullopt, data_.concentration ? std::optional(conc[i]) : std::nullopt, stockScale(), ageText);

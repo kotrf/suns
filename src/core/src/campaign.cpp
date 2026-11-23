@@ -189,6 +189,9 @@ const std::vector<ResearchUnlock>& research_unlocks()
                 scanner.name, scanner.ordinaryRange == 0 ? "Orbital survey only; no remote radar coverage."
                     : std::to_string(int(scanner.ordinaryRange)) + " ly ordinary; "
                         + std::to_string(int(scanner.penetratingRange)) + " ly penetrating.", scanner.component};
+            if (scanner.geologicalRange > 0)
+                entry.description += " Estimates deposit concentrations within "
+                    + std::to_string(int(scanner.geologicalRange)) + " ly.";
             entry.extraLevels[static_cast<std::size_t>(ResearchField::Energy)] = scanner.energy;
             if (field != ResearchField::Biology)
                 entry.extraLevels[static_cast<std::size_t>(ResearchField::Biology)] = scanner.biology;
@@ -575,7 +578,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     for (const auto& planet : host.planets) {
         const bool owned = known_planet_owner(host,playerId,planet.id)==playerId;
         const auto level = survey_level(host, playerId, planet.star);
-        if (!owned && level < SurveyLevel::BasicScan) continue;
+        if (!owned && level < SurveyLevel::BasicScan && !known_remote_geology(host, playerId, planet.id)) continue;
         Planet known;
         if (owned) {
             known = planet;

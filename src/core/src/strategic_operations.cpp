@@ -127,6 +127,19 @@ double sensor_interference(const GameState& state,PlayerId owner,Position positi
 {
     if(!turn) turn=state.turn;
     double strength=0;
+    const auto atVortex = [&](const auto& object) {
+        return object.kind == UnknownObjectKind::IonVortex
+            && distance_between(position, object.position) <= kIonVortexRadiusLy;
+    };
+    if (state.mediumObserver) {
+        if (const auto* player = find_player(state, owner); player
+            && std::any_of(player->objectKnowledge.begin(), player->objectKnowledge.end(),
+                [&](const auto& observation) { return observation.receivedTurn && observation.receivedTurn <= state.turn
+                    && observation.level >= ObjectKnowledgeLevel::Classified && atVortex(observation); }))
+            strength = kIonVortexInterference;
+    } else if (std::any_of(state.unknownObjects.begin(), state.unknownObjects.end(), atVortex)) {
+        strength = kIonVortexInterference;
+    }
     for(const auto& enemy:state.fleets) if(enemy.owner!=owner && fleet_active_sensors(enemy,turn)
         && distance_between(enemy.position,position)<=std::max(30.0,fleet_sensor_range(state,enemy)))
         strength=std::max(strength,combined_rating(state,enemy,&ShipComponentSpec::jammingPercent));

@@ -1,15 +1,15 @@
 # Autonomous survey probes — first #60 slice
 
 The playable loop is a paid probe, a delivered programme, several autonomous
-system surveys, delayed reports, and a bounded return/hold. There are no new
-science rewards, copies, resource harvesting or beacon deployments in this slice.
+system surveys, delayed reports and an explicit completion policy.
 
 ## Hardware and price
 
 **Survey Probe** requires Construction 16 and Electronics 18. The hull is 12 kt,
 90 production and I/B/G **24/8/20**, with 300 fuel capacity, 35 armour and no
 inherent cargo hold. Fittings are one engine, one scanner, one electrical slot
-and one electrical/mechanical utility slot. It cannot carry construction kits.
+and one electrical/mechanical utility slot. A relay build uses that utility
+slot for an ordinary Deep-space Relay Kit.
 
 **Survey Autopilot** requires Construction 16 / Electronics 18, fits only this
 hull, and costs 3 kt, 70 production and I/B/G **10/5/20**. A usable autonomous
@@ -63,6 +63,25 @@ knowledge. Damage of 25% or more holds for ordinary repair; work can continue
 after repair. Missing necessary equipment stops autonomy until explicit resume
 after restoration. Inactive sensors obey normal emission rules and cannot advance
 survey; the programme does not silently enable them.
+
+## Relay deployment
+
+Fit one Survey Probe with its autopilot, active-scanner hardware and a
+Deep-space Relay Kit. Select **Anchor as a relay after the survey** in
+Autonomous survey probes and send the programme. This completion policy is
+available for a single fitted probe. The probe completes at least one survey
+before anchoring and reserves at least 1 mg of fuel for the station.
+
+At completion the probe chooses a site at or near its position with the
+ordinary stellar clearance, using public chart coordinates. It flies to the
+site and performs the normal deployment action. The host checks the position,
+clearance, condition and fuel when it arrives. An occupied site results in a
+failed deployment report. The player can move the probe and resume by order.
+
+The probe itself becomes the permanent communications relay and keeps its
+identity and remaining fuel. Its communications field reaches 300 ly when
+powered and transmitting. It consumes 1 mg per year and accepts ordinary tanker
+deliveries. See [deep-space infrastructure](deep-space-infrastructure.md#fuel-maintenance-and-routes).
 
 ## Two knowledge histories and delayed control
 
@@ -134,7 +153,10 @@ hidden-world isolation, deterministic target ties, fuel/damage/equipment limits,
 both merge paths/splits, paid computer construction/launch, full save continuation,
 PBEM, v87 migration, malformed saves and Designer/UI presentation.
 
-Self-replication, material harvesting for copies, autonomous beacon deployment,
-new scientific rewards, tactical threat routing, arbitrary conditional programmes
-and autonomous searches for supply remain later #60 slices. **#60 stays open**;
-this implementation requires review before merge.
+Save v134 and orders v60 preserve relay completion, the autonomous deployment
+leg and its received status. Earlier programmes retain their return or hold
+policy.
+
+Self-replication and harvesting materials for copies are frozen by the decision
+of 23 November 2026. Other #60 candidates include scientific rewards, tactical
+threat routing, conditional programmes and autonomous supply search.

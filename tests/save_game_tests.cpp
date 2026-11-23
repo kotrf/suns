@@ -1360,6 +1360,7 @@ void scanners_round_trip_and_version_boundaries()
     save.pendingOrders = {1, {}};
     save.playerTokens = {{1, 34}};
     for (const auto& scanner : scanner_technologies()) {
+        if (scanner.component == ShipComponentType::GeologicalScanner) continue; // v57 fixture.
         ShipDesign design{save.state.nextShipDesignId++, 1, scanner.name, ShipHullType::StarsScout,
             {ShipComponentType::QuickJump5, scanner.component}};
         normalize_ship_design_placement(design);

@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "mineral_stock_panel.hpp"
 #include "visitor_offer_text.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/megaprojects.hpp"
@@ -128,6 +129,7 @@ QString event_subject(const GameState& state, const GameEvent& event)
         .arg(event.mediumObservation && event.mediumObservation->level==MediumKnowledgeLevel::Characterized?"Characterized":"Detected"); break;
     case GameEventKind::UnknownObjectObserved: subject=QString("Object X%1: %2").arg(event.objectObservation?event.objectObservation->id:0)
         .arg(event.objectObservation?object_knowledge_name(event.objectObservation->level):"Unknown"); break;
+    case GameEventKind::RemoteGeologyObserved: subject = QString("%1 — remote geology").arg(planetName); break;
     case GameEventKind::PlanetaryAftermath: subject=QString("Aftermath report: %1").arg(planetName); break;
     case GameEventKind::Bombardment: subject = QString("Bombardment of %1: %2 colonists, %3 installations lost").arg(planetName).arg(qulonglong(event.deliveredColonists)).arg(event.quantity); break;
     case GameEventKind::MineStrike: subject = QString("%1 hit a minefield — damage %2%, movement stopped").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
@@ -289,6 +291,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         if(is_visitor_event(event.kind)) return true;
         if(event.kind==GameEventKind::UnknownObjectObserved || event.objectObservation || event.mediumObservation) return true;
         return event.kind == GameEventKind::SystemSurveyed
+            || event.kind == GameEventKind::RemoteGeologyObserved
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered
             || event.kind == GameEventKind::AnomalyDetected
             || event.kind == GameEventKind::WormholeClassified
@@ -574,6 +577,13 @@ QString event_text(const GameState& state, const GameEvent& event)
             ? "No emergence report has arrived. This is an assessment from missing contact, not immediate proof of destruction."
             : "Natural wormholes drift and may collapse. Exit knowledge is partial; transit can destroy the entire fleet.";
         return text.toHtmlEscaped().replace("\n", "<br>");
+    }
+    if (event.kind == GameEventKind::RemoteGeologyObserved) {
+        const auto c = event.deliveredMinerals;
+        return (event_subject(state, event) + QString("\nObserved by fleet #%1 in year %2. Received in year %3.\nDeposit estimates: I %4 / B %5 / G %6.")
+            .arg(event.fleet).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
+            .arg(geology_band_text(c.ironium), geology_band_text(c.boranium), geology_band_text(c.germanium)))
+            .toHtmlEscaped().replace("\n", "<br>");
     }
     if (event.kind == GameEventKind::SystemSurveyed) {
         QString detail;
