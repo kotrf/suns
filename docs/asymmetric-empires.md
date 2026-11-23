@@ -898,6 +898,35 @@ startup/replacement/second-colony campaigns remain acceptance coverage.
 
 Complete GCC 14.2 / Qt 6.12 Debug build; focused2/2 in2.34s and full141/141 CTest in146.09s passed. All178 local documentation targets in seven related documents were checked.
 Save128 / orders55 / race3 remain unchanged. This implements baseline station
-arming and housing decisions. Combat-fleet policy, replacement of obsolete
-weapons, other traits and comparative long-game balance remain open under #50;
+arming and housing decisions. The first fleet policy is described below.
+Replacement of obsolete weapons, other traits and comparative long-game balance remain open under #50;
 #53/#63 stay frozen.
+
+## Paid guard fleets for native computer empires
+
+The native computer defends inhabited orbital colonies when a received fleet
+contact is at most six years old and its uncertainty region is within 100
+light-years of the colony. Lost contacts and identified scout-only fleets do
+not require a guard. Once the startup research is complete, a threat can
+prioritize Weapons 3 for the X-Ray Laser, after any locked housing upgrade.
+
+An idle armed fleet without settlers, mining equipment or a native founding
+module can hold a threatened orbit. One confirmed defender remains on orbit.
+Other guards with current telemetry and no more than
+40% damage can move to the nearest uncovered threatened orbit within their
+fuel range. A guard assignment reserves the destination until the normal fleet
+goal is resolved. Guard scanners remain available during defense. All movement
+and fighting use ordinary fleet orders, delivery and battle plans.
+
+An uncovered threatened colony can commission one guard in its local shipyard
+with an empty, current received queue. Miners, the first surveyor and settler,
+and station upgrades have priority. The ordinary military design policy fits
+researched hull-damaging beams with positive range within the yard's mass limit.
+The mineral budget includes current support, the construction-interval deficit
+at local mining rates and a full bill for the inhabited hull's capacity after
+completion.
+The colony pays the actual hull and component costs through its production queue.
+
+Coverage includes stale and undelivered threat reports, station support
+reserves, actual paid construction, confirmed and incoming defense assignments,
+reserve transfers and guard fire in open-space battles.

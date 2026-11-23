@@ -15,6 +15,8 @@ std::uint64_t review_turn(const GameState&, const Fleet&);
 void explain(std::string&, const std::string&);
 bool military_fleet(const GameState&, const Fleet&);
 bool hostile_intel(const PlayerView&);
+bool colony_threatened(const PlayerView&, Position);
+std::optional<ShipDesign> guard_design(const GameState&, const Planet&);
 void plan_military(const PlayerView&, ComputerTurnPlan&, std::string&);
 void plan_battle_plans(const PlayerView&, PlayerOrders&);
 std::optional<GateFleetOrder> gate_staging_order(
