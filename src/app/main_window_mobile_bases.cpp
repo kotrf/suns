@@ -23,11 +23,8 @@ void MainWindow::installMobileBases()
     if (findChild<QDockWidget*>("mobileBasesDock")) return;
     auto* dock = new QDockWidget("Mobile expedition bases", this); dock->setObjectName("mobileBasesDock");
     auto* body = new QWidget(dock); auto* layout = new QVBoxLayout(body);
-    auto* hint = new QLabel("Ship Designer: Expedition Base (Construction 12), four engines, Expedition Dock, "
-        "optional Expedition Workshops, tanks, cargo and relay. Build at an orbital shipyard and move with ordinary routes. "
-        "A base that moves waits until next year to dock clients; radio and sensors work normally in flight. "
-        "Each workshop restores 100 kt of dry structure/year, costing 0.10 I / 0.05 B / 0.05 G per kt. "
-        "The persistent client list gives refuel and repair priority. Missing, distant and undamaged clients do not block repair.", body);
+    auto* hint = new QLabel("Fit an Expedition Dock for refueling and cargo exchange. Workshops share the client queue "
+        "and restore 100 kt of dry structure/year per module. Use Fleet → Transit stargate for bases fitted with an Expedition Stargate.", body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* bases = new QComboBox(body); bases->setObjectName("mobileBaseSelection"); layout->addWidget(bases);
     auto* stocks = new QLabel(body); stocks->setObjectName("mobileBaseStocks"); stocks->setWordWrap(true); layout->addWidget(stocks);
@@ -78,7 +75,11 @@ void MainWindow::installMobileBases()
     };
     const auto update=[=,this] {
         auto known=knownWorld(); const auto* base=find_service_fleet(known,bases->currentData().toUInt());
-        apply->setEnabled(base && mobile_base_dock(known,*base)); fly->setEnabled(base && selectedFleetPlanningView() && selectedFleetPlanningView()->id!=base->id);
+        const bool hasDock = base && mobile_base_dock(known, *base);
+        const bool hasGate = base && mobile_base_gate(known, *base);
+        for (auto* button : {add, remove, up, down}) button->setEnabled(hasDock);
+        queue->setEnabled(hasDock);
+        apply->setEnabled(hasDock || hasGate); fly->setEnabled(base && selectedFleetPlanningView() && selectedFleetPlanningView()->id!=base->id);
         if (!base) { stocks->setText("No received expedition base. Design and build one at an orbital shipyard."); forecast->clear(); deliver->setEnabled(false); collect->setEnabled(false); return; }
         const auto id=base->id; const auto snapshot=*base;
         stocks->setText(QString("At %1, %2 ly. ").arg(snapshot.position.x,0,'f',1).arg(snapshot.position.y,0,'f',1) + QString("Received year %1 (age %2): fuel %3 / %4 mg; I %5, B %6, G %7 kt; damage %8%; workshops %9 kt/year")
@@ -100,15 +101,16 @@ void MainWindow::installMobileBases()
             if(const auto* gate=std::get_if<GateFleetOrder>(&order); gate && gate->fleet==id)
                 for(auto& f:known.fleets) if(f.id==id) f.lastMovedTurn=state_.turn+1;
         }
-        const auto error=mobile_base_service_error(known,*find_service_fleet(known,id),state_.turn+1);
-        QString text=error.empty()?"Service eligibility from received positions and planned policy:":QString::fromStdString(error);
-        if(error.empty()) {
+        const auto& planned = *find_service_fleet(known,id);
+        const auto error = mobile_base_service_error(known, planned, state_.turn+1);
+        QString text = hasDock ? (error.empty() ? "Dock ready from received positions and planned policy." : QString::fromStdString(error)) : QString{};
+        if(hasDock && error.empty()) {
             if(mobile_base_repair_capacity(known,snapshot)<=0) text+="\nNo workshops fitted; refuel and cargo only.";
             else if(snapshot.minerals.ironium<=0 || snapshot.minerals.boranium<=0 || snapshot.minerals.germanium<=0)
                 text+="\nRepair blocked: workshop minerals exhausted.";
             if(snapshot.fuel<=policy().fuelReserve) text+="\nRefuel blocked: no fuel above base reserve.";
         }
-        for(auto client:policy().clients) {
+        if (hasDock) for(auto client:policy().clients) {
             const auto* a=find_service_fleet(known,client);
             QString detail="missing client";
             if(a) {
@@ -117,6 +119,14 @@ void MainWindow::installMobileBases()
             }
             text+=QString("\n#%1: %2").arg(client).arg(detail);
         }
+        if (hasGate) {
+            const auto gateError = mobile_base_gate_error(known, planned);
+            if (!text.isEmpty()) text += '\n';
+            text += "Expedition Stargate — " + (gateError.empty()
+                ? QString("ready, %1 ly / %2 kt / %3 mg per jump.").arg(kExpeditionGateRangeLy).arg(kExpeditionGateMassKt).arg(kExpeditionGateFuelMg)
+                : QString::fromStdString(gateError));
+        }
+        if (!hasDock && !hasGate) text = QString::fromStdString(error);
         forecast->setText(text);
         const auto* client=find_service_fleet(known,clients->currentData().toUInt());
         const bool transfer=client && same_position(snapshot.position,client->position) && error.empty();

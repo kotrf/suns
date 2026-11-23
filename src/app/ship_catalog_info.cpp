@@ -4,6 +4,7 @@
 #include "suns/mining.hpp"
 #include "suns/equipment.hpp"
 #include "suns/campaign.hpp"
+#include "suns/mobile_base.hpp"
 #include <QStringList>
 
 namespace suns {
@@ -100,6 +101,10 @@ QString componentCatalogDescription(ShipComponentType component)
         facts << "Expedition Base only. Enables finite-stock refueling and cargo docking for separate friendly fleets; no external services in a year the base moves.";
     if (spec.type == ShipComponentType::ExpeditionWorkshop)
         facts << "Expedition Base + Expedition Dock required. Shared priority queue; restores 100 kt dry structure/year per module at 0.10 I / 0.05 B / 0.05 G per kt. Does not replace onboard Field Repair Bays.";
+    if (spec.type == ShipComponentType::ExpeditionStargate)
+        facts << QString("One per Expedition Base. Links a stationary base to owned gates through Fleet → Transit stargate. "
+            "Up to %1 ly and %2 kt loaded fleet mass. The base spends %3 mg of fuel per jump above its fuel reserve.")
+            .arg(kExpeditionGateRangeLy).arg(kExpeditionGateMassKt).arg(kExpeditionGateFuelMg);
     if (spec.enablesColonization) facts << "Enables colonization";
     return facts.join("\n");
 }

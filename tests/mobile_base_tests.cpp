@@ -167,5 +167,132 @@ void reorganization_and_commands()
     remote.fleets[0].telemetry.mobileBase.fuelReserve=123; remote.fleets[0].lastMovedTurn=999;
     const auto view=fleet_player_view(remote,remote.fleets[0]); assert(view.mobileBase.fuelReserve==123 && view.lastMovedTurn!=999);
 }
+
+GameState gate_world(Position origin = {20, 0}, Position destination = {120, 0})
+{
+    auto s = world(origin);
+    auto& design = s.shipDesigns[s.shipDesigns.size() - 2];
+    design.components = {C::QuickJump5, C::QuickJump5, C::QuickJump5, C::QuickJump5, C::ExpeditionStargate};
+    assert(ship_design_valid(design) && component_available_to_player(s, 1, C::ExpeditionStargate));
+    auto duplicate = design;
+    duplicate.components.push_back(C::ExpeditionStargate);
+    assert(!ship_design_valid(duplicate));
+    auto wrongHull = s.shipDesigns.front();
+    wrongHull.components.push_back(C::ExpeditionStargate);
+    assert(!ship_design_valid(wrongHull));
+    s.fleets[0].mobileBase.clients.clear();
+    s.fleets[1].design = kScoutDesignId;
+    s.fleets[1].ships = {{kScoutDesignId, 1}};
+    s.fleets[1].fuel = 50;
+    s.fleets[1].damagePercent = 0;
+    s.fleets[2] = s.fleets[0];
+    s.fleets[2].id = 3;
+    s.fleets[2].position = destination;
+    for (auto& fleet : s.fleets) initialize_initial_fleet_telemetry(fleet, s.turn);
+    return s;
 }
-int main() { design_and_resources(); priorities_and_dry_mass(); movement_and_arrival(); fuel_and_cargo_delivery(); remote_transfer_commands(); generation_and_service_blocks(); reorganization_and_commands(); std::cout<<"mobile base tests passed\n"; }
+
+void expedition_gate_fuel_and_movement()
+{
+    auto s = gate_world();
+    const auto& source = s.fleets[0];
+    const auto& target = s.fleets[2];
+    const MobileGateOrder order{2, {{0, 1, source.position}, {0, 3, target.position}}};
+    assert(mobile_base_gate(s, source) && !mobile_base_dock(s, source));
+    assert(mobile_gate_transit_error(s, s.fleets[1], order.transit).empty());
+    auto result = TurnProcessor{}.process(s, {{1, {order, order}}});
+    assert(result.fleets[1].position == target.position && result.fleets[1].lastMovedTurn == result.turn);
+    assert(result.fleets[1].fuel == s.fleets[1].fuel);
+    assert(result.fleets[0].fuel == source.fuel - kExpeditionGateFuelMg);
+    assert(result.fleets[2].fuel == target.fuel - kExpeditionGateFuelMg);
+
+    auto low = s;
+    auto& lowBase = low.fleets[2];
+    lowBase.mobileBase.fuelReserve = 100.05;
+    lowBase.fuel = 110;
+    auto failure = TurnProcessor{}.process_with_events(low, {{1, {order}}});
+    assert(failure.state.fleets[1].position == source.position);
+    assert(failure.state.fleets[0].fuel == source.fuel && failure.state.fleets[2].fuel == lowBase.fuel);
+    assert(std::any_of(failure.events.begin(), failure.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::StargateTransitFailed;
+    }));
+    lowBase.fuel = 110.05;
+    const auto paid = TurnProcessor{}.process(low, {{1, {order}}});
+    assert(paid.fleets[1].position == target.position && paid.fleets[2].fuel == lowBase.mobileBase.fuelReserve);
+    auto policy = lowBase.mobileBase;
+    policy.enabled = false;
+    const auto disabled = TurnProcessor{}.process(low, {{1, {order, SetMobileBaseOrder{3, policy}}}});
+    assert(!disabled.fleets[2].mobileBase.enabled && disabled.fleets[1].position == source.position);
+
+    const MoveFleetOrder move{3, {123, 0}, 3};
+    const auto justMoved = TurnProcessor{}.process(s, {{1, {move}}});
+    for (const auto& orders : {std::vector<Order>{order, move}, std::vector<Order>{move, order}}) {
+        auto moved = TurnProcessor{}.process(s, {{1, orders}});
+        assert(moved.fleets[2].lastMovedTurn == moved.turn);
+        assert(moved.fleets[1].position == source.position && moved.fleets[0].fuel == source.fuel);
+        assert(moved.fleets[2].fuel == justMoved.fleets[2].fuel);
+        // The older intent cannot chase the base or retry on a later idle year.
+        moved = TurnProcessor{}.process(moved, {});
+        assert(moved.fleets[1].position == source.position);
+    }
+    auto stale = gate_world(source.position, {121, 0});
+    const auto missed = TurnProcessor{}.process(stale, {{1, {order}}});
+    assert(missed.fleets[1].position == source.position && missed.fleets[2].fuel == stale.fleets[2].fuel);
+}
+
+void expedition_and_orbital_gates()
+{
+    auto s = gate_world({20, 0}, {150, 0});
+    auto& station = s.orbitalStations.front();
+    station.hull = OrbitalStationHullType::Starbase;
+    station.components = {C::JumpGate};
+    station.modules = {OrbitalStationModule::Shipyard};
+    const MobileGateOrder inbound{2, {{0, 1, {20, 0}}, {1, 0, {0, 0}}}};
+    const MobileGateOrder outbound{2, {{1, 0, {0, 0}}, {0, 3, {150, 0}}}};
+    s.fleets[1].design = 201;
+    s.fleets[1].ships = {{201, 1}};
+    s.fleets[1].colonists = 100;
+    assert(!mobile_gate_transit_error(s, s.fleets[1], inbound.transit).empty());
+    s.players[0].race.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
+    assert(mobile_gate_transit_error(s, s.fleets[1], inbound.transit).empty());
+    auto jump = TurnProcessor{}.process(s, {{1, {inbound}}});
+    assert(jump.fleets[1].position == Position{} && jump.fleets[1].colonists == 100);
+    auto beyond = outbound;
+    beyond.transit.destination.position = {161, 0};
+    jump.fleets[2].position = beyond.transit.destination.position;
+    assert(!mobile_gate_transit_error(jump, jump.fleets[1], beyond.transit).empty());
+    jump.fleets[2].position = outbound.transit.destination.position;
+    auto heavy = jump.fleets[1];
+    heavy.ships = {{kScoutDesignId, 100}};
+    assert(!mobile_gate_transit_error(jump, heavy, outbound.transit).empty());
+    jump = TurnProcessor{}.process(jump, {{1, {outbound}}});
+    assert(jump.fleets[1].position == outbound.transit.destination.position && jump.fleets[1].colonists == 100);
+}
+
+void expedition_gate_command_delivery()
+{
+    const auto s = gate_world({900, 0}, {1000, 0});
+    const MobileGateOrder order{2, {{0, 1, {900, 0}}, {0, 3, {1000, 0}}}};
+    auto sent = TurnProcessor{}.process(s, {{1, {order}}});
+    assert(sent.fleets[1].pendingCommands.size() == 1 && !sent.fleets[1].mobileGate);
+    const auto arrival = sent.fleets[1].pendingCommands.front().deliveryTurn;
+    assert(arrival > sent.turn);
+    while (sent.turn < arrival) {
+        assert(sent.fleets[1].position == order.transit.source.position);
+        sent = TurnProcessor{}.process(sent, {});
+    }
+    assert(sent.fleets[1].pendingCommands.empty() && sent.fleets[1].mobileGate == order.transit);
+    assert(!find_service_fleet(make_player_view(sent, 1).state, 2)->mobileGate);
+    auto stop = MoveFleetOrder{2, order.transit.source.position, 3};
+    stop.clearRoute = true;
+    auto canceled = s;
+    assert(submit_mobile_gate_command(canceled, 1, order));
+    assert(submit_fleet_route_command(canceled, 1, 2, stop.destination, 3, {}, {}, false, 0, true));
+    canceled.turn = arrival;
+    deliver_due_fleet_commands(canceled);
+    assert(!canceled.fleets[1].mobileGate && canceled.fleets[1].pendingCommands.empty());
+    sent = TurnProcessor{}.process(sent, {});
+    assert(sent.fleets[1].position == order.transit.destination.position && !sent.fleets[1].mobileGate);
+}
+}
+int main() { design_and_resources(); priorities_and_dry_mass(); movement_and_arrival(); fuel_and_cargo_delivery(); remote_transfer_commands(); generation_and_service_blocks(); reorganization_and_commands(); expedition_gate_fuel_and_movement(); expedition_and_orbital_gates(); expedition_gate_command_delivery(); std::cout<<"mobile base tests passed\n"; }

@@ -188,7 +188,10 @@ QString event_subject(const GameState& state, const GameEvent& event)
         ? QString("%1: %2").arg(fleetName,event.quantity==5?"base dismantled; colony station queued":"base dismantled; orbit freed")
         : QString("%1: orbital life support / refit; %2 residents lost").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
     case GameEventKind::OutpostFuelExhausted: subject = QString("%1: outpost fuel exhausted").arg(fleetName); break;
-    case GameEventKind::StargateTransit: subject = QString("%1 transited to %2").arg(fleetName, planetName); break;
+    case GameEventKind::StargateTransit:
+        subject = QString("%1 transited to %2").arg(fleetName, planetName.isEmpty()
+            ? QString("(%1, %2) ly").arg(event.position.x, 0, 'f', 1).arg(event.position.y, 0, 'f', 1) : planetName);
+        break;
     case GameEventKind::StargateTransitFailed: subject = QString("%1: stargate transit rejected").arg(fleetName); break;
     case GameEventKind::RouteCompleted: subject = QString("%1 completed its route").arg(fleetName); break;
     case GameEventKind::FleetStalledForFuel: subject = QString("%1 stalled: insufficient fuel").arg(fleetName); break;

@@ -1,10 +1,11 @@
-# Mobile expedition bases — first slice of #61
+# Mobile expedition bases (#61)
 
 An Expedition Base is a costly mobile logistics asset for operations beyond a
 colony. It uses ordinary ship designs, paid production, fleet movement, combat,
 communications and player knowledge. Fixed #54 depots and relays stay permanently
-anchored. This slice does not complete issue #61: mobile shipyards, refineries,
-science facilities and gate support remain later design work.
+anchored. Expedition Stargate is the selected extension to mobile bases.
+Additional mobile shipyards, refineries, command or sensor services, and science
+facilities are on hold.
 
 ## Design and build
 
@@ -13,6 +14,7 @@ science facilities and gate support remain later design work.
 | Expedition Base hull | Construction 12 | 1200 | 900 | 400 / 180 / 220 | 6000 mg fuel, 1000 kt shared hold, four engines |
 | Expedition Dock | Energy 6, Construction 12 | 120 | 200 | 80 / 30 / 40 | External refueling and cargo docking |
 | Expedition Workshop | Energy 6, Construction 12 | 200 | 300 | 100 / 60 / 50 | 100 kt restored structure/year |
+| Expedition Stargate | Energy 18, Construction 16, Electronics 18 | 350 | 450 | 150 / 60 / 180 | 300 ly, 600 kt loaded fleet mass |
 
 The hull has six mechanical, two electrical, two armor/shield and one scanner
 slot, plus its four engine slots. Service modules fit only this hull. There are
@@ -91,6 +93,35 @@ colony can also use the existing cargo manifest controls.
 Human, computer and PBEM submissions use the same core validation and costs.
 The computer planner does not yet design or schedule its own expedition-base
 operations; this slice adds no privileged AI logistics path.
+
+## Expedition Stargate
+
+Fit one Expedition Stargate in a mechanical slot on an Expedition Base. A
+stationary base can open a link to another fitted stationary base or an owned
+orbital station with an operational [stargate](stargate-specialist.md). Both
+endpoints apply their own limits to range and loaded gross fleet mass. The
+ordinary racial cargo rules apply. Xenocrystal resonance is for orbital pairs.
+
+Put the travelling fleet at the source, leave it idle, and use **Fleet → Transit
+stargate…** to choose the gates. The selection and eligibility are based on
+received fleet and station evidence. The order binds both IDs and positions.
+It uses ordinary radio delay, then makes a single attempt after movement and
+combat in the next year resolved aboard the fleet. A later received Stop or
+route change can cancel the jump. A base that moved that year or still has an
+active route cannot serve a jump. A fleet needs its own movement year for transit.
+The next year's combat phase handles enemies at the destination.
+
+Each mobile endpoint must have external services enabled and spends **10 mg**
+from its own tank above its fuel reserve. Both ends are checked before either
+is charged. Fuel stays aboard the travelling fleet. The **Mobile expedition
+bases** panel sets the reserve and service policy and shows gate readiness.
+Expedition Dock remains a separate fitting for replenishing stock in space.
+Transit results and updated positions travel through the usual report and fleet
+telemetry channels. A moved, lost or unfueled endpoint causes the attempt to fail.
+
+Save **v135** and orders **v61** store gate fittings and transit orders. The
+host save keeps radio packets and commands that have arrived aboard. Player
+exports carry received evidence. Older saves load without mobile gate commands.
 
 ## Persistence and checks
 

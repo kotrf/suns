@@ -1467,6 +1467,7 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     detached.arrivalAction.reset();
     detached.waypointQueue.clear();
     detached.pendingCommands.clear();
+    detached.mobileGate.reset();
     detached.battlePlansInTransit.clear();
     detached.appliedBattlePlanSequence = 0;
     detached.visitor = {}; remaining.visitor = {};
@@ -2614,6 +2615,8 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
             (void)submit_orbital_base_command(state, player, value.fleet, value.command);
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
             (void)submit_mobile_base_command(state, player, value.fleet, value.program);
+        } else if constexpr (std::is_same_v<T, MobileGateOrder>) {
+            if (!projection) (void)submit_mobile_gate_command(state, player, value);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
             (void)submit_fleet_task_command(state, player, value.fleet, value.task, value.recoveryTarget);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
@@ -2800,6 +2803,9 @@ bool remap_fleet_references(Order& order, const std::map<FleetId, FleetId>& alia
             for (auto& leg : value.queuedWaypoints) { remap(leg.targetFleet); action(leg.arrivalAction); }
         }
         if constexpr (std::is_same_v<T, SetMobileBaseOrder>) for (auto& id : value.program.clients) remap(id);
+        if constexpr (std::is_same_v<T, MobileGateOrder>) {
+            remap(value.transit.source.base); remap(value.transit.destination.base);
+        }
         if constexpr (std::is_same_v<T, OrbitalBaseOrder>) remap(value.command.receiver);
         if constexpr (std::is_same_v<T, SetTransportLineOrder>) {
             remap(value.value.destinationFleet);
@@ -3267,6 +3273,7 @@ TurnResult TurnProcessor::process_with_events(
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
     deploy_outposts(next, next.turn + 1);
+    resolve_mobile_gate_transits(next);
     observe_current_wormholes(next, next.turn + 1);
     refresh_planetary_engineering(next);
     detail::assign_production_queue_ids(next);

@@ -403,9 +403,10 @@ enum class ShipComponentType {
     SensorArrayKit,
     CargoCacheKit,
     GeologicalScanner,
+    ExpeditionStargate,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::GeologicalScanner;
+inline constexpr auto kLastShipComponent = ShipComponentType::ExpeditionStargate;
 
 enum class ShipComponentKind {
     Engine,
@@ -1782,6 +1783,20 @@ struct FleetTelemetry {
     FleetBattlePlan battlePlan;
 };
 
+struct GateEndpoint {
+    PlanetId colony{};
+    FleetId base{};
+    Position position;
+
+    bool operator==(const GateEndpoint&) const = default;
+};
+
+struct MobileGateTransit {
+    GateEndpoint source, destination;
+
+    bool operator==(const MobileGateTransit&) const = default;
+};
+
 struct PendingFleetCommand {
     std::uint64_t issuedTurn{};
     std::uint64_t deliveryTurn{};
@@ -1793,6 +1808,7 @@ struct PendingFleetCommand {
     std::optional<VisitorMission> visitor;
     std::optional<OrbitalBaseCommand> orbitalBase;
     UnknownObjectId recoveryTarget{}; // Frozen with a RecoverSample task command at issue time.
+    std::optional<MobileGateTransit> mobileGate;
 };
 
 struct PendingFleetTelemetry {
@@ -1848,6 +1864,7 @@ struct Fleet {
     FleetBattlePlan battlePlan;
     std::uint64_t appliedBattlePlanSequence{};
     std::vector<PendingBattlePlan> battlePlansInTransit;
+    std::optional<MobileGateTransit> mobileGate;
 };
 
 struct Minefield {

@@ -55,6 +55,7 @@ struct StargateSpec {
 [[nodiscard]] const StargateSpec* stargate_spec(ShipComponentType);
 [[nodiscard]] const StargateSpec* station_stargate(const OrbitalStation&);
 [[nodiscard]] bool stargate_component_available(const GameState&, PlayerId, ShipComponentType);
+[[nodiscard]] bool stargate_cargo_allowed(const GameState&, const Fleet&);
 // onboard skips only the idle/live-link authoring checks for a delivered route
 // step. Physical gates, position, annual movement, mass, cargo and payment still apply.
 [[nodiscard]] std::string stargate_transfer_error(

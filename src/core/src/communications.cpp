@@ -270,6 +270,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
 {
     if (program.clearRoute) {
         pause_probe(fleet); fleet.visitor = {};
+        fleet.mobileGate.reset();
         fleet.destination.reset();
         fleet.arrivalAction.reset();
         fleet.waypointQueue.clear();
@@ -288,6 +289,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
     }
 
     pause_probe(fleet); fleet.visitor = {};
+    fleet.mobileGate.reset();
     fleet.warp = requestedWarp;
 
     // A travel programme replaces stationary work. Delayed movement commands
@@ -742,6 +744,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     if (!telemetry.ships.empty()) { view.ships = telemetry.ships; view.design = view.ships.front().design; }
     view.orbitalShipyardBirth = false;
     view.pendingCommands.clear();
+    view.mobileGate.reset();
     view.telemetry = telemetry; view.telemetry.probe.surveys.clear();
     view.telemetryInTransit.clear();
     return view;
@@ -933,8 +936,9 @@ void deliver_due_fleet_commands(GameState& state)
                 if (pending.probe->action == ProbeAction::Stop) { stoppedThrough = pending.issuedTurn; stoppedDelivery = pending.deliveryTurn; }
             }
             else if (pending.mobileBase) {
-                if (mobile_base_dock(state, fleet)) fleet.mobileBase = *pending.mobileBase;
+                if (mobile_base_dock(state, fleet) || mobile_base_gate(state, fleet)) fleet.mobileBase = *pending.mobileBase;
             }
+            else if (pending.mobileGate) { fleet.mobileGate = pending.mobileGate; }
             else if (pending.electronics) {
                 const auto& e = *pending.electronics;
                 apply_electronics_program(fleet,e.resumeTurn && e.resumeTurn <= state.turn ? ElectronicsProgram{} : e);
