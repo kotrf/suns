@@ -61,6 +61,14 @@ void survey_probe_anchors_as_a_paid_relay()
     assert(!submit_probe_command(s, 1, order));
     s.shipDesigns.back().components.push_back(ShipComponentType::DeepSpaceRelayKit);
     assert(ship_design_valid(s.shipDesigns.back()) && probe_relay_capable(s, s.fleets.front()));
+    auto updated = s;
+    auto& scout = updated.fleets.front();
+    apply_probe_command(updated, scout, {ProbeAction::Configure, program});
+    advance_survey_probes(updated);
+    assert(scout.probe.target == 3);
+    apply_probe_command(updated, scout, {ProbeAction::UpdateKnowledge, {}, {{3, SurveyLevel::OrbitalSurvey, s.turn}}});
+    updated = next(updated);
+    assert(updated.fleets.front().probe.completed.empty() && updated.fleets.front().outpost == OutpostKind::None);
     const auto initialFuel = s.fleets.front().fuel;
     s = next(s, {order});
     assert(!s.fleets.front().probe.configured && s.fleets.front().pendingCommands.front().probe->program.deployRelay);

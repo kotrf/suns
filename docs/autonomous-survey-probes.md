@@ -91,6 +91,8 @@ PendingFleetCommand with the ordinary propagation/jamming delay. Receipt merges
 it into the notebook; it does not query the newer host HQ state. Upload is an
 explicit knowledge-only order and does not resume a paused programme. There is
 no automatic empire-wide notebook sharing or free annual synchronization.
+Uploaded surveys let the probe skip known targets. Only its own observations
+can complete a survey for relay deployment.
 
 Fitted probes retain their own observations even before their first programme
 arrives. Local observations update that probe's notebook immediately, even when HQ reports

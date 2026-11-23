@@ -15,6 +15,16 @@ void clear_route(Fleet& f)
     f.destination.reset(); f.targetFleet = 0; f.arrivalAction.reset();
     f.waypointQueue.clear(); f.routeTemplate.clear(); f.repeatOrders = false; f.task = FleetTask::None;
 }
+void merge_survey_note(Fleet& fleet, StarId star, SurveyLevel level, std::uint64_t turn)
+{
+    auto& knowledge = fleet.probe.surveys;
+    const auto existing = std::find_if(knowledge.begin(), knowledge.end(), [&](const auto& entry) {
+        return entry.star == star;
+    });
+    if (existing == knowledge.end()) knowledge.push_back({star, level, turn});
+    else if (level > existing->level || (level == existing->level && turn > existing->observedTurn))
+        *existing = {star, level, turn};
+}
 double leg_cost(const GameState& s, Fleet& f, Position start, Position end, std::uint8_t warp)
 {
     const auto position=f.position;const auto oldWarp=f.warp;
@@ -120,10 +130,7 @@ SurveyLevel probe_survey_level(const Fleet& f, StarId star)
 }
 void record_probe_survey(Fleet& f, StarId star, SurveyLevel level, std::uint64_t turn)
 {
-    auto& knowledge = f.probe.surveys;
-    const auto existing = std::find_if(knowledge.begin(), knowledge.end(), [&](const auto& k) { return k.star == star; });
-    if (existing == knowledge.end()) knowledge.push_back({star, level, turn});
-    else if (level > existing->level || (level == existing->level && turn > existing->observedTurn)) *existing = {star, level, turn};
+    merge_survey_note(f, star, level, turn);
     if (f.probe.target == star && level >= f.probe.program.depth
         && std::find(f.probe.completed.begin(), f.probe.completed.end(), star) == f.probe.completed.end())
         f.probe.completed.push_back(star);
@@ -135,7 +142,7 @@ void combine_probe_knowledge(Fleet& into, const Fleet& from)
     // Reorganization is not a new autonomous launch. Keep the surviving
     // programme, union only knowledge physically present at the rendezvous.
     if (!into.probe.configured && from.probe.configured) into.probe = from.probe;
-    for (const auto& k : from.probe.surveys) record_probe_survey(into, k.star, k.level, k.observedTurn);
+    for (const auto& k : from.probe.surveys) merge_survey_note(into, k.star, k.level, k.observedTurn);
     into.visitor = {};
     pause_probe(into);
 }
@@ -152,7 +159,7 @@ void apply_probe_command(const GameState& s, Fleet& f, const ProbeCommand& comma
     }
     if (!f.probe.configured) return;
     // Delivered updates never read the current HQ database at reception.
-    for (const auto& k : command.knowledge) record_probe_survey(f, k.star, k.level, k.observedTurn);
+    for (const auto& k : command.knowledge) merge_survey_note(f, k.star, k.level, k.observedTurn);
     if (command.action == ProbeAction::Configure || command.action == ProbeAction::Resume) {
         if (!probe_capable(s, f)) { pause_probe(f, ProbeStatus::MissingEquipment); return; }
         clear_route(f); f.visitor = {}; f.probe.enabled = true; f.probe.status = ProbeStatus::Surveying;
