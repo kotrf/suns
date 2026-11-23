@@ -967,6 +967,8 @@ enum class PlayerReportKind {
     NativeOrbitalReserveUsed,
     NativeOrbitalSupportFailure,
     RemoteGeologyObserved,
+    MobileStargateTransit, // Total fuel containers spent by the mobile gates.
+    MobileStargateTransitFailed,
 };
 
 // A report is an immutable observation, independent of surviving objects and

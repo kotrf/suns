@@ -107,7 +107,8 @@ stargate…** to choose the gates. The selection and eligibility are based on
 received fleet and station evidence. The order binds both IDs and positions.
 It uses ordinary radio delay, then makes a single attempt after movement and
 combat in the next year resolved aboard the fleet. A later received Stop or
-route change can cancel the jump. A base that moved that year or still has an
+route change can cancel the jump. A packet in flight blocks splitting and
+merging the travelling fleet. A base that moved that year or still has an
 active route cannot serve a jump. A fleet needs its own movement year for transit.
 The next year's combat phase handles enemies at the destination.
 
@@ -117,7 +118,9 @@ is charged. Fuel stays aboard the travelling fleet. The **Mobile expedition
 bases** panel sets the reserve and service policy and shows gate readiness.
 Expedition Dock remains a separate fitting for replenishing stock in space.
 Transit results and updated positions travel through the usual report and fleet
-telemetry channels. A moved, lost or unfueled endpoint causes the attempt to fail.
+telemetry channels. A successful report lists the destination coordinates and
+the actual fuel paid by the bases. A moved, lost or unfueled endpoint causes
+the attempt to fail. The fleet then needs a new order for another attempt.
 
 Save **v135** and orders **v61** store gate fittings and transit orders. The
 host save keeps radio packets and commands that have arrived aboard. Player

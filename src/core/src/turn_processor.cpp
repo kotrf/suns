@@ -2616,7 +2616,9 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
             (void)submit_mobile_base_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, MobileGateOrder>) {
-            if (!projection) (void)submit_mobile_gate_command(state, player, value);
+            // Later structural commands see packets in flight in either world.
+            // Only the real service phase executes an admitted jump.
+            (void)submit_mobile_gate_command(state, player, value);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
             (void)submit_fleet_task_command(state, player, value.fleet, value.task, value.recoveryTarget);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {

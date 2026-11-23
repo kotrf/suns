@@ -16,7 +16,9 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QTemporaryDir>
+#include <QTextBrowser>
 #include <QTimer>
+#include <algorithm>
 #include <cassert>
 using namespace suns;
 using C=ShipComponentType;
@@ -55,6 +57,13 @@ struct MainWindowTestAccess {
         ++w.planningRevision_; w.rebuildScene();
     }
     static void transit(MainWindow& w) { w.openGateTransit(); }
+    static QString reportText(MainWindow& w, const GameEvent& report) {
+        w.installTurnMessages();
+        w.turnMessages_ = {report};
+        w.refreshTurnMessages();
+        w.turnMessagesList_->setCurrentRow(0);
+        return w.turnMessageBody_->toPlainText();
+    }
     static const auto& orders(const MainWindow& w) {return w.pendingOrders_.orders;}
     static GameState state(const MainWindow& w) {return w.state_;}
 };
@@ -154,6 +163,14 @@ void gate_persistence(GameState state)
     assert(loaded.state.fleets[1].mobileGate == remote.transit);
     const auto result = TurnProcessor{}.process(loaded.state, {});
     assert(result.fleets[1].position == remote.transit.destination.position && !result.fleets[1].mobileGate);
+    auto reportsSave = host;
+    reportsSave.state = result;
+    assert(write_save_game_file(path, reportsSave, error) && read_save_game_file(path, loaded, error));
+    const auto& pending = loaded.state.players.front().pendingPlayerReports;
+    const auto report = std::find_if(pending.begin(), pending.end(), [](const auto& r) {
+        return r.kind == PlayerReportKind::MobileStargateTransit;
+    });
+    assert(report != pending.end() && report->quantity == 200 && report->position == remote.transit.destination.position);
     host.state.turn = issued;
     view = make_player_turn(host, 1);
     assert(!view.state.fleets[1].mobileGate);
@@ -171,6 +188,44 @@ void gate_persistence(GameState state)
     assert(legacy.open(QIODevice::WriteOnly | QIODevice::Truncate));
     assert(legacy.write(previous) == previous.size()); legacy.close();
     assert(read_save_game_file(path, loaded, error) && !loaded.state.fleets.front().mobileGate);
+}
+
+void gate_result_messages(MainWindow& w, const MobileGateOrder& jump)
+{
+    auto state = MainWindowTestAccess::state(w);
+    const PlayerOrders orders{1, {jump}};
+    const auto success = TurnProcessor{}.process_with_events(state, {orders});
+    const auto jumped = std::find_if(success.events.begin(), success.events.end(), [](const auto& e) {
+        return e.kind == GameEventKind::MobileStargateTransit;
+    });
+    assert(jumped != success.events.end() && jumped->quantity == 200 && !jumped->planet);
+    auto& receiver = state.fleets.back();
+    receiver.fuel = receiver.mobileBase.fuelReserve + 5;
+    const auto failure = TurnProcessor{}.process_with_events(state, {orders});
+    const auto denied = std::find_if(failure.events.begin(), failure.events.end(), [](const auto& e) {
+        return e.kind == GameEventKind::MobileStargateTransitFailed;
+    });
+    assert(denied != failure.events.end() && denied->quantity == 0);
+
+    SaveGameData host;
+    host.mode = SessionMode::Host;
+    host.state = success.state;
+    host.playerTokens[1] = 77;
+    host.campaignId = 9;
+    host.turnToken = 8;
+    host.pendingOrders = {1, {}};
+    host.strategicMessages = {*jumped, *denied};
+    QTemporaryDir dir;
+    QString error;
+    const auto path = dir.filePath("reports.sunsturn");
+    SaveGameData read;
+    assert(write_save_game_file(path, make_player_turn(host, 1), error) && read_save_game_file(path, read, error));
+    assert(read.strategicMessages.size() == 2);
+    const auto successText = MainWindowTestAccess::reportText(w, read.strategicMessages[0]);
+    assert(successText.contains("(90.0, 0.0) ly") && successText.contains("spent 20 mg of fuel"));
+    const auto failureText = MainWindowTestAccess::reportText(w, read.strategicMessages[1]);
+    assert(failureText.contains("spent no fuel") && failureText.contains("made one attempt"));
+    assert(failureText.contains("Send a new transit order"));
 }
 }
 int main(int argc,char** argv)
@@ -210,6 +265,7 @@ int main(int argc,char** argv)
     MainWindowTestAccess::transit(w);
     const auto jump = std::get<MobileGateOrder>(MainWindowTestAccess::orders(w).back());
     assert(jump.fleet == 2 && jump.transit.source.base == 1 && jump.transit.destination.base == 3);
+    gate_result_messages(w, jump);
     assert(w.clearSelectedFleetRouteProgram());
     assert(MainWindowTestAccess::orders(w).size() == 1 && std::get<MoveFleetOrder>(MainWindowTestAccess::orders(w).front()).clearRoute);
     gate_persistence(MainWindowTestAccess::state(w));

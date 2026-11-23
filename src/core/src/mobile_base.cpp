@@ -200,10 +200,12 @@ void resolve_mobile_gate_transits(GameState& state)
         const auto& endpoint = success ? transit.destination : transit.source;
         const auto* planet = endpoint.colony ? find_planet(state, endpoint.colony) : nullptr;
         const auto* star = planet ? find_star(state, planet->star) : nullptr;
+        std::uint32_t fuelContainersSpent = 0;
         if (success) {
             for (auto id : {transit.source.base, transit.destination.base}) if (id) {
                 auto& base = *client_fleet(state, id);
                 base.fuel = fuel_after_consumption(base.fuel, kExpeditionGateFuelMg);
+                fuelContainersSpent += static_cast<std::uint32_t>(fuel_containers_required(kExpeditionGateFuelMg));
             }
             fleet->position = endpoint.base ? find_service_fleet(state, endpoint.base)->position : star->position;
             fleet->lastMovedTurn = state.turn + 1;
@@ -212,9 +214,9 @@ void resolve_mobile_gate_transits(GameState& state)
             fleet->visitor = {};
         }
         const bool atColony = planet && planet->owner == fleet->owner && star && same_position(star->position, fleet->position);
-        queue_player_report(state, fleet->owner, success ? PlayerReportKind::StargateTransit : PlayerReportKind::StargateTransitFailed,
+        queue_player_report(state, fleet->owner, success ? PlayerReportKind::MobileStargateTransit : PlayerReportKind::MobileStargateTransitFailed,
             fleet->position, state.turn + 1, atColony ? star->id : 0, atColony ? planet->id : 0, fleet->id, 0,
-            ProductionKind::ColonyShip, 0, ResearchField::Electronics, 0, fleet->minerals, fleet->colonists);
+            ProductionKind::ColonyShip, fuelContainersSpent, ResearchField::Electronics, 0, fleet->minerals, fleet->colonists);
     }
 }
 bool transfer_mobile_base_fuel(GameState& state, PlayerId player, const TransferFleetFuelOrder& order, std::uint64_t serviceTurn)

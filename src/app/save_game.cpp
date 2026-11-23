@@ -1151,7 +1151,8 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 134 ? GameEventKind::RemoteGeologyObserved : gReadSaveFormatVersion >= 121 ? GameEventKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? GameEventKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 135 ? GameEventKind::MobileStargateTransitFailed
+            : gReadSaveFormatVersion >= 134 ? GameEventKind::RemoteGeologyObserved : gReadSaveFormatVersion >= 121 ? GameEventKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? GameEventKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1226,6 +1227,10 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     if (value.kind == GameEventKind::RemoteGeologyObserved
         && (!value.planet || !value.fleet || !value.observedTurn
             || !remote_geology_bands_valid(value.deliveredMinerals))) markCorrupt(stream);
+    if (value.kind == GameEventKind::MobileStargateTransit || value.kind == GameEventKind::MobileStargateTransitFailed) {
+        const bool success = value.kind == GameEventKind::MobileStargateTransit;
+        if (!value.fleet || !value.observedTurn || (success ? value.quantity <= 0 : value.quantity != 0)) markCorrupt(stream);
+    }
 }
 
 void writeMessageIds(QDataStream& stream, const std::vector<std::uint64_t>& ids)
@@ -1758,7 +1763,8 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 134 ? PlayerReportKind::RemoteGeologyObserved : gReadSaveFormatVersion >= 121 ? PlayerReportKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? PlayerReportKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 135 ? PlayerReportKind::MobileStargateTransitFailed
+            : gReadSaveFormatVersion >= 134 ? PlayerReportKind::RemoteGeologyObserved : gReadSaveFormatVersion >= 121 ? PlayerReportKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? PlayerReportKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -1816,6 +1822,13 @@ void readPlayer(QDataStream& stream, Player& value)
         report.fleet = static_cast<FleetId>(fleet);
         report.shipDesign = static_cast<ShipDesignId>(shipDesign);
         report.quantity = static_cast<std::uint32_t>(quantity);
+        if (report.kind == PlayerReportKind::MobileStargateTransit || report.kind == PlayerReportKind::MobileStargateTransitFailed) {
+            const bool success = report.kind == PlayerReportKind::MobileStargateTransit;
+            if (!fleet || !observedTurn || (success ? !quantity || quantity > std::numeric_limits<qint32>::max() : quantity != 0)) {
+                markCorrupt(stream);
+                return;
+            }
+        }
         if (gReadSaveFormatVersion >= 61 && report.kind == PlayerReportKind::SpaceBattle) {
             readBattle(stream, report.battle);
             if ((report.kind == PlayerReportKind::SpaceBattle) != report.battle.has_value()
