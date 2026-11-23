@@ -49,6 +49,33 @@ struct MainWindowTestAccess {
         GameEvent e;e.id=1000;e.recipient=1;e.kind=GameEventKind::ResonanceProjectStatus;e.turn=w.state_.turn;e.star=1;e.planet=1;e.quantity=42;
         w.turnMessages_={e};w.refreshTurnMessages();w.turnMessagesList_->setCurrentRow(0);return w.turnMessageBody_->toPlainText();
     }
+    static void geologyReport(MainWindow& w) {
+        load(w);
+        auto& planet = w.state_.planets[1];
+        planet.name = "Target <II> & moons";
+        set_survey_level(w.state_, 1, planet.star, SurveyLevel::BasicScan, w.state_.turn);
+        GameEvent report;
+        report.id = 1001;
+        report.recipient = 1;
+        report.kind = GameEventKind::RemoteGeologyObserved;
+        report.turn = w.state_.turn;
+        report.observedTurn = report.turn;
+        report.star = planet.star;
+        report.planet = planet.id;
+        report.fleet = w.state_.fleets.front().id;
+        report.deliveredMinerals = {20, 80, 90};
+        w.turnMessages_ = {report};
+        w.refreshTurnMessages();
+        w.turnMessagesList_->setCurrentRow(0);
+        const auto body = w.turnMessageBody_->toPlainText();
+        assert(body.contains("Target <II> & moons — remote geology\n"));
+        assert(body.count('\n') == 2 && body.contains("Observed by fleet #1") && !body.contains("<br>"));
+        w.turnMessageShowOnMapButton_->click();
+        QApplication::processEvents();
+        assert(w.selection_.star == report.star);
+        assert(w.currentDistanceSelectionKind_ == 1 && w.currentDistanceSelectionId_ == report.star);
+        load(w);
+    }
     static double mapScale(MainWindow& w){return std::abs(w.view_->transform().m11());}
     static QPointF center(MainWindow& w){return w.view_->mapToScene(w.view_->viewport()->rect().center());}
     static QGraphicsView* mapView(MainWindow& w){return w.view_;}
@@ -259,6 +286,7 @@ int main(int argc,char** argv) {
     MainWindowTestAccess::emission(w);auto* show=w.findChild<QPushButton*>("showTurnMessageOnMap");assert(show && show->isEnabled());show->click();QApplication::processEvents();
     const auto center=MainWindowTestAccess::center(w);assert(std::abs(center.x()-100)*MainWindowTestAccess::mapScale(w)<2 && std::abs(center.y()-120)*MainWindowTestAccess::mapScale(w)<2);
     const auto labText=MainWindowTestAccess::laboratory(w);assert(labText.contains("42 / 600") && !labText.contains("waiting for minerals"));
+    MainWindowTestAccess::geologyReport(w);
     auto s=make_demo_game();auto extra=s.shipDesigns.front();extra.id=s.nextShipDesignId++;extra.name="ZZ Archive";extra.retired=true;s.shipDesigns.push_back(extra);
     ShipDesignerDialog designer(s,1);auto* templates=designer.findChild<QComboBox*>("shipDesignTemplate");assert(templates->itemText(0)=="New design");assert(templates->findData(extra.id)<0);
     for(int i=2;i<templates->count();++i)assert(QString::compare(templates->itemText(i-1),templates->itemText(i),Qt::CaseInsensitive)<=0);

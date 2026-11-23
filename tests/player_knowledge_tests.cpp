@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 namespace {
@@ -147,6 +148,47 @@ void remote_geology_uses_the_actual_flyby_and_delivers_coarse_evidence()
     assert(!find_event(deliver_due_player_reports(observed), GameEventKind::RemoteGeologyObserved));
     assert(planet_geology_known(observed, 1, 2));
     assert(known_remote_geology(observed, 1, 2)->observedTurn == packet.observedTurn);
+}
+
+void remote_geology_finds_clear_parts_of_an_interfered_flyby()
+{
+    const Position start{445, 0}, end{526, 0};
+    auto initial = survey_fixture(start, {500, 76}, 10);
+    initial.players.front().technology.levels.fill(16);
+    initial.wormholeRules.spawnChancePerTurn = 0;
+    initial.shipDesigns.push_back({99, 1, "Geology Scout", ShipHullType::StarsScout,
+        {ShipComponentType::TransGalacticDrive, ShipComponentType::GeologicalScanner}});
+    auto& scout = initial.fleets.front();
+    scout.design = 99;
+    scout.ships = {{99, 1}};
+    scout.destination = end;
+    scout.warp = 9;
+    scout.fuel = fleet_fuel_capacity(initial, scout);
+    initial.unknownObjects = {{1, {500, 0}, UnknownObjectKind::IonVortex}};
+
+    const auto reported = [&](const GameState& state) {
+        const auto result = TurnProcessor{}.process_with_events(state, {});
+        assert(same_position(result.state.fleets.front().position, end));
+        return std::any_of(result.state.players.front().pendingPlayerReports.begin(),
+            result.state.players.front().pendingPlayerReports.end(), [](const auto& report) {
+                return report.kind == PlayerReportKind::RemoteGeologyObserved && report.planet == 2;
+            });
+    };
+    assert(reported(initial));
+    auto narrow = initial;
+    narrow.stars[1].position.y = std::sqrt(80.0 * 80.0 - 18.001 * 18.001);
+    assert(reported(narrow)); // Only one thousandth of a light-year lies outside each edge of the vortex.
+    auto blocked = initial;
+    blocked.stars[1].position.y = 79;
+    assert(!reported(blocked));
+    blocked.unknownObjects.clear();
+    assert(reported(blocked));
+
+    auto cloud = initial;
+    cloud.unknownObjects.clear();
+    cloud.interstellarMediumEnabled = true;
+    cloud.interstellarClouds = {{1, {500, 0}, 1, 5, 1}};
+    assert(reported(cloud));
 }
 
 void remote_report_remains_in_flight_until_delivery()
@@ -494,6 +536,7 @@ int main()
     ordinary_scanner_reports_system_contact_without_planet_data();
     penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_geology_uses_the_actual_flyby_and_delivers_coarse_evidence();
+    remote_geology_finds_clear_parts_of_an_interfered_flyby();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_all_survey_stages();
     remote_route_completion_obeys_communications_delay();

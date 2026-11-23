@@ -416,6 +416,62 @@ void queue_player_report(
 }
 
 namespace {
+bool reaches_geology_target(const GameState& state, const Fleet& fleet, Position start, Position end,
+    Position target, double range, std::uint64_t turn, double cloudSlope,
+    std::optional<std::vector<SensorInterferenceSpan>>& interference)
+{
+    const double dx = end.x - start.x, dy = end.y - start.y;
+    const double lengthSquared = dx * dx + dy * dy;
+    const double projection = lengthSquared > 0 ? ((target.x - start.x) * dx + (target.y - start.y) * dy) / lengthSquared : 0;
+    const double closest = std::clamp(projection, 0.0, 1.0);
+    const auto position = [&](double t) { return Position{start.x + t * dx, start.y + t * dy}; };
+    if (distance_between(position(closest), target) > range) return false;
+    const auto margin = [&](double t, double localRange) {
+        const auto sample = position(t);
+        const auto distance = distance_between(sample, target);
+        if (distance > localRange || cloudSlope == 0) return localRange - distance;
+        return localRange * medium_active_sensor_factor(state, sample)
+            * medium_active_path_factor(state, sample, target) - distance;
+    };
+    const auto covered = [&](double t) {
+        return margin(t, range * (1 - sensor_interference(state, fleet.owner, position(t), turn))) >= 0;
+    };
+    if (covered(closest)) return true;
+    if (lengthSquared == 0) return false;
+
+    if (!interference) interference = sensor_interference_spans(state, fleet.owner, start, end, turn);
+    const auto flightLength = std::sqrt(lengthSquared);
+    for (const auto& span : *interference) {
+        const auto localRange = range * (1 - span.strength);
+        const auto nearest = std::clamp(projection, span.begin, span.end);
+        if (distance_between(position(nearest), target) > localRange) continue;
+        const auto at = [&](double t) {
+            const auto value = margin(t, localRange);
+            // At a field boundary, a positive margin also gives an accessible
+            // point immediately inside this span. An exact fit must be checked there.
+            return value > 0 || (value == 0 && ((t > span.begin && t < span.end) || covered(t)));
+        };
+        if (at(nearest)) return true;
+        if (cloudSlope == 0) continue;
+        if (at(span.begin) || at(span.end)) return true;
+
+        // Varying cloud density can put the best observation away from the
+        // closest pass. Bound the change in margin to skip impossible subspans.
+        // Path-average density varies at half the local density bound.
+        const auto marginSlope = 1 + (0.20 + 0.30 / 2) * cloudSlope * localRange;
+        const auto search = [&](const auto& recurse, double begin, double finish) -> bool {
+            const auto mid = (begin + finish) * 0.5;
+            const auto value = margin(mid, localRange);
+            if (value >= 0) return true;
+            const auto width = (finish - begin) * flightLength;
+            if (width <= 0.01 || value + marginSlope * width * 0.5 < 0) return false;
+            return recurse(recurse, begin, mid) || recurse(recurse, mid, finish);
+        };
+        if (search(search, span.begin, span.end)) return true;
+    }
+    return false;
+}
+
 void observe_remote_geology(GameState& state, const Fleet& fleet, Position start, Position end, std::uint64_t turn)
 {
     if (state.mediumObserver || !fleet_active_sensors(fleet, turn)
@@ -430,19 +486,16 @@ void observe_remote_geology(GameState& state, const Fleet& fleet, Position start
     auto* player = mutable_player(state, fleet.owner);
     if (!player) return;
     const auto delivery = fleet_report_delivery_turn(state, fleet.owner, end, turn, fleet.id);
-    const auto dx = end.x - start.x;
-    const auto dy = end.y - start.y;
-    const auto length = dx * dx + dy * dy;
+    // The gradient of each quartic cloud profile is bounded by twice its peak
+    // density divided by its shortest axis. Overlap adds the individual bounds.
+    double cloudSlope = 0;
+    if (state.interstellarMediumEnabled)
+        for (const auto& cloud : state.interstellarClouds)
+            cloudSlope += 2 * cloud.density / std::min(cloud.radiusX, cloud.radiusY);
+    std::optional<std::vector<SensorInterferenceSpan>> interference;
     for (const auto& star : state.stars) {
-        const auto t = length > 0
-            ? std::clamp(((star.position.x - start.x) * dx + (star.position.y - start.y) * dy) / length, 0.0, 1.0)
-            : 0.0;
-        const Position sampledAt{start.x + t * dx, start.y + t * dy};
-        const auto distance = distance_between(sampledAt, star.position);
-        if (distance > range || same_position(end, star.position)) continue;
-        const auto effective = range * (1 - sensor_interference(state, fleet.owner, sampledAt, turn))
-            * medium_active_sensor_factor(state, sampledAt) * medium_active_path_factor(state, sampledAt, star.position);
-        if (distance > effective) continue;
+        if (same_position(end, star.position)
+            || !reaches_geology_target(state, fleet, start, end, star.position, range, turn, cloudSlope, interference)) continue;
         const auto* planet = find_planet_at_star(state, star.id);
         if (!planet || planet_geology_known(state, fleet.owner, planet->id)) continue;
         const auto matches = [&](const auto& report) {
