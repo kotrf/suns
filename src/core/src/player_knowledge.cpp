@@ -430,6 +430,7 @@ bool sweep_reaches_target(const GameState& state, const Fleet& fleet, Position s
     const double projection = lengthSquared > 0 ? ((target.x - start.x) * dx + (target.y - start.y) * dy) / lengthSquared : 0;
     const double closest = std::clamp(projection, 0.0, 1.0);
     const auto position = [&](double t) { return Position{start.x + t * dx, start.y + t * dy}; };
+    if (range == 0) return within_range(position(closest), target, 0);
     if (distance_between(position(closest), target) > range) return false;
     const auto margin = [&](double t, double localRange) {
         const auto sample = position(t);
@@ -528,8 +529,8 @@ void observe_fleet_sensor_sweep(
     const auto cloudSlope = sensor_sweep_cloud_slope(state);
     std::optional<std::vector<SensorInterferenceSpan>> interference;
     observe_remote_geology(state, fleet, start, end, observationTurn, cloudSlope, interference);
+    if (!fleet_has_scanner(state, fleet)) return;
     const auto range = fleet_sensor_range(state, fleet);
-    if (range <= 0) return;
     const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
 
     for (const auto& star : state.stars) {
@@ -558,9 +559,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
     std::vector<FleetScanner> fleets;
     for (auto& fleet : state.fleets) {
-        if (!fleet_active_sensors(fleet, observationTurn)) continue;
+        if (!fleet_active_sensors(fleet, observationTurn) || !fleet_has_scanner(state, fleet)) continue;
         const auto range = fleet_sensor_range(state, fleet);
-        if (range <= 0) continue;
         const auto signal = factor(fleet.owner, fleet.position);
         fleets.push_back({&fleet, range * signal, fleet_penetrating_sensor_range(state, fleet) * signal});
     }

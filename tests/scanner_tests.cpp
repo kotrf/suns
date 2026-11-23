@@ -140,6 +140,12 @@ void coverage_and_special_detector()
     observe_current_sensor_coverage(bat, 1);
     assert(std::any_of(bat.players.front().pendingSurveyReports.begin(), bat.players.front().pendingSurveyReports.end(),
         [](const auto& report) { return report.star == 2 && report.level == SurveyLevel::OrbitalSurvey; }));
+    auto batFlyby = coverage_fixture(ShipComponentType::BatScanner);
+    batFlyby.fleets.front().position = {1001, 0};
+    observe_fleet_sensor_sweep(batFlyby, batFlyby.fleets.front(), {999, 0}, {1001, 0}, 1);
+    const auto& flybyReports = batFlyby.players.front().pendingSurveyReports;
+    assert(flybyReports.size() == 1 && flybyReports.front().star == 2
+        && flybyReports.front().level == SurveyLevel::SystemScan);
     auto rhino = coverage_fixture(ShipComponentType::RhinoScanner);
     rhino.stars[1].position = {1050, 0};
     refresh_sensor_intel(rhino);
