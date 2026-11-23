@@ -12,6 +12,8 @@
 #include <QString>
 #include <QTimer>
 
+#include <algorithm>
+
 namespace suns {
 
 void MainWindow::installCommunicationStatus()
@@ -50,8 +52,18 @@ void MainWindow::installCommunicationStatus()
         const auto radar = fleet_radar_position(state_, *fleet);
         const auto positionAge = fleet_position_age(state_, *fleet);
         const auto projected = projected_fleet_position(state_, *fleet);
-        const auto estimatedDelay = communication_delay_turns(state_, fleet->owner, projected);
-        const bool connected = fleet_has_instant_link(state_, *fleet) && age == 0;
+        const auto& received = receivedPlayerState();
+        const CommunicationQueryScope communicationScope(received);
+        const auto estimatedDelay = communication_delay_turns(received, fleet->owner, projected);
+        const bool connected = age == 0 && fleet_has_instant_link(received, *fleet);
+        const auto* player = find_player(received, fleet->owner);
+        const SensorStatus* jamReport = nullptr;
+        if (player) {
+            const auto report = std::find_if(player->sensorStatus.begin(), player->sensorStatus.end(), [&](const auto& value) {
+                return value.fleet == fleet->id && value.fastLinkJammed;
+            });
+            if (report != player->sensorStatus.end()) jamReport = &*report;
+        }
 
         QString text = connected
             ? "<b>Comms:</b> <span style='color:#83c99a'><b>LIVE</b></span>"
@@ -64,6 +76,7 @@ void MainWindow::installCommunicationStatus()
             .arg(positionAge == 0 ? "current" : QString("%1 turn(s) old").arg(qulonglong(positionAge)))
             .arg(radar->uncertainty, 0, 'f', 1);
         else if (age > 0) positionText = "<br>Position unconfirmed; a plotted orbit is based on old telemetry.";
+        if (jamReport) positionText += QString("<br>Fast radio jammed in the report from year %1.").arg(qulonglong(jamReport->observedTurn));
         summary->setText(text + positionText);
         status->setText(text);
         QString details = QString("Last confirmed: turn %1 at (%2, %3)")
@@ -73,6 +86,9 @@ void MainWindow::installCommunicationStatus()
                               .arg(telemetry.position.y, 0, 'f', 1);
         details += "\nCommand reception remains on in Passive and Radio silence. Receiving alone sends no acknowledgement or telemetry."
             "\nIn friendly populated orbit, all modes share full status with the colony; its network forwards it with normal delay.";
+        if (jamReport) details += QString("\nYear %1 report recorded fast-radio jamming at (%2, %3) ly. "
+            "Jammed radios use slow communication for distant traffic.")
+            .arg(qulonglong(jamReport->observedTurn)).arg(jamReport->position.x, 0, 'f', 1).arg(jamReport->position.y, 0, 'f', 1);
         if (radar) details += QString("\nPosition measured by %1 %2 in year %3; received year %4. Uncertainty: %5 ly.\n"
                                      "Remote radar detection sees the hull, without cargo, fuel, mission or radio settings. Friendly orbital exchange is separate.")
             .arg(radar->sourceColony ? "colony" : "fleet")

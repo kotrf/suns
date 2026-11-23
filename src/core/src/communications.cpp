@@ -30,6 +30,22 @@ struct CommunicationField {
     Position position;
     double radius{};
     bool connected{};
+    bool fastEnabled{true};
+    bool capital{};
+};
+
+struct FastLinkInterference {
+    std::vector<Position> emitters;
+    std::vector<Position> reportedReceivers;
+
+    bool blocks(Position position) const
+    {
+        return std::any_of(emitters.begin(), emitters.end(), [&](Position center) {
+            return distance_between(position, center) <= kAreaJammerRangeLy;
+        }) || std::any_of(reportedReceivers.begin(), reportedReceivers.end(), [&](Position receiver) {
+            return same_position(position, receiver);
+        });
+    }
 };
 
 struct CommunicationQueryFrame {
@@ -37,9 +53,71 @@ struct CommunicationQueryFrame {
     bool enabled{};
     CommunicationQueryFrame* previous{};
     std::map<std::pair<PlayerId, std::uint64_t>, std::vector<CommunicationField>> graphs;
+    std::map<std::pair<PlayerId, std::uint64_t>, FastLinkInterference> fastInterference;
 };
 
 thread_local CommunicationQueryFrame* communicationQueries{};
+
+FastLinkInterference build_fast_interference(const GameState& state, PlayerId owner, std::uint64_t turn)
+{
+    FastLinkInterference interference;
+    if (!state.mediumObserver) {
+        interference.emitters = hostile_area_jammers(state, owner, turn);
+        return interference;
+    }
+    const auto* player = state.mediumObserver == owner ? find_player(state, owner) : nullptr;
+    if (!player) return interference;
+    const auto received = [&](const SensorStatus& status) {
+        return status.deliveryTurn <= state.turn && status.observedTurn <= turn;
+    };
+    for (const auto& status : player->sensorStatus) {
+        if (!status.fastLinkJammed || !received(status)) continue;
+        // A received measurement belongs to a particular receiver and position.
+        std::optional<Position> radarPosition;
+        if (status.fleet) {
+            const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const auto& fleet) {
+                return fleet.id == status.fleet && fleet.owner == owner;
+            });
+            if (fleet == state.fleets.end()) continue;
+            if (!same_position(fleet->position, status.position)) {
+                // A matching coarse radar track has not established that the
+                // receiver left its measured position. Include its map point.
+                const auto track = std::find_if(player->friendlyFleetContacts.begin(),
+                    player->friendlyFleetContacts.end(), [&](const auto& contact) {
+                        return contact.fleet == fleet->id && !contact.lost && contact.deliveryTurn <= state.turn
+                            && contact.lastSeenTurn <= turn && contact.lastSeenTurn > fleet->telemetry.observedTurn
+                            && same_position(contact.position, fleet->position)
+                            && distance_between(contact.position, status.position) <= contact.uncertainty;
+                    });
+                if (track == player->friendlyFleetContacts.end()) continue;
+                radarPosition = track->position;
+            }
+        } else {
+            const auto* planet = find_planet(state, status.colony);
+            const auto* star = planet ? find_star(state, planet->star) : nullptr;
+            if (!planet || planet->owner != owner || !star || !same_position(star->position, status.position)) continue;
+        }
+        if (std::any_of(player->sensorStatus.begin(), player->sensorStatus.end(), [&](const auto& newer) {
+                return newer.observedTurn > status.observedTurn && received(newer) && same_position(newer.position, status.position);
+            })) continue;
+        interference.reportedReceivers.push_back(status.position);
+        if (radarPosition) interference.reportedReceivers.push_back(*radarPosition);
+    }
+    return interference;
+}
+
+const FastLinkInterference& fast_interference(const GameState& state, PlayerId owner, std::uint64_t turn,
+    FastLinkInterference& temporary)
+{
+    auto* frame = communicationQueries;
+    if (frame && frame->enabled && frame->state == &state) {
+        auto [entry, inserted] = frame->fastInterference.try_emplace({owner, turn});
+        if (inserted) entry->second = build_fast_interference(state, owner, turn);
+        return entry->second;
+    }
+    temporary = build_fast_interference(state, owner, turn);
+    return temporary;
+}
 
 bool has_friendly_colony(const GameState& state, PlayerId owner, Position position)
 {
@@ -70,7 +148,7 @@ const Fleet* report_source(const GameState& state, PlayerId owner, Position posi
 
 std::vector<CommunicationField> build_communication_fields(
     const GameState& state,
-    PlayerId player, std::uint64_t atTurn)
+    PlayerId player, std::uint64_t atTurn, const FastLinkInterference& interference)
 {
     std::vector<CommunicationField> fields;
 
@@ -81,7 +159,8 @@ std::vector<CommunicationField> build_communication_fields(
         if (planet.owner != player || total_colony_population(planet) == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
         if (!star) continue;
-        fields.push_back({star->position, planetary_radar_range(planet.radar), planet.homeworld});
+        const bool fast = !interference.blocks(star->position);
+        fields.push_back({star->position, planetary_radar_range(planet.radar), planet.homeworld && fast, fast, planet.homeworld});
     }
 
     // Ordinary scanners and dedicated relay arrays participate in the mesh.
@@ -90,14 +169,14 @@ std::vector<CommunicationField> build_communication_fields(
         if (fleet.owner != player || !fleet_transmits(fleet, atTurn)) continue;
         const auto range = fleet_communication_range(state, fleet);
         if (range <= 0.0) continue;
-        fields.push_back({fleet.position, range, false});
+        fields.push_back({fleet.position, range, false, !interference.blocks(fleet.position)});
     }
 
     std::vector<std::size_t> frontier;
     for (std::size_t i=0;i<fields.size();++i) if(fields[i].connected) frontier.push_back(i);
     for (std::size_t head=0;head<frontier.size();++head) {
         const auto current=frontier[head];
-        for (std::size_t i=0;i<fields.size();++i) if(!fields[i].connected
+        for (std::size_t i=0;i<fields.size();++i) if(fields[i].fastEnabled && !fields[i].connected
             && distance_between(fields[i].position,fields[current].position)<=fields[i].radius+fields[current].radius+0.000001) {
             fields[i].connected=true;frontier.push_back(i);
         }
@@ -107,15 +186,15 @@ std::vector<CommunicationField> build_communication_fields(
 }
 
 std::vector<CommunicationField> communication_fields(
-    const GameState& state, PlayerId player, std::uint64_t atTurn)
+    const GameState& state, PlayerId player, std::uint64_t atTurn, const FastLinkInterference& interference)
 {
     auto* frame = communicationQueries;
     if (!frame || !frame->enabled || frame->state != &state)
-        return build_communication_fields(state, player, atTurn);
+        return build_communication_fields(state, player, atTurn, interference);
     const auto key = std::pair{player, atTurn};
     const auto found = frame->graphs.find(key);
     if (found != frame->graphs.end()) return found->second;
-    auto fields = build_communication_fields(state, player, atTurn);
+    auto fields = build_communication_fields(state, player, atTurn, interference);
     frame->graphs.emplace(key, fields);
     return fields;
 }
@@ -131,14 +210,14 @@ std::vector<bool> field_component_containing(
 {
     std::vector<bool> component(fields.size(), false);
     for (std::size_t index = 0; index < fields.size(); ++index) {
-        component[index] = inside_field(position, fields[index]);
+        component[index] = fields[index].fastEnabled && inside_field(position, fields[index]);
     }
 
     std::vector<std::size_t> frontier;
     for(std::size_t i=0;i<fields.size();++i) if(component[i])frontier.push_back(i);
     for(std::size_t head=0;head<frontier.size();++head) {
         const auto member=frontier[head];
-        for(std::size_t i=0;i<fields.size();++i) if(!component[i]
+        for(std::size_t i=0;i<fields.size();++i) if(fields[i].fastEnabled && !component[i]
             && distance_between(fields[i].position,fields[member].position)<=fields[i].radius+fields[member].radius+0.000001) {
             component[i]=true;frontier.push_back(i);
         }
@@ -496,11 +575,18 @@ bool fleet_route_tasks_valid(const FleetRouteProgram& program)
     return route_tasks_valid(program);
 }
 
-CommunicationRoute communication_route(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
+namespace {
+CommunicationRoute route_with_interference(const GameState& state, PlayerId player, Position position,
+    std::uint64_t atTurn, const FastLinkInterference& interference)
 {
-    if (!atTurn) atTurn = state.turn;
-    const auto fields = communication_fields(state, player, atTurn);
+    const auto fields = communication_fields(state, player, atTurn, interference);
     const auto jamDelay = communication_jamming_delay(state, player, position, atTurn);
+    const bool sourceJammed = interference.blocks(position);
+
+    // At headquarters the ship and colony exchange data locally, without a fast hop.
+    if (sourceJammed && std::any_of(fields.begin(), fields.end(), [&](const auto& field) {
+            return field.capital && same_position(position, field.position);
+        })) return {SignalChannel::Fast, position, position, 0, jamDelay};
 
     // A colony without its capital radar has no instant route. Synthetic
     // ship-only combat scenarios have no colony/root and resolve onboard
@@ -518,7 +604,7 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
 
     // A position inside any field connected to a colony root belongs to the
     // instantaneous empire mesh.
-    for (const auto& field : fields) {
+    if (!sourceJammed) for (const auto& field : fields) {
         if (field.connected && inside_field(position, field)) return {SignalChannel::Fast, position, field.position, 0, jamDelay};
     }
 
@@ -527,25 +613,26 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
     // island and to the colony-rooted mesh, then use the shortest real
     // point-to-point subspace hop. Scanner radii never subtract from this distance:
     // there is no receiver on the imaginary surface of a sensor field.
-    const auto sourceComponent = field_component_containing(fields, position);
+    const auto sourceComponent = sourceJammed ? std::vector<bool>{} : field_component_containing(fields, position);
     std::vector<Position> sourceTransceivers{position};
     std::vector<Position> connectedTransceivers;
 
     for (const auto& planet : state.planets) {
         if (planet.owner != player || total_colony_population(planet) == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
-        if (star && std::any_of(fields.begin(), fields.end(), [&](const CommunicationField& field) {
-            return field.connected && inside_field(star->position, field);
-        })) connectedTransceivers.push_back(star->position);
+        if (star && (planet.homeworld || (!interference.blocks(star->position)
+            && std::any_of(fields.begin(), fields.end(), [&](const CommunicationField& field) {
+                return field.connected && inside_field(star->position, field);
+            })))) connectedTransceivers.push_back(star->position);
     }
     for (const auto& fleet : state.fleets) {
-        if (fleet.owner != player || !fleet_transmits(fleet,atTurn)) continue;
+        if (fleet.owner != player || !fleet_transmits(fleet,atTurn) || interference.blocks(fleet.position)) continue;
         const auto inConnectedMesh = std::any_of(
             fields.begin(), fields.end(), [&](const CommunicationField& field) {
                 return field.connected && inside_field(fleet.position, field);
             });
         if (inConnectedMesh) connectedTransceivers.push_back(fleet.position);
-        if (inside_component(fleet.position, fields, sourceComponent)) {
+        if (!sourceJammed && inside_component(fleet.position, fields, sourceComponent)) {
             sourceTransceivers.push_back(fleet.position);
         }
     }
@@ -563,29 +650,46 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
         }
     }
     if (!std::isfinite(nearest)) return {SignalChannel::Slow, position, position, 1, jamDelay};
-    if (nearest <= 0.000001) return {SignalChannel::Fast, transmitter, receiverPosition, 0, jamDelay};
+    if (!sourceJammed && nearest <= 0.000001 && !interference.blocks(receiverPosition))
+        return {SignalChannel::Fast, transmitter, receiverPosition, 0, jamDelay};
 
     // Any non-zero subspace hop lands at a later annual planning boundary;
     // priority can never alter this physical propagation time.
     return {SignalChannel::Slow, transmitter, receiverPosition,
-        static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed)), jamDelay};
+        std::max(1U, static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed))), jamDelay};
+}
+} // namespace
+
+CommunicationRoute communication_route(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
+{
+    if (!atTurn) atTurn = state.turn;
+    FastLinkInterference temporary;
+    return route_with_interference(state, player, position, atTurn, fast_interference(state, player, atTurn, temporary));
+}
+
+bool fast_communication_jammed_at(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
+{
+    FastLinkInterference temporary;
+    return fast_interference(state, player, atTurn ? atTurn : state.turn, temporary).blocks(position);
 }
 
 std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
 {
-    // A built, inhabited capital radar is itself a connected mesh root. A
-    // delay-only query inside that field does not need the remaining graph;
-    // interference still applies at the actual queried receiver and year.
-    // Keep communication_route unchanged: packet emission needs its exact
-    // transmitter/receiver identity, including deterministic tie choices.
+    // An available capital radio needs no graph search. Packet emission still
+    // uses the full route to retain the physical transmitter and receiver.
+    if (!atTurn) atTurn = state.turn;
+    FastLinkInterference temporary;
+    const auto& interference = fast_interference(state, player, atTurn, temporary);
     for (const auto& planet : state.planets) {
         if (planet.owner != player || !planet.homeworld || total_colony_population(planet) == 0
             || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
-        if (star && distance_between(position, star->position) <= planetary_radar_range(planet.radar))
-            return communication_jamming_delay(state, player, position, atTurn ? atTurn : state.turn);
+        if (star && distance_between(position, star->position) <= planetary_radar_range(planet.radar)
+            && (same_position(position, star->position)
+                || (!interference.blocks(star->position) && !interference.blocks(position))))
+            return communication_jamming_delay(state, player, position, atTurn);
     }
-    const auto route=communication_route(state,player,position,atTurn);
+    const auto route = route_with_interference(state, player, position, atTurn, interference);
     return route.propagationTurns+route.receiverDelay;
 }
 
@@ -977,6 +1081,12 @@ void deliver_due_fleet_telemetry(GameState& state)
 
 void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
 {
+    for (const auto& station : state.orbitalStations) {
+        if (!station_area_jammer_active(station)) continue;
+        const auto* planet = find_planet(state, station.planet);
+        if (const auto* star = planet ? find_star(state, planet->star) : nullptr)
+            record_pulse(state, station.owner, star->position, observationTurn, SignalChannel::Fast);
+    }
     for (auto& fleet : state.fleets) {
         if (!fleet_can_share_reports(state, fleet, observationTurn)) continue;
         // Active scan/jamming is a real fast-channel emission even when this
@@ -986,7 +1096,8 @@ void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
             bool jammer=false;
             for(const auto& stack:fleet_ship_stacks(fleet)) if(const auto* d=find_ship_design(state,stack.design))
                 for(auto c:d->components) jammer|=component_spec(c).jammingPercent>0;
-            if(fleet_has_scanner(state,fleet) || jammer) record_pulse(state,fleet.owner,fleet.position,observationTurn,SignalChannel::Fast);
+            if (fleet_has_scanner(state, fleet) || jammer || fleet_area_jammer_active(state, fleet, observationTurn))
+                record_pulse(state, fleet.owner, fleet.position, observationTurn, SignalChannel::Fast);
         }
         record_report_transmission(state,fleet.owner,fleet.position,observationTurn,fleet.id);
         const auto snapshot = authoritative_snapshot(state, fleet, observationTurn);

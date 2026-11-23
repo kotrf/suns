@@ -6,28 +6,53 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <tuple>
 
 namespace suns {
 namespace {
-struct Receiver { Position position; FleetId fleet{}; PlanetId colony{}; double range{}, tachyon{}, interference{}; bool passive{}; double nominal{}; };
+struct Receiver {
+    Position position;
+    FleetId fleet{};
+    PlanetId colony{};
+    double range{}, tachyon{}, interference{};
+    bool passive{};
+    double nominal{};
+    bool fastLinkJammed{};
+};
 bool newer(const ReconContact& a,const ReconContact& b)
 {
     return a.observedTurn>b.observedTurn || (a.observedTurn==b.observedTurn
         && (a.lost>b.lost || (a.lost==b.lost && (a.quality>b.quality || (a.quality==b.quality && a.uncertainty<b.uncertainty)))));
 }
-std::vector<Receiver> receivers(const GameState& s,PlayerId owner,std::uint64_t turn)
+std::vector<Receiver> receivers(const GameState& s,PlayerId owner,std::uint64_t turn, bool measureRadio = false)
 {
+    const CommunicationQueryScope communicationScope(s);
+    std::set<std::pair<FleetId, PlanetId>> previouslyJammed;
+    if (const auto* player = measureRadio ? find_player(s, owner) : nullptr)
+        for (const auto& status : player->observedSensorStatus)
+            if (status.fastLinkJammed) previouslyJammed.emplace(status.fleet, status.colony);
     std::vector<Receiver> result;
-    for(const auto& p:s.planets) if(p.owner==owner && total_colony_population(p) && p.radar!=PlanetaryRadarLevel::None)
+    for(const auto& p:s.planets) if(p.owner==owner && total_colony_population(p))
         if(const auto* star=find_star(s,p.star)) {
+            const double nominal = planetary_radar_range(p.radar);
+            if (!nominal && !measureRadio) continue;
+            const bool fastJammed = measureRadio && fast_communication_jammed_at(s, owner, star->position, turn);
+            if (!nominal && !fastJammed && !previouslyJammed.contains({0, p.id})) continue;
             const double jam=sensor_interference(s,owner,star->position,turn);
-            result.push_back({star->position,0,p.id,planetary_radar_range(p.radar)*(1-jam)*medium_active_sensor_factor(s,star->position),0,jam,false,planetary_radar_range(p.radar)});
+            result.push_back({star->position, 0, p.id, nominal * (1-jam) * medium_active_sensor_factor(s, star->position),
+                0, jam, false, nominal, fastJammed});
         }
-    for(const auto& f:s.fleets) if(f.owner==owner && fleet_has_scanner(s,f)) {
+    for(const auto& f:s.fleets) if(f.owner==owner) {
+        const bool hasScanner = fleet_has_scanner(s, f);
+        if (!hasScanner && !measureRadio) continue;
+        const bool fastJammed = measureRadio && fast_communication_jammed_at(s, owner, f.position, turn);
+        if (!hasScanner && !fastJammed && !previouslyJammed.contains({f.id, 0})) continue;
         const bool passive=!fleet_active_sensors(f,turn);
         const double jam=sensor_interference(s,owner,f.position,turn);
-        result.push_back({f.position,f.id,0,fleet_sensor_range(s,f)*(1-jam)*(passive?1:medium_active_sensor_factor(s,f.position)),fleet_tachyon_fraction(s,f),jam,passive,fleet_sensor_range(s,f)});
+        const double nominal = fleet_sensor_range(s, f);
+        result.push_back({f.position, f.id, 0, nominal * (1-jam) * (passive ? 1 : medium_active_sensor_factor(s, f.position)),
+            fleet_tachyon_fraction(s, f), jam, passive, nominal, fastJammed});
     }
     std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){return std::tuple{bool(a.fleet),a.colony,a.fleet}<std::tuple{bool(b.fleet),b.colony,b.fleet};});
     return result;
@@ -47,6 +72,7 @@ SensorStatus sensor_status(const GameState& s,PlayerId owner,const Receiver& r,s
     status.observedTurn=turn; status.deliveryTurn=fleet_report_delivery_turn(s,owner,r.position,turn,r.fleet);
     status.transmissionFleet=held_report_source(s,owner,r.position,turn,r.fleet);
     status.interferencePercent=std::uint8_t(std::lround(r.interference*100));
+    status.fastLinkJammed = r.fastLinkJammed;
     status.nominalRange=r.nominal; status.activeRange=r.passive?0:r.range;
     const auto passiveBase=r.nominal*(1-r.interference);
     status.passiveRange=passiveBase*0.25; status.emissionRange=passiveBase*2;
@@ -56,7 +82,7 @@ std::optional<ReconContact> observe(const GameState& s,PlayerId owner,const Flee
     std::uint64_t turn,bool tracked,ContactQuality held=ContactQuality::Probable)
 {
     // A player export's anonymous fleet placeholders are evidence, never truth to rescan.
-    if(target.id==receiver.fleet || target.owner==0 || (!target.design && target.ships.empty())) return {};
+    if(receiver.range<=0 || target.id==receiver.fleet || target.owner==0 || (!target.design && target.ships.empty())) return {};
     const double range=fleet_detection_range(s,target,receiver.range*(receiver.passive?1:medium_active_path_factor(s,receiver.position,target.position)),receiver.tachyon,receiver.passive);
     const double distance=distance_between(receiver.position,target.position);
     if(range<=0 || distance>range*(tracked?1.10:1.0)+1e-6) return {};
@@ -164,8 +190,9 @@ bool sensor_status_valid(const SensorStatus& x)
 std::vector<SensorStatus> known_sensor_status(const GameState& s,PlayerId owner)
 {
     const auto* player=find_player(s,owner); if(!player) return {};
+    if (s.mediumObserver) return player->sensorStatus;
     auto result=player->sensorStatus;
-    for(const auto& receiver:receivers(s,owner,s.turn)) {
+    for(const auto& receiver:receivers(s,owner,s.turn,true)) {
         if(!live_receiver_allowed(s,owner,receiver)) continue;
         const auto status=sensor_status(s,owner,receiver,s.turn);
         if(status.deliveryTurn!=s.turn) continue;
@@ -179,7 +206,7 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
 {
     for(auto& player:s.players) {
         std::vector<Player::EnemyContact> visible;
-        const auto sensors=receivers(s,player.id,turn);
+        const auto sensors=receivers(s,player.id,turn,true);
         std::vector<SensorStatus> statuses;
         for(const auto& receiver:sensors) {
             const auto status=sensor_status(s,player.id,receiver,turn); statuses.push_back(status);
@@ -187,7 +214,9 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
             auto duplicate=std::find_if(player.pendingSensorStatus.begin(),player.pendingSensorStatus.end(),[&](const auto& x){return x.fleet==status.fleet && x.colony==status.colony && x.observedTurn==turn;});
             if(duplicate==player.pendingSensorStatus.end()) player.pendingSensorStatus.push_back(status);
             const auto old=std::find_if(player.observedSensorStatus.begin(),player.observedSensorStatus.end(),[&](const auto& x){return x.fleet==status.fleet && x.colony==status.colony;});
-            if((old==player.observedSensorStatus.end()?0:old->interferencePercent)!=status.interferencePercent) {
+            const auto previousInterference = old == player.observedSensorStatus.end() ? 0 : old->interferencePercent;
+            const bool previousFastJammed = old != player.observedSensorStatus.end() && old->fastLinkJammed;
+            if (previousInterference != status.interferencePercent || previousFastJammed != status.fastLinkJammed) {
                 PendingPlayerReport report; report.kind=PlayerReportKind::SensorInterferenceChanged;
                 report.observedTurn=turn; report.deliveryTurn=status.deliveryTurn; report.fleet=status.fleet;
                 report.planet=status.colony; report.position=status.position; report.quantity=status.interferencePercent;

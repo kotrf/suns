@@ -1093,7 +1093,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
     const bool surveyed = star && is_surveyed(state_, pendingOrders_.player, star->id);
     const auto& movementPreview = movementPlanningPreview();
     const auto* plannedFleet = authoritativeFleet ? findFleet(movementPreview, authoritativeFleet->id) : nullptr;
-    const bool instantLink = authoritativeFleet && fleet_has_instant_link(state_, *authoritativeFleet)
+    const bool instantLink = authoritativeFleet && fleet_has_instant_link(received, *authoritativeFleet)
         && fleet_telemetry_age(state_, *authoritativeFleet) == 0;
     const auto* effectiveFleet = instantLink && plannedFleet ? plannedFleet : fleet;
 

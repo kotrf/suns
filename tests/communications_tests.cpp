@@ -5,6 +5,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/campaign.hpp"
+#include "suns/stations.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -605,6 +606,164 @@ void merged_fleet_keeps_unsent_observations()
     assert(std::any_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived && e.observedTurn==1;}));
 }
 
+GameState area_jammer_fixture()
+{
+    auto s = make_demo_game();
+    s.turn = 10;
+    s.stars.resize(1);
+    s.planets.resize(1);
+    s.wormholeRules.spawnChancePerTurn = 0;
+    s.players.push_back({2, "Opposition"});
+    s.shipDesigns.push_back({200, 2, "Jammer", ShipHullType::Destroyer,
+        {ShipComponentType::QuickJump5, ShipComponentType::AreaJammer}});
+    auto& observer = s.fleets.front();
+    observer.position = {130, 0};
+    observer.telemetry.position = observer.position;
+    observer.telemetry.observedTurn = s.turn - 1;
+    Fleet jammer;
+    jammer.id = s.nextFleetId++;
+    jammer.owner = 2;
+    jammer.design = 200;
+    jammer.position = {210, 0};
+    s.fleets.push_back(jammer);
+    return s;
+}
+
+void area_jammers_disconnect_receivers_and_relays()
+{
+    auto s = area_jammer_fixture();
+    s.fleets.erase(s.fleets.begin());
+    auto& jammer = s.fleets.front();
+    const Position root{0, 0}, coveredReceiver{130, 0}, outside{360, 0};
+    const auto slow = communication_route(s, 1, coveredReceiver);
+    assert(slow.channel == SignalChannel::Slow && slow.receiver == root && slow.transmitter == coveredReceiver);
+    assert(slow.propagationTurns == 1 && slow.receiverDelay == 0);
+    assert(communication_delay_turns(s, 1, coveredReceiver) == 1);
+    assert(fast_communication_jammed_at(s, 1, {120, 0}) && !fast_communication_jammed_at(s, 1, {119.99, 0}));
+    assert(!fast_communication_jammed_at(s, jammer.owner, jammer.position));
+
+    jammer.electronics.mode = EmissionMode::RadioSilence;
+    jammer.electronics.resumeTurn = s.turn + 10;
+    jammer.electronics.burstInterval = 2;
+    jammer.electronics.firstBurstTurn = s.turn;
+    assert(communication_delay_turns(s, 1, coveredReceiver) == 0);
+    jammer.electronics.activeBurst = true;
+    assert(communication_delay_turns(s, 1, coveredReceiver, s.turn) == 1);
+    assert(communication_delay_turns(s, 1, coveredReceiver, s.turn + 1) == 0);
+    jammer.electronics = {};
+
+    s.shipDesigns.push_back({201, 1, "Relay", ShipHullType::Utility,
+        {ShipComponentType::QuickJump5, ShipComponentType::RelayArray}});
+    Fleet relay;
+    relay.id = s.nextFleetId++;
+    relay.owner = 1;
+    relay.design = 201;
+    relay.position = {210, 0};
+    s.fleets.push_back(relay);
+    assert(!fast_communication_jammed_at(s, 1, outside));
+    assert(communication_delay_turns(s, 1, outside) == 3);
+    s.fleets.front().electronics.mode = EmissionMode::Passive;
+    assert(communication_delay_turns(s, 1, outside) == 0);
+    s.fleets.front().electronics = {};
+    relay.id = s.nextFleetId++;
+    relay.position = {270, 130};
+    s.fleets.push_back(relay);
+    {
+        const CommunicationQueryScope scope(s);
+        assert(communication_delay_turns(s, 1, outside) == 0);
+        assert(communication_route(s, 1, outside).receiver == relay.position);
+        assert(communication_delay_turns(s, 1, coveredReceiver) == 1);
+    }
+
+    s.fleets.front().position = {50, 0};
+    assert(communication_delay_turns(s, 1, root) == 0);
+    assert(communication_route(s, 1, {110, 0}).channel == SignalChannel::Slow);
+}
+
+void area_jammer_station_limits_detection_and_emits()
+{
+    auto s = area_jammer_fixture();
+    s.fleets.pop_back();
+    s.stars.push_back({2, "Forward station", {210, 0}});
+    s.planets.push_back({2, 2, "Forward station", 100, 2, 10'000});
+    s.players[1].technology.levels.fill(20);
+    const StationLoadout fit{OrbitalStationHullType::Starbase, {ShipComponentType::AreaJammer}};
+    assert(station_loadout_available(s, 2, fit));
+    s.orbitalStations.push_back({2, 2, 2, "Electronic warfare station", fit.hull, {}, fit.components});
+    assert(fast_communication_jammed_at(s, 1, scout(s).position));
+    assert(std::abs(strategic_sensor_range(s, scout(s)) - fleet_sensor_range(s, scout(s)) * 0.60) < 1e-6);
+    const auto result = TurnProcessor{}.process(s, {});
+    assert(std::any_of(result.emissions.begin(), result.emissions.end(), [](const auto& pulse) {
+        return pulse.owner == 2 && pulse.colony == 2 && pulse.channel == SignalChannel::Fast;
+    }));
+    s.orbitalStations.back().damagePercent = 100;
+    assert(!fast_communication_jammed_at(s, 1, scout(s).position));
+    assert(std::abs(strategic_sensor_range(s, scout(s)) - fleet_sensor_range(s, scout(s))) < 1e-6);
+}
+
+void area_jammer_reports_and_packets_follow_the_slow_route()
+{
+    auto s = area_jammer_fixture();
+    const auto observer = scout(s).id;
+    const auto position = scout(s).position;
+    const auto find_status = [&](const GameState& state) -> const SensorStatus* {
+        const auto& statuses = state.players.front().sensorStatus;
+        const auto i = std::find_if(statuses.begin(), statuses.end(), [&](const auto& status) { return status.fleet == observer; });
+        return i == statuses.end() ? nullptr : &*i;
+    };
+    Fleet target = s.fleets.back();
+    target.position.x = position.x + 0.8 * fleet_sensor_range(s, scout(s));
+    assert(!detector_detects_fleet(s, scout(s), target));
+    auto clear = s;
+    clear.fleets.back().electronics.mode = EmissionMode::Passive;
+    assert(detector_detects_fleet(clear, scout(clear), target));
+
+    const auto planned = make_player_view(s, 1).state;
+    assert(!fast_communication_jammed_at(planned, 1, position));
+    assert(std::none_of(planned.shipDesigns.begin(), planned.shipDesigns.end(), [](const auto& design) { return design.id == 200; }));
+    const TurnProcessor processor;
+    const MoveFleetOrder move{observer, {134, 0}, 2};
+    const auto issued = processor.process(s, {{1, {move}}});
+    assert(issued.fleets.front().position == position && issued.fleets.front().destination == move.destination);
+    assert(std::any_of(issued.emissions.begin(), issued.emissions.end(), [&](const auto& pulse) {
+        return pulse.owner == 1 && pulse.channel == SignalChannel::Slow && pulse.emittedTurn == s.turn
+            && pulse.position == s.stars.front().position;
+    }));
+    auto restored = issued;
+    restored.fleets.back().electronics.mode = EmissionMode::Passive;
+    assert(processor.process(restored, {}).fleets.front().position == move.destination);
+
+    const auto observed = processor.process(s, {});
+    assert(!find_status(make_player_view(observed, 1).state));
+    const auto result = processor.process_with_events(observed, {});
+    const auto* status = find_status(result.state);
+    assert(status && status->fastLinkJammed && status->interferencePercent == 40 && status->deliveryTurn > status->observedTurn);
+    assert(std::any_of(result.events.begin(), result.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::SensorInterferenceChanged && event.sensorStatus && event.sensorStatus->fastLinkJammed;
+    }));
+    const auto received = make_player_view(result.state, 1).state;
+    assert(fast_communication_jammed_at(received, 1, position));
+    assert(!fast_communication_jammed_at(received, 1, {position.x + 1, position.y}));
+    assert(communication_route(received, 1, position).channel == SignalChannel::Slow);
+    const auto mapPosition = projected_fleet_position(received, received.fleets.front());
+    assert(!same_position(mapPosition, position));
+    assert(communication_route(received, 1, mapPosition).channel == SignalChannel::Slow);
+    auto moved = received;
+    moved.fleets.front().position = {101, 0};
+    moved.fleets.front().telemetry.position = moved.fleets.front().position;
+    moved.fleets.front().telemetry.observedTurn = moved.turn;
+    assert(!fast_communication_jammed_at(moved, 1, moved.fleets.front().position));
+
+    auto recovered = result.state;
+    recovered.fleets.back().electronics.mode = EmissionMode::Passive;
+    const auto after = processor.process_with_events(recovered, {});
+    assert(find_status(after.state) && !find_status(after.state)->fastLinkJammed);
+    assert(std::any_of(after.events.begin(), after.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::SensorInterferenceChanged && event.sensorStatus
+            && !event.sensorStatus->fastLinkJammed && event.quantity == 0;
+    }));
+}
+
 } // namespace
 
 int main()
@@ -628,6 +787,9 @@ int main()
     local_status_exchange_requires_an_owned_populated_colony();
     colony_snapshot_reaches_the_last_contact_after_a_silent_mine_loss();
     merged_fleet_keeps_unsent_observations();
+    area_jammers_disconnect_receivers_and_relays();
+    area_jammer_station_limits_detection_and_emits();
+    area_jammer_reports_and_packets_follow_the_slow_route();
     std::cout << "communications tests passed\n";
     return 0;
 }

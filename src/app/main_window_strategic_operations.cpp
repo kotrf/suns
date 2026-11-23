@@ -136,6 +136,10 @@ void MainWindow::installStrategicOperations()
             .arg(QString::fromStdString(fleet_task_name(known.task)), emissionName(known.electronics.mode))
             .arg(fleet_cloak_fraction(state_,known)*100,0,'f',0)
             .arg(fleet_active_sensors(known,state_.turn) ? "Active scan window" : "Passive listening");
+        if (fleet_has_area_jammer(state_, known))
+            text += QString("\nArea Jammer %1 at last onboard report. Radius %2 ly. Hostile detection range −%3%.")
+                .arg(fleet_area_jammer_active(state_, known, confirmed_fleet_telemetry(state_, *fleet).observedTurn) ? "active" : "inactive")
+                .arg(kAreaJammerRangeLy).arg(kAreaJammerSensorReduction * 100);
         if (known.electronics.resumeTurn) text += QString(" • wake year %1").arg(qulonglong(known.electronics.resumeTurn));
         if(known.electronics.burstInterval) text+=QString(" • window every %1 yr, first %2%3").arg(known.electronics.burstInterval)
             .arg(qulonglong(known.electronics.firstBurstTurn)).arg(known.electronics.activeBurst?" (active scan)":" (comms only)");
@@ -154,6 +158,7 @@ void MainWindow::installStrategicOperations()
             .arg(qulonglong(status->observedTurn)).arg(status->interferencePercent).arg(status->activeRange,0,'f',0)
             .arg(status->passiveRange,0,'f',0).arg(status->emissionRange,0,'f',0);
         else text+="\nNo received sensor-quality measurement yet. Nominal fitted ranges remain estimates.";
+        if (status != statuses.end() && status->fastLinkJammed) text += "\nFast radio was jammed at the reported position.";
 
         summary->setText(text);
     };

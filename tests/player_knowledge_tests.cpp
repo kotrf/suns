@@ -191,6 +191,44 @@ void remote_geology_finds_clear_parts_of_an_interfered_flyby()
     assert(reported(cloud));
 }
 
+void flyby_uses_area_jamming_at_the_observation_point()
+{
+    const Position start{460, 88}, end{541, 88};
+    auto state = survey_fixture(start, {500, 137}, 10);
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.players.push_back({2, "Opposition"});
+    state.shipDesigns.push_back({99, 1, "Flyby scout", ShipHullType::StarsScout,
+        {ShipComponentType::TransGalacticDrive, ShipComponentType::RhinoScanner}});
+    state.shipDesigns.push_back({100, 2, "Jammer", ShipHullType::Destroyer,
+        {ShipComponentType::QuickJump5, ShipComponentType::AreaJammer}});
+    auto& observer = state.fleets.front();
+    observer.design = 99;
+    observer.ships = {{99, 1}};
+    observer.warp = 9;
+    observer.destination = end;
+    observer.fuel = fleet_fuel_capacity(state, observer);
+    Fleet jammer;
+    jammer.id = state.nextFleetId++;
+    jammer.owner = 2;
+    jammer.design = 100;
+    jammer.position = {500, 0};
+    state.fleets.push_back(jammer);
+    const auto surveyed = [&](const GameState& input) {
+        const auto next = TurnProcessor{}.process(input, {});
+        assert(same_position(next.fleets.front().position, end));
+        const auto& reports = next.players.front().pendingSurveyReports;
+        return std::any_of(reports.begin(), reports.end(), [](const auto& report) {
+            return report.star == 2 && report.level == SurveyLevel::SystemScan;
+        });
+    };
+    assert(!surveyed(state)); // The only in-range part of the flight is jammed.
+    auto clear = state;
+    clear.fleets.back().electronics.mode = EmissionMode::Passive;
+    assert(surveyed(clear));
+    state.stars[1].position.y = 130;
+    assert(surveyed(state)); // The scanner can reach the star from outside the field.
+}
+
 void remote_report_remains_in_flight_until_delivery()
 {
     auto state = survey_fixture({420.0, 0.0}, {450.0, 0.0}, 10);
@@ -537,6 +575,7 @@ int main()
     penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_geology_uses_the_actual_flyby_and_delivers_coarse_evidence();
     remote_geology_finds_clear_parts_of_an_interfered_flyby();
+    flyby_uses_area_jamming_at_the_observation_point();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_all_survey_stages();
     remote_route_completion_obeys_communications_delay();

@@ -33,6 +33,19 @@ Only positions inside the colony-rooted scanner mesh have a zero-turn subspace l
 
 Signals have the same propagation time regardless of message priority. Priority can matter only if a future relay has finite processing or transmission capacity; there is no artificial faster channel in the base model.
 
+### Area jamming
+
+An active hostile [Area Jammer](strategic-operations.md#area-jammer) disables
+fast radio at ships, colonies and relays within 90 ly. A clean route can use
+other relays. A jammed endpoint uses the ordinary slow hop between physical
+radios at 150 ly/year. A jammed homeworld continues to receive slow packets
+and share data locally with fleets in orbit. Packets already in flight keep
+their scheduled delivery.
+
+Ships and colonies report jamming and its clearance through their usual
+communications. The player sees the observed year and position of their own
+receiver. Estimates use received measurements at those locations.
+
 ## Commands
 
 A local fleet receives a new route program immediately, preserving the familiar early-game interaction around the homeworld.
@@ -173,7 +186,8 @@ The same model is intended to support:
 - jamming, interception and communication warfare
 - technology improvements to range, signal speed and resistance to interference
 
-Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the subspace hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.
+Further work could limit the reliable range of slow hops under interference.
+Authentication and deliberately forged messages remain future ideas.
 
 When no new command can arrive, a fleet keeps executing its onboard waypoint queue and stops after the program is exhausted. Conditional contingency commands such as "if no contact for N turns, return to the nearest friendly relay" are a future autonomy layer rather than implicit fleet behaviour.
 

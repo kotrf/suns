@@ -11,8 +11,10 @@ A local ship/surface upload exposes the forwarding colony, not a silent ship.
 
 Active scanner/jammer operation also emits on the fast channel during the annual
 telemetry phase; a communication-only window leaves active emission off. Passive
-listening never emits. No new equipment, channel controls or periodic orders are
-required. Channels do not change when jamming merely delays delivery.
+listening never emits. Legacy local jamming adds delivery delay. An active
+[Area Jammer](strategic-operations.md#area-jammer) instead forces distant traffic
+at a blocked endpoint onto the slow radio, and the actual dispatch emits on
+that channel.
 
 Fast signals are sampled at the dispatch/next annual planning boundary. Slow
 signals propagate in shells at 150 ly/year: a receiver 200 ly away intercepts a
@@ -42,4 +44,4 @@ Save v76 stores in-flight pulses, receiver receipts and dated report/message
 metadata. Player exports contain delivered anonymous evidence, never host pulses,
 source identities, unsent reports or incoming intelligence. Orders remain v25.
 Advanced traffic classification, specialized SIGINT hardware, physical decoys and
-channel-specific jamming remain later work under #58/#101/#205.
+slow-link interference remain later work under #58/#101/#205.
