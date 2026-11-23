@@ -18,6 +18,8 @@ const char* unknown_object_name(UnknownObjectKind kind)
     case UnknownObjectKind::CompactRemnant:return "Compact remnant";
     case UnknownObjectKind::DriftingDerelict:return "Drifting derelict";
     case UnknownObjectKind::RoguePlanetoid:return "Rogue planetoid";
+    case UnknownObjectKind::IonVortex:return "Ion vortex";
+    case UnknownObjectKind::RogueComet:return "Rogue comet";
     }
     return "Unknown object";
 }
@@ -26,9 +28,10 @@ const char* object_knowledge_name(ObjectKnowledgeLevel level)
 ResearchField unknown_object_research_field(UnknownObjectKind kind)
 { return kind==UnknownObjectKind::RoguePlanetoid ? ResearchField::Biology
     :kind==UnknownObjectKind::DriftingDerelict ? ResearchField::Construction
+    :kind==UnknownObjectKind::RogueComet ? ResearchField::Propulsion
     :kind==UnknownObjectKind::AncientProbe ? ResearchField::Electronics : ResearchField::Energy; }
 std::uint32_t unknown_object_research_points(UnknownObjectKind kind)
-{ return kind==UnknownObjectKind::AncientProbe ? 24 : 32; }
+{ return kind==UnknownObjectKind::AncientProbe ? 24 : kind==UnknownObjectKind::RogueComet ? 40 : 32; }
 double object_study_radius(const GameState& s,const Fleet& fleet)
 { return fleet_has_scanner(s,fleet) ? std::min(20.0,std::max(1.0,fleet_sensor_range(s,fleet))) : 0; }
 bool object_observation_valid(const ObjectObservation& x)
@@ -42,14 +45,14 @@ bool object_observation_valid(const ObjectObservation& x)
         && std::isfinite(x.uncertainty) && x.uncertainty>=0 && x.uncertainty<=15
         && x.observedTurn && (!x.receivedTurn || x.receivedTurn>=x.observedTurn)
         && (x.level==ObjectKnowledgeLevel::Detected ? !x.kind && !x.velocity && x.uncertainty==15
-            : x.kind && *x.kind<=UnknownObjectKind::RoguePlanetoid
+            : x.kind && *x.kind<=UnknownObjectKind::RogueComet
                 && (moving
                     ? (x.uncertainty==0 && x.velocity) || (x.uncertainty==15 && !x.velocity)
                     : x.uncertainty==0 && !x.velocity));
 }
 bool unknown_object_valid(const UnknownObject& x)
 {
-    if(!x.id || x.id>0x7fffffffU || x.kind>UnknownObjectKind::RoguePlanetoid
+    if(!x.id || x.id>0x7fffffffU || x.kind>UnknownObjectKind::RogueComet
         || !std::isfinite(x.position.x) || !std::isfinite(x.position.y)
         || !std::isfinite(x.velocity.x) || !std::isfinite(x.velocity.y))return false;
     const auto speed=std::hypot(x.velocity.x,x.velocity.y);
@@ -95,7 +98,7 @@ void generate_unknown_objects(GameState& s,bool includeMoving)
     // Independent streams preserve the old static/hulk positions and IDs.
     // Legacy migration requests only static landmarks; new bodies are not seeded.
     if(!includeMoving)return;
-    const auto appendMoving=[&](UnknownObjectKind kind,std::uint64_t salt,Position speed) {
+    const auto append=[&](UnknownObjectKind kind,std::uint64_t salt,Position speed) {
         std::mt19937_64 rng(s.galaxySeed ^ salt);
         const auto axis=[&](double extent){return (double(rng()%1'000'001)/1'000'000-0.5)*extent;};
         for(unsigned attempt=0;attempt<2000;++attempt) {
@@ -107,9 +110,13 @@ void generate_unknown_objects(GameState& s,bool includeMoving)
         }
     };
     if(s.stars.size()>=64 && s.galaxySeed%5==0)
-        appendMoving(UnknownObjectKind::DriftingDerelict,0x4452494654494e47ULL,{1.5,0.5});
+        append(UnknownObjectKind::DriftingDerelict,0x4452494654494e47ULL,{1.5,0.5});
     if(s.stars.size()>=96 && s.galaxySeed%7==0)
-        appendMoving(UnknownObjectKind::RoguePlanetoid,0x524f475545494345ULL,{0.5,0.25});
+        append(UnknownObjectKind::RoguePlanetoid,0x524f475545494345ULL,{0.5,0.25});
+    if(s.stars.size()>=64 && s.galaxySeed%7==2)
+        append(UnknownObjectKind::IonVortex,0x494f4e564f525445ULL,{});
+    if(s.stars.size()>=96 && s.galaxySeed%9==3)
+        append(UnknownObjectKind::RogueComet,0x524f475545434f4dULL,{1.25,0.75});
 }
 void advance_unknown_objects(GameState& s)
 {

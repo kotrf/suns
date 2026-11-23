@@ -250,7 +250,7 @@ int main(int argc, char** argv)
         }
         engines += component_spec(component).kind == ShipComponentKind::Engine;
     }
-    assert(engines == 15 && scanners == 16 && robots == 6);
+    assert(engines == 15 && scanners == 17 && robots == 6);
     auto* initialHulls = designer.findChild<QComboBox*>("shipHullCatalog");
     assert(initialHulls && initialHulls->count() == 34);
     auto* hullModel = qobject_cast<QStandardItemModel*>(initialHulls->model());

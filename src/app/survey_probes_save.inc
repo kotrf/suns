@@ -2,15 +2,16 @@
 void writeProbeProgram(QDataStream& out, const ProbeProgram& p)
 {
     writePosition(out, p.center); out << p.radius; writeEnum(out, p.depth); writeEnum(out, p.flight);
-    out << quint8(p.maxWarp) << p.fuelReserve << quint32(p.maxSystems) << quint32(p.maxTurns) << quint8(p.returnHome);
+    const auto completion = quint8((p.returnHome ? 1 : 0) | (p.deployRelay ? 2 : 0));
+    out << quint8(p.maxWarp) << p.fuelReserve << quint32(p.maxSystems) << quint32(p.maxTurns) << completion;
 }
 void readProbeProgram(QDataStream& in, ProbeProgram& p)
 {
     readPosition(in, p.center); in >> p.radius;
     if (!readEnum(in, p.depth, quint8(SurveyLevel::DeepSurvey)) || !readEnum(in, p.flight, quint8(ProbeFlightMode::Economical))) return;
-    quint8 warp{}, home{}; in >> warp >> p.fuelReserve >> p.maxSystems >> p.maxTurns >> home;
-    p.maxWarp = warp; p.returnHome = home != 0;
-    if (home > 1 || !probe_program_valid(p)) markCorrupt(in);
+    quint8 warp{}, completion{}; in >> warp >> p.fuelReserve >> p.maxSystems >> p.maxTurns >> completion;
+    p.maxWarp = warp; p.returnHome = (completion & 1) != 0; p.deployRelay = (completion & 2) != 0;
+    if (completion > (gReadSaveFormatVersion >= 134 ? 2 : 1) || !probe_program_valid(p)) markCorrupt(in);
 }
 void writeProbeKnowledge(QDataStream& out, const std::vector<ProbeSurvey>& knowledge)
 {
@@ -40,7 +41,9 @@ void writeProbeMission(QDataStream& out, const ProbeMission& m)
 void readProbeMission(QDataStream& in, ProbeMission& m, const GameState& s, std::uint64_t latest, bool telemetry)
 {
     quint8 configured{}, enabled{}; in >> configured >> enabled; m.configured = configured; m.enabled = enabled;
-    readProbeProgram(in, m.program); if (!readEnum(in, m.status, quint8(ProbeStatus::Stopped))) return;
+    readProbeProgram(in, m.program);
+    if (!readEnum(in, m.status, quint8(gReadSaveFormatVersion >= 134 ? ProbeStatus::RelayUnavailable : ProbeStatus::Stopped))) return;
+    if (m.status >= ProbeStatus::DeployingRelay && !m.program.deployRelay) { markCorrupt(in); return; }
     readPosition(in, m.origin); quint64 start{}; quint32 count{}; in >> start >> m.target; m.startedTurn = start;
     if (configured > 1 || enabled > 1 || (enabled && !configured) || start > latest
         || (configured && !start) || (m.target && !find_star(s, m.target))

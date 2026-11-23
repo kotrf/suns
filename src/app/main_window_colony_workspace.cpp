@@ -391,6 +391,12 @@ void MainWindow::refreshColonyWorkspace()
     const auto stock = values(minerals.stock.value_or(MineralCargo{}));
     const auto extraction = values(minerals.mining.value_or(MineralCargo{}));
     const auto conc = values(minerals.concentration.value_or(MineralCargo{}));
+    const auto bands = minerals.remoteGeology ? values(minerals.remoteGeology->bandLower) : std::array<double, 3>{};
+    const auto geologyAge = minerals.remoteGeology
+        ? QString("Remote geology from fleet #%1, year %2 (age %3)")
+              .arg(minerals.remoteGeology->source).arg(qulonglong(minerals.remoteGeology->observedTurn))
+              .arg(qulonglong(received.turn - std::min(received.turn, minerals.remoteGeology->observedTurn)))
+        : QString{};
     const auto age = minerals.observedTurn ? received.turn - std::min(received.turn, *minerals.observedTurn) : 0;
     const auto ageText = !minerals.observedTurn ? QString("No received surface-stock report") : age == 0 ? QString("Current surface-stock report")
         : QString("Surface stock: %1 years old (year %2)").arg(qulonglong(age)).arg(qulonglong(*minerals.observedTurn));
@@ -398,10 +404,12 @@ void MainWindow::refreshColonyWorkspace()
         auto* item = table->topLevelItem(row);
         item->setText(1, minerals.stock ? QString::number(stock[row], 'f', 1) : "—");
         item->setText(2, minerals.mining ? QString::number(extraction[row], 'f', 1) : "—");
-        item->setText(3, minerals.concentration ? QString::number(conc[row], 'f', 0) + "%" : "?");
+        item->setText(3, minerals.concentration ? QString::number(conc[row], 'f', 0) + "%"
+            : minerals.remoteGeology ? geology_band_text(bands[row]) : "?");
         for (int column = 0; column < 4; ++column)
             item->setToolTip(column, QString("%1 • Stock: %2 kt • Current-year mining before cargo: %3 kt • Concentration: %4 • %5")
-                .arg(item->text(0), item->text(1), item->text(2), item->text(3), ageText));
+                .arg(item->text(0), item->text(1), item->text(2), item->text(3),
+                    geologyAge.isEmpty() ? ageText : ageText + " • " + geologyAge));
     }
     fitMineralRows(table);
 }

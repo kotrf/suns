@@ -9,6 +9,11 @@ namespace suns {
 [[nodiscard]] double fleet_tachyon_fraction(const GameState&, const Fleet&);
 [[nodiscard]] double strategic_sensor_range(const GameState&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] double sensor_interference(const GameState&, PlayerId, Position, std::uint64_t atTurn = 0);
+struct SensorInterferenceSpan {
+    double begin, end, strength; // Interior of a normalized flight interval.
+};
+[[nodiscard]] std::vector<SensorInterferenceSpan> sensor_interference_spans(
+    const GameState&, PlayerId, Position start, Position end, std::uint64_t turn);
 [[nodiscard]] double fleet_detection_range(const GameState&, const Fleet&, double scannerRange,
     double tachyon = 0, bool passive = false);
 [[nodiscard]] bool colony_detects_fleet(const GameState&, const Planet&, const Fleet&, std::uint64_t atTurn = 0);

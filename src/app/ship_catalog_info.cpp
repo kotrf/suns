@@ -62,6 +62,9 @@ QString componentCatalogDescription(ShipComponentType component)
         if (spec.sensorRange == 0 && spec.penetratingSensorRange == 0)
             facts << "Orbital surveys only; no remote ship detection or communications coverage.";
         facts << "Within one ship, each range is the fourth root of the sum of scanner ranges to the fourth power. Fleet coverage uses the best ship.";
+        if (const auto* scanner = scanner_technology(component); scanner && scanner->geologicalRange > 0)
+            facts << QString("Geology: estimates deposit concentrations up to %1 ly along the flight path. Results arrive as ten-point bands.")
+                .arg(scanner->geologicalRange);
     }
     if (component == ShipComponentType::AnomalyDetector)
         facts << "Dedicated anomaly range 200 ly; faint signatures 90 ly, weak signatures 70 ly. Does not extend ordinary radar or communications.";

@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "save_game.hpp"
 #include "ship_designer_dialog.hpp"
+#include "mineral_stock_panel.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/survey_probes.hpp"
@@ -163,6 +164,56 @@ void ui_and_catalogs(MainWindow& w)
     const auto& created = std::get<CreateShipDesignOrder>(MainWindowTestAccess::orders(w)[0]);
     assert(created.hull == ShipHullType::SurveyProbe && std::find(created.components.begin(), created.components.end(), ShipComponentType::SurveyAutopilot) != created.components.end());
 }
+
+void exploration_evidence_and_relay_orders_roundtrip(MainWindow& w)
+{
+    auto host = fixture();
+    auto& state = host.state;
+    state.shipDesigns.back().components.push_back(ShipComponentType::DeepSpaceRelayKit);
+    MainWindowTestAccess::load(w, state);
+    auto* relay = w.findChild<QCheckBox*>("probeRelay");
+    assert(relay && relay->isEnabled());
+    relay->setChecked(true);
+    assert(!w.findChild<QCheckBox*>("probeReturn")->isChecked());
+    w.findChild<QPushButton*>("sendProbeProgram")->click();
+    const auto order = std::get<SetProbeProgramOrder>(MainWindowTestAccess::orders(w).back());
+    assert(order.program.deployRelay && submit_probe_command(state, 1, order));
+    const auto planet = state.planets[1].id;
+    state.players.front().remoteGeology = {{planet, 1, state.turn - 2, {20, 50, 90}}};
+    state.unknownObjects = {{7, {410, 12}, UnknownObjectKind::IonVortex},
+        {8, {980, 5}, UnknownObjectKind::RogueComet, false, {1.25, 0.75}}};
+    state.nextUnknownObjectId = 9;
+
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    const auto save = directory.filePath("exploration.suns");
+    const auto orders = directory.filePath("relay.sunsorders");
+    QString error;
+    SaveGameData loaded;
+    assert(write_save_game_file(save, host, error) && read_save_game_file(save, loaded, error));
+    assert(loaded.state.unknownObjects[0].kind == UnknownObjectKind::IonVortex
+        && loaded.state.unknownObjects[1].velocity == Position(1.25, 0.75));
+    assert(loaded.state.fleets.front().pendingCommands.front().probe->program.deployRelay);
+    assert(known_remote_geology(loaded.state, 1, planet)->bandLower.germanium == 90);
+    const TurnOrderFileData authored{17, state.turn, 31, {1, {order}}, {"Anchor as relay"}};
+    TurnOrderFileData decoded;
+    assert(write_turn_order_file(orders, authored, error) && read_turn_order_file(orders, decoded, error));
+    assert(std::get<SetProbeProgramOrder>(decoded.orders.orders.front()).program.deployRelay);
+    assert(validate_turn_submission(host, decoded).isEmpty());
+
+    if (!write_save_game_file(save, make_player_turn(host, 1), error) || !read_save_game_file(save, loaded, error)) {
+        std::cerr << error.toStdString() << '\n';
+        assert(false);
+    }
+    assert(loaded.state.unknownObjects.empty() && loaded.state.fleets.front().pendingCommands.empty());
+    const auto display = mineral_display_data(loaded.state, loaded.state, 1, planet);
+    assert(display.remoteGeology && !display.concentration && !display.stock);
+    MineralStockPanel panel(nullptr);
+    panel.setMinerals(display, state.turn);
+    const auto* label = panel.findChild<QLabel*>("mineralStockAge");
+    assert(label->text().contains("Remote geology") && label->text().contains("20–30%"));
+    assert(!known_remote_geology(make_player_view(state, 2).state, 2, planet));
+}
 }
 int main(int argc, char** argv)
 {
@@ -170,5 +221,6 @@ int main(int argc, char** argv)
     MainWindow w; w.installSurveyProbes();
     w.findChild<QDockWidget*>("surveyProbesDock")->show();
     stop_before_first_programme_confirmation(w); ui_and_catalogs(w);
+    exploration_evidence_and_relay_orders_roundtrip(w);
     std::cout << "Probe UI, catalogs, frozen exports, save/load and PBEM passed\n";
 }

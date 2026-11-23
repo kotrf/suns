@@ -19,6 +19,7 @@ struct ScannerTechnology {
     MineralCargo minerals;
     std::uint32_t cost;
     bool superStealth{};
+    double geologicalRange{};
 };
 
 [[nodiscard]] std::span<const ScannerTechnology> scanner_technologies();

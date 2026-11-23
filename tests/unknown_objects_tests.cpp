@@ -37,6 +37,36 @@ void generation_is_rare_stable_and_separate_from_player_knowledge()
     const auto player=make_player_view(a,1).state;
     assert(player.unknownObjects.empty() && player.nextUnknownObjectId==1 && player.players[0].objectKnowledge.empty());
 }
+void vortices_and_comets_have_distinct_observed_effects()
+{
+    const auto generated = generate_game(GalaxyConfig{30, 120, 1300, 900, 25});
+    auto replay = generated;
+    advance_unknown_objects(replay);
+    for (const auto kind : {UnknownObjectKind::IonVortex, UnknownObjectKind::RogueComet}) {
+        const auto it = std::find_if(generated.unknownObjects.begin(), generated.unknownObjects.end(),
+            [&](const auto& object) { return object.kind == kind; });
+        assert(it != generated.unknownObjects.end() && unknown_object_valid(*it));
+        const auto& following = replay.unknownObjects[std::size_t(it - generated.unknownObjects.begin())];
+        assert((following.position != it->position) == (kind == UnknownObjectKind::RogueComet));
+    }
+    assert(unknown_object_research_field(UnknownObjectKind::RogueComet) == ResearchField::Propulsion);
+
+    auto state = fixture();
+    auto& vortex = state.unknownObjects.front();
+    vortex.kind = UnknownObjectKind::IonVortex;
+    state.fleets.front().position = {401, 7};
+    assert(sensor_interference(state, 1, state.fleets.front().position) == kIonVortexInterference);
+    assert(sensor_interference(make_player_view(state, 1).state, 1, state.fleets.front().position) == 0);
+    observe_unknown_objects(state, state.turn);
+    const auto& report = state.players.front().pendingPlayerReports.front();
+    assert(report.objectObservation->kind == UnknownObjectKind::IonVortex && report.deliveryTurn > state.turn);
+    state.turn = report.deliveryTurn;
+    (void)deliver_due_player_reports(state);
+    const auto player = make_player_view(state, 1).state;
+    assert(player.unknownObjects.empty());
+    assert(sensor_interference(player, 1, state.fleets.front().position) == kIonVortexInterference);
+    assert(sensor_interference(player, 1, {450, 7}) == 0);
+}
 void detection_is_an_uncertain_immutable_delayed_observation()
 {
     auto s=fixture(); observe_unknown_objects(s,10);
@@ -148,6 +178,7 @@ void uncertain_areas_require_appropriate_scanners()
 
 int main()
 {
+    vortices_and_comets_have_distinct_observed_effects();
     uncertain_areas_require_appropriate_scanners();
     computer_expeditions_use_received_positions_and_ordinary_orders();
     generation_is_rare_stable_and_separate_from_player_knowledge(); detection_is_an_uncertain_immutable_delayed_observation();

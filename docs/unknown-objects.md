@@ -38,6 +38,20 @@ conditions. Native stations additionally require Normal support. Lost or consume
 specimens never regenerate; the planetoid continues moving after recovery.
 These rewards and rarity are prototype balance.
 
+Two further rare anomalies use independent streams on newly generated maps.
+An **Ion vortex** is stationary and reduces local sensor range by 30% within
+18 ly. Field research gives 32 Energy RP and a physical specimen of ionized
+dust can be recovered after study. A **Rogue comet** drifts 1.25 ly/year on the
+horizontal axis and 0.75 ly/year on the vertical axis, with seeded signs and
+dated courses. Field research gives 40 Propulsion RP. Its one 5 kt specimen
+of cometary condensate gives 80 Propulsion RP on analysis or supplies +4/year
+when retained under the standard colony and focus rules.
+
+The vortex starts at 64 stars on one in seven seeds and the comet at 96 stars
+on one in nine. Both obey the ordinary placement clearance. Existing campaigns
+keep their generated landmarks. On maps and in the expedition journal, their
+names and properties become available after the classified report is received.
+
 Active fleet scanners and built colony radars can detect objects within their
 ordinary, interference-adjusted sensor range. Orbit-only scanners have a 1 ly local
 investigation envelope. Passive/silent scanners do not actively survey objects.
@@ -144,7 +158,7 @@ coverage, corrections and review status.
 richer discovery outcomes. The drifting hulk adds one globally finite architectural
 core: analyze for80 Construction RP or retain its+4 Construction RP/year capability
 after physical delivery. The received object journal acts as its learned reference;
-it never exposes the current stock or hidden course. Current formats are save133/orders59/race3. Save130 added the planetoid kind to physical, observed and
+it never exposes the current stock or hidden course. Current formats are save134/orders60/race3. Save134 adds the vortex and comet. Save130 added the planetoid kind to physical, observed and
 specimen records. Both moving kinds carry their existing velocity payload shape;
 older static/derelict layouts and IDs remain unchanged. Version129 rejects the
 new kind; older campaigns load without generating planetoids. Recovery orders

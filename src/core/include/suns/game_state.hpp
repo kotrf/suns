@@ -18,7 +18,9 @@ using OrbitalStationId = std::uint32_t;
 using WormholeEndpointId = std::uint32_t;
 using UnknownObjectId = std::uint32_t;
 
-enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant, DriftingDerelict, RoguePlanetoid };
+enum class UnknownObjectKind : std::uint8_t {
+    AncientProbe, CompactRemnant, DriftingDerelict, RoguePlanetoid, IonVortex, RogueComet
+};
 enum class ObjectKnowledgeLevel : std::uint8_t { Detected, Classified, Studied };
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
@@ -400,9 +402,10 @@ enum class ShipComponentType {
     AdvancedRadiationScreen,
     SensorArrayKit,
     CargoCacheKit,
+    GeologicalScanner,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::CargoCacheKit;
+inline constexpr auto kLastShipComponent = ShipComponentType::GeologicalScanner;
 
 enum class ShipComponentKind {
     Engine,
@@ -840,6 +843,13 @@ struct SurfaceMineralObservation {
     bool finalSurface{}; // Post-mining/cargo evidence supersedes the same year's arrival scan.
 };
 
+struct RemoteGeologyObservation {
+    PlanetId planet{};
+    FleetId source{};
+    std::uint64_t observedTurn{};
+    MineralCargo bandLower; // Percentage points in ten-point bands.
+};
+
 struct PlanetSurveySnapshot {
     // Basic scans contain only a frozen rough Hab estimate. Orbital scans
     // retain the scalar baseline and environmental axes for known-cycle forecasts.
@@ -955,6 +965,7 @@ enum class PlayerReportKind {
     NativeOrbitalSupportRestored,
     NativeOrbitalReserveUsed,
     NativeOrbitalSupportFailure,
+    RemoteGeologyObserved,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1496,6 +1507,7 @@ struct Player {
     std::vector<MediumObservation> mediumKnowledge;
     std::vector<std::uint64_t> receivedScientificData; // Sorted durable delivery receipts.
     std::vector<StationDestructionObservation> stationDestructions; // Sorted by station ID; delivered only.
+    std::vector<RemoteGeologyObservation> remoteGeology; // Sorted by PlanetId; delivered only.
 };
 
 enum class FleetRole {
@@ -1656,7 +1668,10 @@ struct MobileBaseProgram {
 
 enum class ProbeFlightMode : std::uint8_t { SafeCruise, Economical };
 enum class ProbeAction : std::uint8_t { Configure, Stop, Resume, UpdateKnowledge };
-enum class ProbeStatus : std::uint8_t { Idle, Travelling, Surveying, Returning, Complete, AwaitingFuel, Damaged, MissingEquipment, ManualPause, Stopped };
+enum class ProbeStatus : std::uint8_t {
+    Idle, Travelling, Surveying, Returning, Complete, AwaitingFuel, Damaged, MissingEquipment, ManualPause, Stopped,
+    DeployingRelay, RelayUnavailable
+};
 struct ProbeProgram {
     Position center;
     double radius{300};
@@ -1666,6 +1681,7 @@ struct ProbeProgram {
     double fuelReserve{20};
     std::uint32_t maxSystems{12}, maxTurns{100};
     bool returnHome{true};
+    bool deployRelay{};
 };
 struct ProbeSurvey {
     StarId star{};

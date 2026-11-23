@@ -31,7 +31,9 @@ ProbeProgram draft(MainWindow& w)
     p.maxWarp = std::uint8_t(w.findChild<QSpinBox*>("probeWarp")->value());
     p.fuelReserve = w.findChild<QDoubleSpinBox*>("probeReserve")->value();
     p.maxSystems = w.findChild<QSpinBox*>("probeSystems")->value(); p.maxTurns = w.findChild<QSpinBox*>("probeYears")->value();
-    p.returnHome = w.findChild<QCheckBox*>("probeReturn")->isChecked(); return p;
+    p.returnHome = w.findChild<QCheckBox*>("probeReturn")->isChecked();
+    p.deployRelay = w.findChild<QCheckBox*>("probeRelay")->isChecked();
+    return p;
 }
 }
 void MainWindow::installSurveyProbes()
@@ -65,6 +67,12 @@ void MainWindow::installSurveyProbes()
     integer("probeWarp", "Maximum Warp", kMaxWarp, 6); real("probeReserve", "Extra fuel reserve", 0, 1e9, 20);
     integer("probeSystems", "Completed targets limit", 1000, 12); integer("probeYears", "Mission years limit", 10000, 100);
     auto* home = new QCheckBox("Return to launch position on completion / fuel limit", body); home->setObjectName("probeReturn"); home->setChecked(true); form->addRow(home);
+    auto* relay = new QCheckBox("Anchor as a relay after the survey", body);
+    relay->setObjectName("probeRelay");
+    relay->setToolTip("Requires one probe with a Deep-space Relay Kit fitted in Ship Designer. The probe becomes a permanent relay with its remaining fuel.");
+    form->addRow(relay);
+    connect(relay, &QCheckBox::toggled, home, [home](bool checked) { if (checked) home->setChecked(false); });
+    connect(home, &QCheckBox::toggled, relay, [relay](bool checked) { if (checked) relay->setChecked(false); });
     layout->addLayout(form);
     auto* row = new QHBoxLayout;
     const auto button = [&](const char* name, const char* label) { auto* b = new QPushButton(label, body); b->setObjectName(name); row->addWidget(b); return b; };
@@ -95,6 +103,8 @@ void MainWindow::installSurveyProbes()
         findChild<QComboBox*>("probeDepth")->setCurrentIndex(findChild<QComboBox*>("probeDepth")->findData(unsigned(p.depth)));
         findChild<QComboBox*>("probeFlight")->setCurrentIndex(int(p.flight)); findChild<QSpinBox*>("probeWarp")->setValue(p.maxWarp);
         findChild<QSpinBox*>("probeSystems")->setValue(p.maxSystems); findChild<QSpinBox*>("probeYears")->setValue(p.maxTurns); findChild<QCheckBox*>("probeReturn")->setChecked(p.returnHome);
+        auto* relay = findChild<QCheckBox*>("probeRelay");
+        relay->setChecked(relay->isEnabled() && p.deployRelay);
     });
     connect(build, &QPushButton::clicked, this, [this, colony] {
         const auto view = make_player_view(state_, pendingOrders_.player).state;
@@ -138,6 +148,9 @@ void MainWindow::refreshSurveyProbes()
     if (colony->findData(oldColony) >= 0) colony->setCurrentIndex(colony->findData(oldColony));
     const auto f = std::find_if(view.fleets.begin(), view.fleets.end(), [&](const auto& f) { return f.id == combo->currentData().toUInt(); });
     const bool exists = f != view.fleets.end(), capable = exists && probe_capable(view, *f);
+    auto* relay = findChild<QCheckBox*>("probeRelay");
+    relay->setEnabled(exists && probe_relay_capable(view, *f));
+    if (!relay->isEnabled()) relay->setChecked(false);
     findChild<QPushButton*>("buildSurveyProbe")->setEnabled(colony->count() && ship_design_available_to_player(view, pendingOrders_.player, basic_survey_probe_design(pendingOrders_.player, view.nextShipDesignId)));
     findChild<QPushButton*>("sendProbeProgram")->setEnabled(capable);
     findChild<QPushButton*>("loadProbeProgram")->setEnabled(exists);

@@ -4,6 +4,7 @@
 namespace suns {
 bool probe_program_valid(const ProbeProgram&);
 bool probe_capable(const GameState&, const Fleet&);
+bool probe_relay_capable(const GameState&, const Fleet&);
 bool submit_probe_command(GameState&, PlayerId, const SetProbeProgramOrder&);
 void apply_probe_command(const GameState&, Fleet&, const ProbeCommand&);
 void pause_probe(Fleet&, ProbeStatus = ProbeStatus::ManualPause);

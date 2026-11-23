@@ -2,7 +2,10 @@
 #include "suns/game_state.hpp"
 namespace suns {
 [[nodiscard]] constexpr bool unknown_object_is_moving(UnknownObjectKind kind) noexcept
-{ return kind==UnknownObjectKind::DriftingDerelict || kind==UnknownObjectKind::RoguePlanetoid; }
+{ return kind==UnknownObjectKind::DriftingDerelict || kind==UnknownObjectKind::RoguePlanetoid
+    || kind==UnknownObjectKind::RogueComet; }
+inline constexpr double kIonVortexRadiusLy = 18.0;
+inline constexpr double kIonVortexInterference = 0.30;
 [[nodiscard]] const char* unknown_object_name(UnknownObjectKind);
 [[nodiscard]] const char* object_knowledge_name(ObjectKnowledgeLevel);
 [[nodiscard]] ResearchField unknown_object_research_field(UnknownObjectKind);

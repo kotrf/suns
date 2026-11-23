@@ -71,7 +71,7 @@ void versioned_orders_and_paused_completed_experiments_roundtrip()
     TurnOrderFileData packet{56,1,17,{1,{test::mega_order(1,E::RadicalTransformation,A::CommitTransformation),test::mega_order(1,E::WormholeExperiment,A::ActivateExperiment)}},{"Commit","Activate"}};
     assert(write_turn_order_file(path,packet,error) && read_turn_order_file(path,decoded,error));
     assert(std::get<SetPlanetaryEngineeringOrder>(decoded.orders.orders.back()).action==A::ActivateExperiment);
-    auto old=bytes(path);assert(quint8(old[7])==59);old[7]=char(57);raw(path,old);assert(!read_turn_order_file(path,decoded,error));
+    auto old=bytes(path);assert(quint8(old[7])==60);old[7]=char(57);raw(path,old);assert(!read_turn_order_file(path,decoded,error));
     auto invalid=packet;std::get<SetPlanetaryEngineeringOrder>(invalid.orders.orders.front()).kind=E::WormholeExperiment;
     assert(!write_turn_order_file(path,invalid,error));
     auto s=test::megaproject_fixture();test::prepare_megaproject(s,E::RadicalTransformation);
@@ -79,7 +79,7 @@ void versioned_orders_and_paused_completed_experiments_roundtrip()
     assert(apply_planetary_engineering_order(s,s.planets.front(),test::mega_order(1,E::RadicalTransformation,A::Pause)));
     auto h=host(s);SaveGameData loaded;assert(write_save_game_file(save,h,error) && read_save_game_file(save,loaded,error));
     assert(loaded.state.planets.front().engineering.transformation.paused && loaded.state.planets.front().engineering.transformation.shelterCapacity==s.planets.front().population);
-    old=bytes(save);assert(quint8(old[7])==133);old[7]=char(131);raw(save,old);assert(!read_save_game_file(save,loaded,error));
+    old=bytes(save);assert(quint8(old[7])==134);old[7]=char(131);raw(save,old);assert(!read_save_game_file(save,loaded,error));
     h.state.planets.front().engineering.transformation.years=30;assert(!write_save_game_file(save,h,error));
     assert(apply_planetary_engineering_order(s,s.planets.front(),test::mega_order(1,E::RadicalTransformation,A::StartOrResume)));
     while(surface_sheltered(s.planets.front()))s=TurnProcessor{}.process(s,{});
