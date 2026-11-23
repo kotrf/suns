@@ -113,6 +113,8 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::InterstellarMediumObserved: return GameEventKind::InterstellarMediumObserved;
     case PlayerReportKind::StargateTransit: return GameEventKind::StargateTransit;
     case PlayerReportKind::StargateTransitFailed: return GameEventKind::StargateTransitFailed;
+    case PlayerReportKind::MobileStargateTransit: return GameEventKind::MobileStargateTransit;
+    case PlayerReportKind::MobileStargateTransitFailed: return GameEventKind::MobileStargateTransitFailed;
     case PlayerReportKind::OutpostDeployed: return GameEventKind::OutpostDeployed;
     case PlayerReportKind::OutpostDeploymentFailed: return GameEventKind::OutpostDeploymentFailed;
     case PlayerReportKind::EngineeringProgress: return GameEventKind::EngineeringProgress;
@@ -143,7 +145,8 @@ GameEventSeverity event_severity(PlayerReportKind kind)
         || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
     return kind == PlayerReportKind::OrbitalBaseStatus || kind == PlayerReportKind::EngineeringPaused || kind == PlayerReportKind::OutpostDeploymentFailed || kind == PlayerReportKind::OutpostFuelExhausted
-            || kind == PlayerReportKind::StargateTransitFailed || kind == PlayerReportKind::EnemyFleetDetected
+            || kind == PlayerReportKind::StargateTransitFailed || kind == PlayerReportKind::MobileStargateTransitFailed
+            || kind == PlayerReportKind::EnemyFleetDetected
             || kind == PlayerReportKind::FleetStalledForFuel
             || kind == PlayerReportKind::FleetTargetLost
             || kind == PlayerReportKind::ProductionWaitingForMinerals
@@ -216,6 +219,7 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     // A receiving colony gets one aggregated freight report per year.
     // The manifest is part of the stable identity even when replaying a turn.
     if (report.kind == PlayerReportKind::FreightDelivered || report.kind == PlayerReportKind::StargateTransit
+        || report.kind == PlayerReportKind::MobileStargateTransit
         || report.kind == PlayerReportKind::RemoteMiningOutput
         || report.kind == PlayerReportKind::NativeOrbitalRadiationLoss
         || report.kind == PlayerReportKind::NativeOrbitalSupportRestored || report.kind == PlayerReportKind::NativeOrbitalReserveUsed

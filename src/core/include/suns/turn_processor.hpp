@@ -155,6 +155,7 @@ struct GateFleetOrder {
     PlanetId destination{};
     bool resonant{}; // Optional paid xenocrystal pulse; doubles finite range only.
 };
+struct MobileGateOrder { FleetId fleet{}; MobileGateTransit transit; };
 
 struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; UnknownObjectId recoveryTarget{}; };
 struct SetFleetElectronicsOrder { FleetId fleet{}; ElectronicsProgram program; };
@@ -249,7 +250,7 @@ using Order = std::variant<
     EncounterVisitorOrder,
     OrbitalBaseOrder,
     SetTransportLineOrder,
-    AssignTransportLineOrder, DeleteShipDesignOrder, RefitShipOrder, SetFleetBattlePlanOrder>;
+    AssignTransportLineOrder, DeleteShipDesignOrder, RefitShipOrder, SetFleetBattlePlanOrder, MobileGateOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

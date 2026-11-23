@@ -188,6 +188,12 @@ bool stargate_station_available(const GameState& s, PlayerId owner, PlanetId id)
         && gate && player && (!gate->specialistOnly
             || player->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
 }
+bool stargate_cargo_allowed(const GameState& s, const Fleet& fleet)
+{
+    const auto* player = find_player(s, fleet.owner);
+    return player && (player->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
+        || (!fleet.colonists && mineral_cargo_mass(fleet.minerals) <= 0.000001 && !fleet.xenocrystal));
+}
 std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId fleetId,
     PlanetId source, PlanetId destination, bool resonant, bool onboard)
 {
@@ -216,9 +222,7 @@ std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId 
         return "A live command link and no commands in transit are required.";
     if (fleet->lastMovedTurn > s.turn) return "A gate hop requires a separate movement year.";
     if (fleet->damagePercent >= 100) return "An immobilized fleet cannot transit.";
-    const auto* player = find_player(s, owner);
-    if (player->race.primaryTrait != PrimaryRaceTrait::StargateSpecialist
-        && (fleet->colonists || mineral_cargo_mass(fleet->minerals) > 0.000001 || fleet->xenocrystal))
+    if (!stargate_cargo_allowed(s, *fleet))
         return "Generalist gates cannot transport cargo or colonists.";
     const auto* from = station_stargate(*find_orbital_station_at_planet(s, source));
     const auto* to = station_stargate(*find_orbital_station_at_planet(s, destination));

@@ -78,6 +78,8 @@ enum class GameEventKind {
     NativeOrbitalReserveUsed,
     NativeOrbitalSupportFailure,
     RemoteGeologyObserved,
+    MobileStargateTransit,
+    MobileStargateTransitFailed,
 };
 
 inline constexpr bool is_visitor_event(GameEventKind kind)

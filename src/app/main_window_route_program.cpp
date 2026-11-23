@@ -167,7 +167,7 @@ std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const Playe
         [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
     if (actual != state.fleets.end()) {
         for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
-            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor || it->orbitalBase) continue;
+            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor || it->orbitalBase || it->mobileGate) continue;
             const auto& command = it->program;
             return MoveFleetOrder{fleet.id, command.destination, command.warp,
                 command.arrivalAction, command.queuedWaypoints, command.repeatOrders,
@@ -1064,6 +1064,12 @@ void MainWindow::stageFleetMove(MoveFleetOrder route, const QString& description
 {
     const auto id = route.fleet;
     auto& orders = pendingOrders_.orders;
+    for (std::size_t index = orders.size(); index-- > 0;) {
+        const auto* jump = std::get_if<MobileGateOrder>(&orders[index]);
+        if (!jump || jump->fleet != id) continue;
+        orders.erase(orders.begin() + index);
+        pendingDescriptions_.removeAt(static_cast<qsizetype>(index));
+    }
     for (std::size_t index = orders.size(); index-- > 0;) {
         const auto& order = orders[index];
         // Keep the route state that earlier commands relied on, including

@@ -2,7 +2,10 @@
 #include "suns/communications.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/deep_space.hpp"
+#include "suns/player_knowledge.hpp"
 #include "suns/propulsion.hpp"
+#include "suns/stations.hpp"
+#include "suns/survey_probes.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/ship_refit.hpp"
 #include <algorithm>
@@ -29,6 +32,36 @@ double service_modules(const GameState& state, const Fleet& fleet, ShipComponent
             count += std::count(design->components.begin(), design->components.end(), type) * stack.count;
     return count;
 }
+
+bool has_route(const Fleet& fleet)
+{
+    return fleet.destination || fleet.targetFleet || !fleet.waypointQueue.empty() || fleet.repeatOrders;
+}
+
+std::string gate_endpoint_error(const GameState& state, PlayerId owner, const GateEndpoint& endpoint,
+    double distance, double mass)
+{
+    auto range = kExpeditionGateRangeLy;
+    auto capacity = kExpeditionGateMassKt;
+    if (endpoint.base) {
+        const auto* base = find_service_fleet(state, endpoint.base);
+        if (!base || base->owner != owner || !same_position(base->position, endpoint.position))
+            return "Base is unavailable at the ordered position.";
+        if (const auto error = mobile_base_gate_error(state, *base); !error.empty()) return error;
+    } else {
+        const auto* planet = find_planet(state, endpoint.colony);
+        const auto* star = planet ? find_star(state, planet->star) : nullptr;
+        if (!star || !same_position(star->position, endpoint.position)
+            || !stargate_station_available(state, owner, endpoint.colony))
+            return "Orbital gate is unavailable at the ordered position.";
+        const auto* spec = station_stargate(*find_orbital_station_at_planet(state, endpoint.colony));
+        range = spec->rangeLy;
+        capacity = spec->maximumMassKt;
+    }
+    if (range > 0 && distance > range) return "Distance exceeds the gate's range.";
+    if (capacity > 0 && mass > capacity) return "Loaded gross fleet mass exceeds the gate's limit.";
+    return {};
+}
 }
 double fleet_dry_mass(const GameState& state, const Fleet& fleet)
 {
@@ -49,6 +82,23 @@ bool mobile_base_dock(const GameState& state, const Fleet& fleet)
 {
     if (fleet.outpost == OutpostKind::OrbitalShipyard || fleet_construction_kit(state,fleet)==OutpostKind::OrbitalShipyard) return true;
     return fleet.outpost == OutpostKind::None && service_modules(state, fleet, ShipComponentType::ExpeditionDock) > 0;
+}
+bool mobile_base_gate(const GameState& state, const Fleet& fleet)
+{
+    return fleet.outpost == OutpostKind::None && service_modules(state, fleet, ShipComponentType::ExpeditionStargate) > 0;
+}
+std::string mobile_base_gate_error(const GameState& state, const Fleet& fleet)
+{
+    if (!mobile_base_gate(state, fleet)) return "Expedition Stargate required.";
+    if (!fleet.mobileBase.enabled) return "External services disabled.";
+    if (!std::isfinite(fleet.damagePercent) || fleet.damagePercent >= 100) return "Base immobilized by damage.";
+    if (fleet.lastMovedTurn > state.turn || has_route(fleet) || fleet.task != FleetTask::None)
+        return "Base must be stationary and idle throughout the jump year.";
+    const auto reserve = fleet.mobileBase.fuelReserve;
+    if (!std::isfinite(fleet.fuel) || !std::isfinite(reserve) || reserve < 0
+        || fuel_in_complete_containers(fleet.fuel - reserve) < kExpeditionGateFuelMg)
+        return "Base needs 10 mg of fuel above its reserve.";
+    return {};
 }
 double mobile_base_repair_capacity(const GameState& state, const Fleet& fleet)
 {
@@ -71,14 +121,15 @@ std::string mobile_base_service_error(const GameState& state, const Fleet& fleet
     if (!fleet.mobileBase.enabled) return "External services disabled";
     if (fleet.damagePercent >= 100) return "Base immobilized by damage";
     if (fleet.lastMovedTurn >= serviceTurn) return "Base moved this year; docking starts next year";
-    if (fleet.destination || fleet.targetFleet || !fleet.waypointQueue.empty() || fleet.repeatOrders)
+    if (has_route(fleet))
         return "Base has an active route";
     return {};
 }
 bool submit_mobile_base_command(GameState& state, PlayerId player, FleetId id, const MobileBaseProgram& program)
 {
     auto* fleet = client_fleet(state, id);
-    if (!fleet || fleet->owner != player || !mobile_base_dock(state, *fleet) || !mobile_base_program_valid(program)) return false;
+    if (!fleet || fleet->owner != player || !mobile_base_program_valid(program)
+        || (!mobile_base_dock(state, *fleet) && !mobile_base_gate(state, *fleet))) return false;
     record_command_transmission(state, player, fleet->position, state.turn);
     const auto delay = communication_delay_turns(state, player, fleet->position);
     if (!delay) fleet->mobileBase = program;
@@ -88,6 +139,85 @@ bool submit_mobile_base_command(GameState& state, PlayerId player, FleetId id, c
         fleet->pendingCommands.push_back(std::move(command));
     }
     return true;
+}
+bool mobile_gate_transit_valid(const MobileGateTransit& transit)
+{
+    const auto valid_endpoint = [](const GateEndpoint& endpoint) {
+        return (bool(endpoint.colony) != bool(endpoint.base))
+            && std::isfinite(endpoint.position.x) && std::isfinite(endpoint.position.y);
+    };
+    const auto& [source, destination] = transit;
+    return valid_endpoint(source) && valid_endpoint(destination) && (source.base || destination.base)
+        && (!source.base || source.base != destination.base)
+        && (!source.colony || source.colony != destination.colony)
+        && !same_position(source.position, destination.position);
+}
+std::string mobile_gate_transit_error(const GameState& state, const Fleet& fleet, const MobileGateTransit& transit)
+{
+    if (!mobile_gate_transit_valid(transit)) return "Two distinct gates, including an Expedition Stargate, are required.";
+    if (fleet.id == transit.source.base || fleet.id == transit.destination.base || fleet.outpost != OutpostKind::None)
+        return "A deployed outpost or either endpoint fleet cannot make this jump.";
+    if (!same_position(fleet.position, transit.source.position) || has_route(fleet) || fleet.task != FleetTask::None)
+        return "Fleet must be idle at the source gate with no route or work task.";
+    if (fleet.lastMovedTurn > state.turn) return "A gate hop requires a separate movement year.";
+    if (!std::isfinite(fleet.damagePercent) || fleet.damagePercent >= 100) return "An immobilized fleet cannot transit.";
+    if (!stargate_cargo_allowed(state, fleet)) return "Generalist gates cannot transport cargo or colonists.";
+    const auto mass = fleet_gross_mass(state, fleet);
+    const auto distance = distance_between(transit.source.position, transit.destination.position);
+    if (!std::isfinite(mass) || !std::isfinite(distance)) return "Invalid fleet mass or distance.";
+    if (const auto error = gate_endpoint_error(state, fleet.owner, transit.source, distance, mass); !error.empty())
+        return "Source: " + error;
+    if (const auto error = gate_endpoint_error(state, fleet.owner, transit.destination, distance, mass); !error.empty())
+        return "Destination: " + error;
+    return {};
+}
+bool submit_mobile_gate_command(GameState& state, PlayerId player, const MobileGateOrder& order)
+{
+    auto* fleet = client_fleet(state, order.fleet);
+    if (!fleet || fleet->owner != player || fleet->outpost != OutpostKind::None
+        || !mobile_gate_transit_valid(order.transit)) return false;
+    record_command_transmission(state, player, fleet->position, state.turn);
+    const auto delay = communication_delay_turns(state, player, fleet->position);
+    if (!delay) fleet->mobileGate = order.transit;
+    else {
+        PendingFleetCommand command;
+        command.issuedTurn = state.turn;
+        command.deliveryTurn = state.turn + delay;
+        command.mobileGate = order.transit;
+        fleet->pendingCommands.push_back(std::move(command));
+    }
+    return true;
+}
+void resolve_mobile_gate_transits(GameState& state)
+{
+    std::vector<Fleet*> jumps;
+    for (auto& fleet : state.fleets) if (fleet.mobileGate) jumps.push_back(&fleet);
+    std::sort(jumps.begin(), jumps.end(), [](const auto* a, const auto* b) { return a->id < b->id; });
+    for (auto* fleet : jumps) {
+        const auto transit = *fleet->mobileGate;
+        fleet->mobileGate.reset();
+        const bool success = mobile_gate_transit_error(state, *fleet, transit).empty();
+        const auto& endpoint = success ? transit.destination : transit.source;
+        const auto* planet = endpoint.colony ? find_planet(state, endpoint.colony) : nullptr;
+        const auto* star = planet ? find_star(state, planet->star) : nullptr;
+        std::uint32_t fuelContainersSpent = 0;
+        if (success) {
+            for (auto id : {transit.source.base, transit.destination.base}) if (id) {
+                auto& base = *client_fleet(state, id);
+                base.fuel = fuel_after_consumption(base.fuel, kExpeditionGateFuelMg);
+                fuelContainersSpent += static_cast<std::uint32_t>(fuel_containers_required(kExpeditionGateFuelMg));
+            }
+            fleet->position = endpoint.base ? find_service_fleet(state, endpoint.base)->position : star->position;
+            fleet->lastMovedTurn = state.turn + 1;
+            fleet->fuelStalled = false;
+            pause_probe(*fleet);
+            fleet->visitor = {};
+        }
+        const bool atColony = planet && planet->owner == fleet->owner && star && same_position(star->position, fleet->position);
+        queue_player_report(state, fleet->owner, success ? PlayerReportKind::MobileStargateTransit : PlayerReportKind::MobileStargateTransitFailed,
+            fleet->position, state.turn + 1, atColony ? star->id : 0, atColony ? planet->id : 0, fleet->id, 0,
+            ProductionKind::ColonyShip, fuelContainersSpent, ResearchField::Electronics, 0, fleet->minerals, fleet->colonists);
+    }
 }
 bool transfer_mobile_base_fuel(GameState& state, PlayerId player, const TransferFleetFuelOrder& order, std::uint64_t serviceTurn)
 {

@@ -132,7 +132,7 @@ std::optional<FleetId> transport_manual_override(const Order& order) {
         if constexpr(std::is_same_v<T,MoveFleetOrder> || std::is_same_v<T,SetFleetTaskOrder>
             || std::is_same_v<T,SetRemoteMiningOrder> || std::is_same_v<T,SetProbeProgramOrder>
             || std::is_same_v<T,EncounterVisitorOrder> || std::is_same_v<T,ColonizePlanetOrder>
-            || std::is_same_v<T,GateFleetOrder>)return value.fleet;
+            || std::is_same_v<T,GateFleetOrder> || std::is_same_v<T,MobileGateOrder>)return value.fleet;
         return {};
     },order);
 }

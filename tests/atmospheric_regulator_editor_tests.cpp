@@ -58,9 +58,9 @@ void versioned_kinds_and_unrelated_target_bytes_are_strict()
     assert(write_turn_order_file(path,packet,error) && read_turn_order_file(path,decoded,error));
     assert(std::get<SetPlanetaryEngineeringOrder>(decoded.orders.orders.front()).targetRadiation==0);
     assert(std::get<SetPlanetaryEngineeringOrder>(decoded.orders.orders.back()).targetRadiation==100);
-    auto old=bytes(path);assert(quint8(old[7])==60);old[7]=char(56);raw(path,old);assert(!read_turn_order_file(path,decoded,error));
+    auto old=bytes(path);assert(quint8(old[7])==61);old[7]=char(56);raw(path,old);assert(!read_turn_order_file(path,decoded,error));
     auto h=host();assert(apply_planetary_engineering_order(h.state,h.state.planets.front(),test::atmospheric_order(1,A::StartOrResume)));
-    assert(write_save_game_file(save,h,error));old=bytes(save);assert(quint8(old[7])==134);old[7]=char(130);raw(save,old);
+    assert(write_save_game_file(save,h,error));old=bytes(save);assert(quint8(old[7])==135);old[7]=char(130);raw(save,old);
     assert(!read_save_game_file(save,loaded,error));
     for(unsigned invalid=0;invalid<3;++invalid) {
         auto bad=packet;auto& order=std::get<SetPlanetaryEngineeringOrder>(bad.orders.orders.front());
