@@ -588,11 +588,11 @@ CommunicationRoute route_with_interference(const GameState& state, PlayerId play
             return field.capital && same_position(position, field.position);
         })) return {SignalChannel::Fast, position, position, 0, jamDelay};
 
-    // A colony without its capital radar has no instant route. Synthetic
-    // ship-only combat scenarios have no colony/root and resolve onboard
-    // orders locally, without a fictitious distant receiver.
+    // The capital's receiver still anchors slow routes while jammed. Use the
+    // legacy fallback only when the capital has no radar field at all.
+    // Ship-only combat scenarios resolve onboard orders locally.
     if (std::none_of(fields.begin(), fields.end(), [](const CommunicationField& field) {
-            return field.connected;
+            return field.capital;
         })) {
         const bool hasColony = std::any_of(state.planets.begin(), state.planets.end(),
             [&](const Planet& planet) { return planet.owner == player && total_colony_population(planet) > 0; });

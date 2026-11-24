@@ -39,8 +39,10 @@ An active hostile [Area Jammer](strategic-operations.md#area-jammer) disables
 fast radio at ships, colonies and relays within 90 ly. A clean route can use
 other relays. A jammed endpoint uses the ordinary slow hop between physical
 radios at 150 ly/year. A jammed homeworld continues to receive slow packets
-and share data locally with fleets in orbit. Packets already in flight keep
-their scheduled delivery.
+and share data locally with fleets in orbit. A fleet outside the field can use
+its own fast relay chain before the slow hop to that homeworld. Flyby reports
+choose their route from the shared end positions of simultaneous fleet legs.
+Packets already in flight keep their scheduled delivery.
 
 Ships and colonies report jamming and its clearance through their usual
 communications. The player sees the observed year and position of their own

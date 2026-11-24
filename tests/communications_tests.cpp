@@ -701,6 +701,46 @@ void area_jammer_station_limits_detection_and_emits()
     assert(std::abs(strategic_sensor_range(s, scout(s)) - fleet_sensor_range(s, scout(s))) < 1e-6);
 }
 
+void slow_hop_to_jammed_capital_keeps_the_fleets_relay_chain()
+{
+    auto state = area_jammer_fixture();
+    const Position capital{0, 0}, nearRelay{140, 0}, farRelay{400, 0}, observerPosition{480, 0};
+    state.fleets.back().position = {-50, 0};
+    auto& observer = scout(state);
+    observer.position = observerPosition;
+    observer.telemetry.position = observerPosition;
+    const auto observerId = observer.id;
+    state.shipDesigns.push_back({201, 1, "Relay", ShipHullType::Utility,
+        {ShipComponentType::QuickJump5, ShipComponentType::RelayArray}});
+    for (const auto position : {nearRelay, farRelay}) {
+        Fleet relay;
+        relay.id = state.nextFleetId++;
+        relay.owner = 1;
+        relay.design = 201;
+        relay.position = position;
+        state.fleets.push_back(relay);
+    }
+
+    const auto route = communication_route(state, 1, observerPosition);
+    assert(route.channel == SignalChannel::Slow && route.transmitter == nearRelay && route.receiver == capital);
+    assert(route.propagationTurns == 1 && communication_delay_turns(state, 1, observerPosition) == 1);
+    assert(communication_delay_turns(state, 1, capital) == 0);
+
+    const TurnProcessor processor;
+    const MoveFleetOrder move{observerId, {484, 0}, 2};
+    auto issued = processor.process(state, {{1, {move}}});
+    assert(scout(issued).position == observerPosition && scout(issued).destination == move.destination);
+    assert(std::any_of(issued.emissions.begin(), issued.emissions.end(), [&](const auto& pulse) {
+        return pulse.owner == 1 && pulse.emittedTurn == issued.turn && pulse.channel == SignalChannel::Slow
+            && pulse.position == nearRelay;
+    }));
+    auto next = processor.process(issued, {});
+    assert(scout(next).position == move.destination);
+
+    state.fleets.pop_back();
+    assert(communication_delay_turns(state, 1, observerPosition) == 4);
+}
+
 void area_jammer_reports_and_packets_follow_the_slow_route()
 {
     auto s = area_jammer_fixture();
@@ -789,6 +829,7 @@ int main()
     merged_fleet_keeps_unsent_observations();
     area_jammers_disconnect_receivers_and_relays();
     area_jammer_station_limits_detection_and_emits();
+    slow_hop_to_jammed_capital_keeps_the_fleets_relay_chain();
     area_jammer_reports_and_packets_follow_the_slow_route();
     std::cout << "communications tests passed\n";
     return 0;

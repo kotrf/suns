@@ -229,6 +229,59 @@ void flyby_uses_area_jamming_at_the_observation_point()
     assert(surveyed(state)); // The scanner can reach the star from outside the field.
 }
 
+void flyby_dispatch_uses_the_jammers_completed_movement()
+{
+    const Position start{60, 0}, end{85, 0};
+    const Position jammerClear{130, 90}, jammerNear{130, 65};
+    auto state = survey_fixture(start, {60, 45}, 10);
+    state.stars.front().position = {110, 0};
+    state.planets.front().radar = PlanetaryRadarLevel::Local;
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.players.push_back({2, "Opposition"});
+    state.shipDesigns.push_back({99, 1, "Scout", ShipHullType::StarsScout,
+        {ShipComponentType::QuickJump5, ShipComponentType::RhinoScanner}});
+    state.shipDesigns.push_back({100, 2, "Jammer", ShipHullType::Destroyer,
+        {ShipComponentType::QuickJump5, ShipComponentType::AreaJammer}});
+    auto& observer = state.fleets.front();
+    observer.design = 99;
+    observer.ships = {{99, 1}};
+    observer.warp = 5;
+    observer.fuel = fleet_fuel_capacity(state, observer);
+    observer.destination = end;
+    Fleet jammer;
+    jammer.id = state.nextFleetId++;
+    jammer.owner = 2;
+    jammer.design = 100;
+    jammer.warp = 5;
+    jammer.fuel = fleet_fuel_capacity(state, jammer);
+    state.fleets.push_back(jammer);
+
+    const TurnProcessor processor;
+    for (const bool swapIds : {false, true}) {
+        for (const bool jamAtEnd : {false, true}) {
+            auto input = state;
+            auto& source = input.fleets.front();
+            auto& hostile = input.fleets.back();
+            if (swapIds) std::swap(source.id, hostile.id);
+            hostile.position = jamAtEnd ? jammerClear : jammerNear;
+            hostile.destination = jamAtEnd ? jammerNear : jammerClear;
+            const auto after = processor.process_with_events(input, {});
+            assert(after.state.fleets.front().position == end);
+            assert(after.state.fleets.back().position == *hostile.destination);
+            assert((survey_level(after.state, 1, 2) >= SurveyLevel::SystemScan) == !jamAtEnd);
+            if (!jamAtEnd) continue;
+
+            const auto& reports = after.state.players.front().pendingSurveyReports;
+            assert(std::any_of(reports.begin(), reports.end(), [&](const auto& report) {
+                return report.star == 2 && report.sourceFleet == source.id
+                    && report.observedTurn == 11 && report.deliveryTurn == 12;
+            }));
+            const auto delivered = processor.process(after.state, {});
+            assert(survey_level(delivered, 1, 2) >= SurveyLevel::SystemScan);
+        }
+    }
+}
+
 void remote_report_remains_in_flight_until_delivery()
 {
     auto state = survey_fixture({420.0, 0.0}, {450.0, 0.0}, 10);
@@ -576,6 +629,7 @@ int main()
     remote_geology_uses_the_actual_flyby_and_delivers_coarse_evidence();
     remote_geology_finds_clear_parts_of_an_interfered_flyby();
     flyby_uses_area_jamming_at_the_observation_point();
+    flyby_dispatch_uses_the_jammers_completed_movement();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_all_survey_stages();
     remote_route_completion_obeys_communications_delay();
