@@ -18,8 +18,8 @@ struct FlightSensorFields {
     std::set<FleetId> recordedFleets;
 };
 
-[[nodiscard]] FlightSensorFields stationary_flight_sensor_fields(const GameState&);
-void record_arriving_fleet_sensor_fields(const GameState&, const Fleet&, std::uint64_t turn, FlightSensorFields&);
+[[nodiscard]] FlightSensorFields stationary_flight_sensor_fields(const GameState&, std::uint64_t turn);
+void record_fleet_sensor_fields(const GameState&, const Fleet&, std::uint64_t turn, FlightSensorFields&);
 void finish_flight_sensor_fields(const GameState&, std::uint64_t turn, FlightSensorFields&);
 [[nodiscard]] double flight_sensor_interference(const FlightSensorFields&, PlayerId, Position);
 [[nodiscard]] std::vector<SensorInterferenceSpan> flight_sensor_interference_spans(

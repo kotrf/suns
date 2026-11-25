@@ -301,7 +301,7 @@ std::vector<SensorInterferenceSpan> interference_spans(Position start, Position 
 
 } // namespace
 
-detail::FlightSensorFields detail::stationary_flight_sensor_fields(const GameState& state)
+detail::FlightSensorFields detail::stationary_flight_sensor_fields(const GameState& state, std::uint64_t turn)
 {
     FlightSensorFields snapshot;
     visit_stationary_sensor_interference(state, std::nullopt, true,
@@ -309,10 +309,14 @@ detail::FlightSensorFields detail::stationary_flight_sensor_fields(const GameSta
             const auto value = strength();
             if (value > 0) snapshot.fields.push_back({owner, center, radius, value});
         });
+    // Arrivals can change the fuel reserve of any deployed outpost. Record
+    // offline outposts too so a later refuel cannot add an earlier field.
+    for (const auto& fleet : state.fleets)
+        if (fleet.outpost != OutpostKind::None) record_fleet_sensor_fields(state, fleet, turn, snapshot);
     return snapshot;
 }
 
-void detail::record_arriving_fleet_sensor_fields(
+void detail::record_fleet_sensor_fields(
     const GameState& state, const Fleet& fleet, std::uint64_t turn, FlightSensorFields& snapshot)
 {
     if (snapshot.recordedFleets.insert(fleet.id).second) append_fleet_sensor_fields(state, fleet, turn, snapshot);

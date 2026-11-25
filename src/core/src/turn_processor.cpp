@@ -1566,7 +1566,7 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     std::vector<ColonyFreightDelivery>& freight, OrbitalDepotRefueling& depotFuel,
     detail::FlightSensorFields* flightFields = nullptr)
 {
-    if (flightFields) detail::record_arriving_fleet_sensor_fields(state, fleet, state.turn + 1, *flightFields);
+    if (flightFields) detail::record_fleet_sensor_fields(state, fleet, state.turn + 1, *flightFields);
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
@@ -1768,7 +1768,6 @@ bool resolve_fleet_target_arrival(
         return true;
     }
     if (action.kind == FleetArrivalActionKind::SupplyOutpost) {
-        if (flightFields) detail::record_arriving_fleet_sensor_fields(state, *target, state.turn + 1, *flightFields);
         (void)transfer_mobile_base_fuel(state, fleet.owner,
             TransferFleetFuelOrder{fleet.id, target->id, std::numeric_limits<double>::max(), action.reserveFuel}, state.turn + 1);
         fleet.arrivalAction.reset();
@@ -2398,7 +2397,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     std::optional<detail::FlightSensorFields> continuationFields;
     if (!state.mediumObserver && std::any_of(resolvedEncounters.begin(), resolvedEncounters.end(),
         [](const auto& encounter) { return encounter.targetRouted; })) {
-        continuationFields = detail::stationary_flight_sensor_fields(state);
+        continuationFields = detail::stationary_flight_sensor_fields(state, state.turn + 1);
     }
     auto* flightFields = continuationFields ? &*continuationFields : nullptr;
 

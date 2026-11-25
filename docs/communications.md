@@ -43,7 +43,8 @@ and share data locally with fleets in orbit. A fleet outside the field can use
 its own fast relay chain, including working colony radars, before the slow hop
 to that homeworld. Observations from the initial flight legs are frozen before
 combat. Observations from continued legs use the jamming fields at the end of
-flight, before arrival actions change the emitters. Ready reports from both
+flight, before arrival actions change the emitters. Deployed outposts keep
+their pre-arrival power state for these observations. Ready reports from both
 phases use the completed radio network for dispatch.
 Packets already in flight keep their scheduled delivery.
 

@@ -426,6 +426,83 @@ void continued_flyby_keeps_interference_from_before_arrival()
     assert(survey_level(processor.process(state, {}), 1, 2) == SurveyLevel::SystemScan);
 }
 
+void continued_flyby_uses_outpost_power_from_before_fuel_arrivals()
+{
+    auto state = rendezvous_survey_fixture();
+    const auto scoutId = state.fleets.front().id;
+    const auto scoutEnd = *state.fleets.front().destination;
+    const Position depotPosition{140, 0};
+    state.shipDesigns.push_back({102, 2, "Jamming depot", ShipHullType::Scout,
+        {ShipComponentType::QuickJump5, ShipComponentType::FuelDepotKit, ShipComponentType::AreaJammer}});
+    auto& depot = state.fleets[1];
+    const auto depotId = depot.id;
+    depot.design = 102;
+    depot.ships = {{102, 1}};
+    depot.position = depotPosition;
+    depot.destination.reset();
+    depot.outpost = OutpostKind::FuelDepot;
+    depot.fuel = 0;
+    add_survey_pursuer(state, 1, scoutId, 99, {62, 0});
+
+    Fleet tanker;
+    tanker.id = state.nextFleetId++;
+    tanker.owner = 2;
+    tanker.design = 101;
+    tanker.position = {140, -25};
+    tanker.destination = depotPosition;
+    tanker.warp = 5;
+    tanker.fuel = 50;
+    const auto tankerIndex = state.fleets.size();
+    state.fleets.push_back(tanker);
+
+    const auto depot_fuel = [&](const GameState& result) {
+        const auto station = std::find_if(result.fleets.begin(), result.fleets.end(),
+            [&](const Fleet& fleet) { return fleet.id == depotId; });
+        assert(station != result.fleets.end());
+        return station->fuel;
+    };
+    const auto report = [&](const GameState& result) {
+        const auto& surveys = result.players.front().pendingSurveyReports;
+        return std::find_if(surveys.begin(), surveys.end(), [&](const auto& reading) {
+            return reading.star == 2 && reading.sourceFleet == scoutId;
+        });
+    };
+    const TurnProcessor processor;
+    const auto noTransfer = processor.process(state, {});
+    assert(depot_fuel(noTransfer) == 0 && survey_level(noTransfer, 1, 2) == SurveyLevel::SystemScan);
+
+    auto shipTarget = state;
+    shipTarget.fleets[tankerIndex].targetFleet = depotId;
+    shipTarget.fleets[tankerIndex].arrivalAction = FleetArrivalAction{FleetArrivalActionKind::SupplyOutpost};
+    auto coordinates = state;
+    coordinates.fleets[tankerIndex].arrivalAction = FleetArrivalAction{FleetArrivalActionKind::SupplyOutpost};
+    const auto suppliedById = processor.process(shipTarget, {});
+    const auto suppliedAtPoint = processor.process(coordinates, {});
+    assert(depot_fuel(suppliedById) > 0 && depot_fuel(suppliedAtPoint) == depot_fuel(suppliedById));
+    for (const auto* supplied : {&suppliedById, &suppliedAtPoint}) {
+        assert(communication_delay_turns(*supplied, 1, scoutEnd) == 1);
+        const auto pending = report(*supplied);
+        assert(pending != supplied->players.front().pendingSurveyReports.end()
+            && pending->observedTurn == 11 && pending->deliveryTurn == 12);
+        assert(survey_level(processor.process(*supplied, {}), 1, 2) == SurveyLevel::SystemScan);
+    }
+
+    auto refuel = state;
+    refuel.fleets[1].fuel = 12;
+    refuel.fleets[tankerIndex].fuel = 20;
+    refuel.fleets[tankerIndex].arrivalAction = FleetArrivalAction{FleetArrivalActionKind::Refuel};
+    const auto emptied = processor.process(refuel, {});
+    assert(depot_fuel(emptied) == 0 && communication_delay_turns(emptied, 1, scoutEnd) == 0);
+    assert(survey_level(emptied, 1, 2) < SurveyLevel::SystemScan);
+    assert(report(emptied) == emptied.players.front().pendingSurveyReports.end());
+
+    shipTarget.fleets[tankerIndex].position = depotPosition;
+    const auto suppliedBeforeFlight = processor.process(shipTarget, {});
+    assert(depot_fuel(suppliedBeforeFlight) > 0);
+    assert(survey_level(suppliedBeforeFlight, 1, 2) < SurveyLevel::SystemScan);
+    assert(report(suppliedBeforeFlight) == suppliedBeforeFlight.players.front().pendingSurveyReports.end());
+}
+
 void flyby_keeps_pre_battle_sensor_readings()
 {
     const Position scoutEnd{85, 0}, jammerPosition{140, 0};
@@ -841,6 +918,7 @@ int main()
     flyby_dispatch_uses_the_jammers_completed_movement();
     flyby_dispatch_waits_for_movement_after_rendezvous();
     continued_flyby_keeps_interference_from_before_arrival();
+    continued_flyby_uses_outpost_power_from_before_fuel_arrivals();
     flyby_keeps_pre_battle_sensor_readings();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_all_survey_stages();
