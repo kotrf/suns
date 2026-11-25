@@ -7,6 +7,8 @@
 
 namespace suns::detail {
 
+struct FlightSensorFields;
+
 // A travelled segment keeps the instruments and source it had during flight.
 struct FleetSensorSweep {
     PlayerId owner{};
@@ -32,7 +34,7 @@ struct FleetSensorReadings {
 [[nodiscard]] std::optional<FleetSensorSweep> prepare_fleet_sensor_sweep(
     GameState&, const Fleet&, Position start, Position end, std::uint64_t turn);
 [[nodiscard]] std::optional<FleetSensorReadings> read_fleet_sensor_sweep(
-    const GameState&, const FleetSensorSweep&, std::uint64_t turn);
+    const GameState&, const FleetSensorSweep&, std::uint64_t turn, const FlightSensorFields* fields = nullptr);
 void dispatch_fleet_sensor_readings(GameState&, FleetSensorReadings&&);
 void read_wormhole_sweep(const GameState&, const FleetSensorSweep&, double effectiveRange, FleetSensorReadings&);
 void dispatch_wormhole_readings(GameState&, const FleetSensorReadings&, const CommunicationRoute&);

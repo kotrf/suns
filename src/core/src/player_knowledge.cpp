@@ -14,6 +14,7 @@
 #include "suns/scanners.hpp"
 #include "suns/deep_space.hpp"
 #include "fleet_sensor_sweep.hpp"
+#include "flight_sensor_fields.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -436,9 +437,19 @@ double sensor_sweep_cloud_slope(const GameState& state)
     return slope;
 }
 
+struct SweepInterference {
+    const detail::FlightSensorFields* fields{};
+    std::optional<std::vector<SensorInterferenceSpan>> spans;
+
+    double strength_at(const GameState& state, PlayerId owner, Position position, std::uint64_t turn) const
+    {
+        return fields ? detail::flight_sensor_interference(*fields, owner, position)
+            : sensor_interference(state, owner, position, turn);
+    }
+};
+
 bool sweep_reaches_target(const GameState& state, const detail::FleetSensorSweep& sweep,
-    Position target, double range, std::uint64_t turn, double cloudSlope,
-    std::optional<std::vector<SensorInterferenceSpan>>& interference)
+    Position target, double range, std::uint64_t turn, double cloudSlope, SweepInterference& interference)
 {
     const auto start = sweep.start, end = sweep.end;
     const double dx = end.x - start.x, dy = end.y - start.y;
@@ -456,14 +467,18 @@ bool sweep_reaches_target(const GameState& state, const detail::FleetSensorSweep
             * medium_active_path_factor(state, sample, target) - distance;
     };
     const auto covered = [&](double t) {
-        return margin(t, range * (1 - sensor_interference(state, sweep.owner, position(t), turn))) >= 0;
+        return margin(t, range * (1 - interference.strength_at(state, sweep.owner, position(t), turn))) >= 0;
     };
     if (covered(closest)) return true;
     if (lengthSquared == 0) return false;
 
-    if (!interference) interference = sensor_interference_spans(state, sweep.owner, start, end, turn);
+    if (!interference.spans) {
+        interference.spans = interference.fields
+            ? detail::flight_sensor_interference_spans(*interference.fields, sweep.owner, start, end)
+            : sensor_interference_spans(state, sweep.owner, start, end, turn);
+    }
     const auto flightLength = std::sqrt(lengthSquared);
-    for (const auto& span : *interference) {
+    for (const auto& span : *interference.spans) {
         const auto localRange = range * (1 - span.strength);
         const auto nearest = std::clamp(projection, span.begin, span.end);
         if (distance_between(position(nearest), target) > localRange) continue;
@@ -508,8 +523,7 @@ double geological_scanner_range(const GameState& state, const Fleet& fleet, std:
 }
 
 void read_remote_geology(const GameState& state, const detail::FleetSensorSweep& sweep, std::uint64_t turn,
-    double cloudSlope, std::optional<std::vector<SensorInterferenceSpan>>& interference,
-    std::vector<PendingPlayerReport>& readings)
+    double cloudSlope, SweepInterference& interference, std::vector<PendingPlayerReport>& readings)
 {
     if (sweep.geologicalRange <= 0) return;
     for (const auto& star : state.stars) {
@@ -577,16 +591,16 @@ std::optional<detail::FleetSensorSweep> detail::prepare_fleet_sensor_sweep(
 }
 
 std::optional<detail::FleetSensorReadings> detail::read_fleet_sensor_sweep(
-    const GameState& state, const FleetSensorSweep& sweep, std::uint64_t turn)
+    const GameState& state, const FleetSensorSweep& sweep, std::uint64_t turn, const FlightSensorFields* fields)
 {
     FleetSensorReadings readings{sweep.owner, sweep.fleet, sweep.end, turn};
+    SweepInterference interference{fields};
     if (!state.wormholes.empty()) {
-        const auto range = sweep.scannerRange.value_or(0.0) * (1 - sensor_interference(state, sweep.owner, sweep.end, turn))
+        const auto range = sweep.scannerRange.value_or(0.0) * (1 - interference.strength_at(state, sweep.owner, sweep.end, turn))
             * medium_active_sensor_factor(state, sweep.end);
         read_wormhole_sweep(state, sweep, range, readings);
     }
     const auto cloudSlope = sensor_sweep_cloud_slope(state);
-    std::optional<std::vector<SensorInterferenceSpan>> interference;
     read_remote_geology(state, sweep, turn, cloudSlope, interference, readings.geology);
 
     if (sweep.scannerRange) {
@@ -693,7 +707,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         const detail::FleetSensorSweep sweep{
             .owner = fleet.owner, .fleet = fleet.id, .start = fleet.position, .end = fleet.position, .geologicalRange = range,
         };
-        std::optional<std::vector<SensorInterferenceSpan>> interference;
+        SweepInterference interference;
         std::vector<PendingPlayerReport> readings;
         read_remote_geology(state, sweep, observationTurn, cloudSlope, interference, readings);
         if (readings.empty()) continue;

@@ -42,9 +42,9 @@ radios at 150 ly/year. A jammed homeworld continues to receive slow packets
 and share data locally with fleets in orbit. A fleet outside the field can use
 its own fast relay chain, including working colony radars, before the slow hop
 to that homeworld. Observations from the initial flight legs are frozen before
-combat. Continued legs after rendezvous produce their own observations.
-Ready reports from both phases use the completed flight phase's radio network
-for dispatch.
+combat. Observations from continued legs use the jamming fields at the end of
+flight, before arrival actions change the emitters. Ready reports from both
+phases use the completed radio network for dispatch.
 Packets already in flight keep their scheduled delivery.
 
 Ships and colonies report jamming and its clearance through their usual

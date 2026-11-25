@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
+#include "suns/communications.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/player_knowledge.hpp"
 
@@ -282,7 +283,7 @@ void flyby_dispatch_uses_the_jammers_completed_movement()
     }
 }
 
-void flyby_dispatch_waits_for_movement_after_rendezvous()
+GameState rendezvous_survey_fixture()
 {
     const Position scoutEnd{85, 0}, jammerEnd{165, 25};
     auto state = survey_fixture({60, 0}, {74, 49.8}, 10);
@@ -302,8 +303,6 @@ void flyby_dispatch_waits_for_movement_after_rendezvous()
     observer.warp = 5;
     observer.fuel = fleet_fuel_capacity(state, observer);
     observer.destination = scoutEnd;
-    const auto observerId = observer.id;
-
     Fleet jammer;
     jammer.id = state.nextFleetId++;
     jammer.owner = 2;
@@ -313,27 +312,38 @@ void flyby_dispatch_waits_for_movement_after_rendezvous()
     jammer.warp = 5;
     jammer.fuel = fleet_fuel_capacity(state, jammer);
     state.fleets.push_back(jammer);
+    return state;
+}
 
-    const auto addPursuer = [](GameState& game, PlayerId owner, FleetId target, ShipDesignId design, Position position) {
-        Fleet pursuer;
-        pursuer.id = game.nextFleetId++;
-        pursuer.owner = owner;
-        pursuer.design = design;
-        pursuer.position = position;
-        pursuer.destination = position;
-        pursuer.targetFleet = target;
-        pursuer.warp = 2;
-        pursuer.fuel = fleet_fuel_capacity(game, pursuer);
-        pursuer.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};
-        game.fleets.push_back(pursuer);
-    };
+void add_survey_pursuer(GameState& state, PlayerId owner, FleetId target, ShipDesignId design, Position position)
+{
+    Fleet pursuer;
+    pursuer.id = state.nextFleetId++;
+    pursuer.owner = owner;
+    pursuer.design = design;
+    pursuer.position = position;
+    pursuer.destination = position;
+    pursuer.targetFleet = target;
+    pursuer.warp = 2;
+    pursuer.fuel = fleet_fuel_capacity(state, pursuer);
+    pursuer.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};
+    state.fleets.push_back(pursuer);
+}
+
+void flyby_dispatch_waits_for_movement_after_rendezvous()
+{
+    const auto state = rendezvous_survey_fixture();
+    const auto observerId = state.fleets.front().id;
+    const auto jammerId = state.fleets.back().id;
+    const auto scoutEnd = *state.fleets.front().destination;
+    const auto jammerEnd = *state.fleets.back().destination;
     const TurnProcessor processor;
     for (const bool mergeScout : {true, false}) {
         for (const bool enemyFirst : {false, true}) {
             auto input = state;
-            if (enemyFirst) addPursuer(input, 2, jammer.id, 101, {165, 48});
-            if (mergeScout) addPursuer(input, 1, observerId, 99, {62, 0});
-            if (!enemyFirst) addPursuer(input, 2, jammer.id, 101, {165, 48});
+            if (enemyFirst) add_survey_pursuer(input, 2, jammerId, 101, {165, 48});
+            if (mergeScout) add_survey_pursuer(input, 1, observerId, 99, {62, 0});
+            if (!enemyFirst) add_survey_pursuer(input, 2, jammerId, 101, {165, 48});
             const auto result = processor.process(input, {});
             assert(result.fleets.size() == 2);
             assert(same_position(result.fleets.front().position, scoutEnd)
@@ -356,12 +366,64 @@ void flyby_dispatch_waits_for_movement_after_rendezvous()
         {ShipComponentType::QuickJump5}});
     laterFit.fleets.front().design = 102;
     laterFit.fleets.front().ships = {{102, 1}};
-    addPursuer(laterFit, 1, observerId, 99, {62, 0});
+    add_survey_pursuer(laterFit, 1, observerId, 99, {62, 0});
     const auto merged = processor.process(laterFit, {});
     assert(merged.fleets.size() == 2 && merged.fleets.front().ships.size() == 2);
     assert(survey_level(merged, 1, 2) < SurveyLevel::SystemScan);
     assert(std::none_of(merged.players.front().pendingSurveyReports.begin(), merged.players.front().pendingSurveyReports.end(),
         [](const auto& report) { return report.star == 2; }));
+}
+
+void continued_flyby_keeps_interference_from_before_arrival()
+{
+    auto state = rendezvous_survey_fixture();
+    const auto scoutId = state.fleets.front().id;
+    const auto jammerId = state.fleets[1].id;
+    const auto scoutEnd = *state.fleets.front().destination;
+    state.fleets[1].position = {140, -12.5};
+    state.fleets[1].destination = Position{140, 12.5};
+    add_survey_pursuer(state, 1, scoutId, 99, {62, 0});
+    const auto scan = [&](const GameState& game) {
+        const auto& reports = game.players.front().pendingSurveyReports;
+        return std::find_if(reports.begin(), reports.end(), [&](const auto& report) {
+            return report.star == 2 && report.sourceFleet == scoutId;
+        });
+    };
+    const TurnProcessor processor;
+    for (const bool mergeJammer : {false, true}) {
+        auto input = state;
+        if (mergeJammer) add_survey_pursuer(input, 2, jammerId, 101, {140, -10.5});
+        const auto jammed = processor.process(input, {});
+        assert(jammed.fleets.front().position == scoutEnd && jammed.fleets.front().ships.front().count == 2);
+        assert(survey_level(jammed, 1, 2) < SurveyLevel::SystemScan);
+        assert(scan(jammed) == jammed.players.front().pendingSurveyReports.end());
+
+        auto scrap = input;
+        scrap.fleets[1].arrivalAction = FleetArrivalAction{FleetArrivalActionKind::ScrapFleet};
+        const auto scrapped = processor.process(scrap, {});
+        assert(std::none_of(scrapped.fleets.begin(), scrapped.fleets.end(),
+            [&](const auto& fleet) { return fleet.id == jammerId; }));
+        assert(communication_delay_turns(scrapped, 1, scoutEnd) == 0);
+        assert(survey_level(scrapped, 1, 2) < SurveyLevel::SystemScan);
+        assert(scan(scrapped) == scrapped.players.front().pendingSurveyReports.end());
+
+        input.fleets[1].electronics.mode = EmissionMode::RadioSilence;
+        input.fleets[1].electronics.resumeTurn = 20;
+        assert(survey_level(processor.process(input, {}), 1, 2) == SurveyLevel::SystemScan);
+
+        input.fleets[1].electronics.wakeOnArrival = true;
+        const auto woke = processor.process(input, {});
+        assert(communication_delay_turns(woke, 1, scoutEnd) == 1);
+        assert(survey_level(woke, 1, 2) < SurveyLevel::SystemScan);
+        const auto pending = scan(woke);
+        assert(pending != woke.players.front().pendingSurveyReports.end()
+            && pending->observedTurn == 11 && pending->deliveryTurn == 12);
+        assert(survey_level(processor.process(woke, {}), 1, 2) == SurveyLevel::SystemScan);
+    }
+
+    state.fleets[1].destination = state.fleets[1].position;
+    state.fleets[1].arrivalAction = FleetArrivalAction{FleetArrivalActionKind::ScrapFleet};
+    assert(survey_level(processor.process(state, {}), 1, 2) == SurveyLevel::SystemScan);
 }
 
 void flyby_keeps_pre_battle_sensor_readings()
@@ -778,6 +840,7 @@ int main()
     flyby_uses_area_jamming_at_the_observation_point();
     flyby_dispatch_uses_the_jammers_completed_movement();
     flyby_dispatch_waits_for_movement_after_rendezvous();
+    continued_flyby_keeps_interference_from_before_arrival();
     flyby_keeps_pre_battle_sensor_readings();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_all_survey_stages();
