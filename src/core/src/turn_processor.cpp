@@ -2285,6 +2285,13 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     std::vector<FleetId> fixedArrivals;
     std::vector<FleetId> mineDestroyedFleets;
     std::vector<detail::FleetSensorSweep> sensorSweeps;
+    std::vector<detail::FleetSensorReadings> sensorReadings;
+    const auto readSweeps = [&] {
+        for (const auto& sweep : sensorSweeps)
+            if (auto readings = detail::read_fleet_sensor_sweep(state, sweep, state.turn + 1))
+                sensorReadings.push_back(std::move(*readings));
+        sensorSweeps.clear();
+    };
 
     for (const auto id : fleetIds) {
         auto* movingFleet = fleet_by_id(state,id); if (!movingFleet) continue;
@@ -2364,6 +2371,10 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         }
     }
 
+    // Freeze observations from the shared pre-battle geometry. A later loss
+    // can reopen transmission without changing what the sensors already saw.
+    readSweeps();
+
     // Battles precede arrival actions, so a destroyed fleet cannot unload,
     // found a colony or escape an encounter by entering a wormhole.
     std::erase_if(state.fleets, [&](const auto& f) { return fleet_id_list_contains(mineDestroyedFleets,f.id); });
@@ -2434,10 +2445,9 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         });
     }
 
-    // Ordinary and continued legs share the completed radio geometry. The
-    // saved segments still have the equipment and sender from each flyby.
-    for (const auto& sweep : sensorSweeps)
-        detail::observe_fleet_sensor_sweep(state, sweep, state.turn + 1);
+    readSweeps(); // Continued legs use the geometry of the post-battle phase.
+    for (auto& readings : sensorReadings)
+        detail::dispatch_fleet_sensor_readings(state, std::move(readings));
 }
 
 void grow_colonies(GameState& state)
