@@ -282,6 +282,88 @@ void flyby_dispatch_uses_the_jammers_completed_movement()
     }
 }
 
+void flyby_dispatch_waits_for_movement_after_rendezvous()
+{
+    const Position scoutEnd{85, 0}, jammerEnd{165, 25};
+    auto state = survey_fixture({60, 0}, {74, 49.8}, 10);
+    state.stars.front().position = {64, 0};
+    state.planets.front().radar = PlanetaryRadarLevel::Local;
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.players.push_back({2, "Opposition"});
+    state.shipDesigns.push_back({99, 1, "Observer", ShipHullType::StarsScout,
+        {ShipComponentType::QuickJump5, ShipComponentType::RhinoScanner}});
+    state.shipDesigns.push_back({100, 2, "Jammer", ShipHullType::Destroyer,
+        {ShipComponentType::QuickJump5, ShipComponentType::AreaJammer}});
+    state.shipDesigns.push_back({101, 2, "Courier", ShipHullType::StarsScout,
+        {ShipComponentType::QuickJump5}});
+    auto& observer = state.fleets.front();
+    observer.design = 99;
+    observer.ships = {{99, 1}};
+    observer.warp = 5;
+    observer.fuel = fleet_fuel_capacity(state, observer);
+    observer.destination = scoutEnd;
+    const auto observerId = observer.id;
+
+    Fleet jammer;
+    jammer.id = state.nextFleetId++;
+    jammer.owner = 2;
+    jammer.design = 100;
+    jammer.position = {165, 50};
+    jammer.destination = jammerEnd;
+    jammer.warp = 5;
+    jammer.fuel = fleet_fuel_capacity(state, jammer);
+    state.fleets.push_back(jammer);
+
+    const auto addPursuer = [](GameState& game, PlayerId owner, FleetId target, ShipDesignId design, Position position) {
+        Fleet pursuer;
+        pursuer.id = game.nextFleetId++;
+        pursuer.owner = owner;
+        pursuer.design = design;
+        pursuer.position = position;
+        pursuer.destination = position;
+        pursuer.targetFleet = target;
+        pursuer.warp = 2;
+        pursuer.fuel = fleet_fuel_capacity(game, pursuer);
+        pursuer.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};
+        game.fleets.push_back(pursuer);
+    };
+    const TurnProcessor processor;
+    for (const bool mergeScout : {true, false}) {
+        for (const bool enemyFirst : {false, true}) {
+            auto input = state;
+            if (enemyFirst) addPursuer(input, 2, jammer.id, 101, {165, 48});
+            if (mergeScout) addPursuer(input, 1, observerId, 99, {62, 0});
+            if (!enemyFirst) addPursuer(input, 2, jammer.id, 101, {165, 48});
+            const auto result = processor.process(input, {});
+            assert(result.fleets.size() == 2);
+            assert(same_position(result.fleets.front().position, scoutEnd)
+                && same_position(result.fleets.back().position, jammerEnd));
+            assert(survey_level(result, 1, 2) < SurveyLevel::SystemScan);
+            const auto& reports = result.players.front().pendingSurveyReports;
+            assert(std::any_of(reports.begin(), reports.end(), [&](const auto& report) {
+                return report.star == 2 && report.sourceFleet == observerId
+                    && report.observedTurn == 11 && report.deliveryTurn == 12;
+            }));
+            assert(survey_level(processor.process(result, {}), 1, 2) >= SurveyLevel::SystemScan);
+        }
+    }
+
+    // The new scanner can observe the continued leg, starting at the meeting.
+    // Only the earlier leg crosses the coverage of this system.
+    auto laterFit = state;
+    laterFit.stars[1].position = {60, 49.98};
+    laterFit.shipDesigns.push_back({102, 1, "Scannerless lead ship", ShipHullType::StarsScout,
+        {ShipComponentType::QuickJump5}});
+    laterFit.fleets.front().design = 102;
+    laterFit.fleets.front().ships = {{102, 1}};
+    addPursuer(laterFit, 1, observerId, 99, {62, 0});
+    const auto merged = processor.process(laterFit, {});
+    assert(merged.fleets.size() == 2 && merged.fleets.front().ships.size() == 2);
+    assert(survey_level(merged, 1, 2) < SurveyLevel::SystemScan);
+    assert(std::none_of(merged.players.front().pendingSurveyReports.begin(), merged.players.front().pendingSurveyReports.end(),
+        [](const auto& report) { return report.star == 2; }));
+}
+
 void remote_report_remains_in_flight_until_delivery()
 {
     auto state = survey_fixture({420.0, 0.0}, {450.0, 0.0}, 10);
@@ -630,6 +712,7 @@ int main()
     remote_geology_finds_clear_parts_of_an_interfered_flyby();
     flyby_uses_area_jamming_at_the_observation_point();
     flyby_dispatch_uses_the_jammers_completed_movement();
+    flyby_dispatch_waits_for_movement_after_rendezvous();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_all_survey_stages();
     remote_route_completion_obeys_communications_delay();

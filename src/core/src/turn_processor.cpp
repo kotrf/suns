@@ -41,6 +41,7 @@
 #include <type_traits>
 #include <utility>
 #include "suns/ship_refit.hpp"
+#include "fleet_sensor_sweep.hpp"
 
 namespace suns {
 
@@ -1884,9 +1885,12 @@ void apply_overdrive_damage(Fleet& fleet, double damage)
 // pay the annual loss once, regardless of how many segments it traverses.
 using RadiationExposure = std::map<FleetId, std::uint64_t>;
 
-void apply_movement_effects(GameState& state, Fleet& fleet,
-    double overdriveDamage, RadiationExposure& exposure)
+void apply_movement_effects(GameState& state, Fleet& fleet, Position start, double overdriveDamage,
+    RadiationExposure& exposure, std::vector<detail::FleetSensorSweep>& sensorSweeps)
 {
+    if (const auto sweep = detail::prepare_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1))
+        sensorSweeps.push_back(*sweep);
+
     if (!fleet_radiation_safe(state, fleet)) {
         const auto alreadyExposed = std::min(fleet.colonists, exposure[fleet.id]);
         auto unexposed = fleet;
@@ -1906,7 +1910,8 @@ void continue_merged_fleet_route(
     std::vector<ColonyFreightDelivery>& freight,
     std::vector<FleetMovementFuel>& movementFuel,
     RadiationExposure& exposure,
-    OrbitalDepotRefueling& depotFuel)
+    OrbitalDepotRefueling& depotFuel,
+    std::vector<detail::FleetSensorSweep>& sensorSweeps)
 {
     constexpr double epsilon = 0.000001;
     if (remainingTurnFraction <= epsilon) return;
@@ -1947,8 +1952,7 @@ void continue_merged_fleet_route(
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuel.consumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
     fleet.fuelStalled = false;
-    observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
-    apply_movement_effects(state, fleet, budget.damage, exposure);
+    apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
 
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
@@ -2280,7 +2284,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
     std::vector<FleetId> fixedArrivals;
     std::vector<FleetId> mineDestroyedFleets;
-    std::vector<std::pair<const Fleet*, Position>> sensorSweeps;
+    std::vector<detail::FleetSensorSweep> sensorSweeps;
 
     for (const auto id : fleetIds) {
         auto* movingFleet = fleet_by_id(state,id); if (!movingFleet) continue;
@@ -2351,8 +2355,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         fleet.position = endpoint;
         recordFuel(budget.fuel.consumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
-        sensorSweeps.emplace_back(&fleet, start);
-        apply_movement_effects(state, fleet, budget.damage, exposure);
+        apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
 
         if (!mineStrike && fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
@@ -2360,11 +2363,6 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             fixedArrivals.push_back(fleet.id);
         }
     }
-
-    // All simultaneous legs are complete. Share this radio geometry for
-    // flyby dispatches while the original fleet objects are still alive.
-    for (const auto& [fleet, start] : sensorSweeps)
-        observe_fleet_sensor_sweep(state, *fleet, start, fleet->position, state.turn + 1);
 
     // Battles precede arrival actions, so a destroyed fleet cannot unload,
     // found a colony or escape an encounter by entering a wormhole.
@@ -2427,7 +2425,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             *merged,
             encounter->targetDestination,
             1.0 - encounter->timeFraction,
-            consumedFleets, freight, movementFuel, exposure, depotFuel);
+            consumedFleets, freight, movementFuel, exposure, depotFuel, sensorSweeps);
     }
 
     if (!consumedFleets.empty()) {
@@ -2435,6 +2433,11 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             return fleet_id_list_contains(consumedFleets, fleet.id);
         });
     }
+
+    // Ordinary and continued legs share the completed radio geometry. The
+    // saved segments still have the equipment and sender from each flyby.
+    for (const auto& sweep : sensorSweeps)
+        detail::observe_fleet_sensor_sweep(state, sweep, state.turn + 1);
 }
 
 void grow_colonies(GameState& state)

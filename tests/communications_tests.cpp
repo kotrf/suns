@@ -737,6 +737,29 @@ void slow_hop_to_jammed_capital_keeps_the_fleets_relay_chain()
     auto next = processor.process(issued, {});
     assert(scout(next).position == move.destination);
 
+    auto colonyRelay = state;
+    colonyRelay.fleets.erase(colonyRelay.fleets.begin() + 2);
+    colonyRelay.stars.push_back({2, "Relay colony", nearRelay});
+    colonyRelay.planets.push_back({2, 2, "Relay colony", 100, 1, 10000});
+    colonyRelay.planets.back().radar = PlanetaryRadarLevel::Full;
+    const auto colonyRoute = communication_route(colonyRelay, 1, observerPosition);
+    assert(colonyRoute.channel == SignalChannel::Slow && colonyRoute.transmitter == nearRelay
+        && colonyRoute.receiver == capital && colonyRoute.propagationTurns == 1);
+    issued = processor.process(colonyRelay, {{1, {move}}});
+    assert(scout(issued).position == observerPosition && scout(issued).destination == move.destination);
+    assert(std::any_of(issued.emissions.begin(), issued.emissions.end(), [&](const auto& pulse) {
+        return pulse.owner == 1 && pulse.emittedTurn == issued.turn && pulse.channel == SignalChannel::Slow
+            && pulse.position == nearRelay && pulse.colony == 2;
+    }));
+    next = processor.process(issued, {});
+    assert(scout(next).position == move.destination);
+
+    auto colonyJammer = colonyRelay.fleets[1];
+    colonyJammer.id = colonyRelay.nextFleetId++;
+    colonyJammer.position = nearRelay;
+    colonyRelay.fleets.push_back(colonyJammer);
+    assert(communication_delay_turns(colonyRelay, 1, observerPosition) == 3);
+
     state.fleets.pop_back();
     assert(communication_delay_turns(state, 1, observerPosition) == 4);
 }

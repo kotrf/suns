@@ -11,6 +11,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/production.hpp"
 #include "suns/mining.hpp"
+#include "fleet_sensor_sweep.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -620,10 +621,14 @@ CommunicationRoute route_with_interference(const GameState& state, PlayerId play
     for (const auto& planet : state.planets) {
         if (planet.owner != player || total_colony_population(planet) == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
-        if (star && (planet.homeworld || (!interference.blocks(star->position)
+        if (!star) continue;
+        const bool fastEnabled = !interference.blocks(star->position);
+        if (planet.homeworld || (fastEnabled
             && std::any_of(fields.begin(), fields.end(), [&](const CommunicationField& field) {
                 return field.connected && inside_field(star->position, field);
-            })))) connectedTransceivers.push_back(star->position);
+            }))) connectedTransceivers.push_back(star->position);
+        if (!sourceJammed && fastEnabled && inside_component(star->position, fields, sourceComponent))
+            sourceTransceivers.push_back(star->position);
     }
     for (const auto& fleet : state.fleets) {
         if (fleet.owner != player || !fleet_transmits(fleet,atTurn) || interference.blocks(fleet.position)) continue;
@@ -727,12 +732,16 @@ void record_pulse(GameState& state, PlayerId owner, Position position, std::uint
     state.emissions.push_back(std::move(pulse));
 }
 }
+void detail::record_dispatched_report(
+    GameState& state, PlayerId owner, Position position, std::uint64_t turn, const CommunicationRoute& route)
+{
+    if(!same_position(route.transmitter,position)) record_pulse(state,owner,position,turn,SignalChannel::Fast);
+    record_pulse(state,owner,route.transmitter,turn,route.channel);
+}
 void record_report_transmission(GameState& state,PlayerId owner,Position position,std::uint64_t turn,FleetId observer)
 {
     if(held_report_source(state,owner,position,turn,observer)) return;
-    const auto route=communication_route(state,owner,position,turn);
-    if(!same_position(route.transmitter,position)) record_pulse(state,owner,position,turn,SignalChannel::Fast);
-    record_pulse(state,owner,route.transmitter,turn,route.channel);
+    detail::record_dispatched_report(state, owner, position, turn, communication_route(state, owner, position, turn));
 }
 void record_command_transmission(GameState& state,PlayerId owner,Position target,std::uint64_t turn)
 {

@@ -1,6 +1,7 @@
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/communications.hpp"
+#include "fleet_sensor_sweep.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -58,24 +59,28 @@ Player* player_for(GameState& state, PlayerId id)
 }
 
 void queue(GameState& state, PlayerId owner, WormholeReportKind kind, WormholeKnowledge knowledge,
-    FleetId fleet, Position source, std::uint64_t turn)
+    FleetId fleet, Position source, std::uint64_t turn, const CommunicationRoute* dispatchedRoute = nullptr)
 {
     auto* p = player_for(state, owner);
     if (!p) return;
-    const auto due = fleet_report_delivery_turn(state,owner,source,turn,fleet);
+    const auto due = dispatchedRoute
+        ? turn + dispatchedRoute->propagationTurns + dispatchedRoute->receiverDelay
+        : fleet_report_delivery_turn(state, owner, source, turn, fleet);
     if (kind == WormholeReportKind::Observation) {
         const auto duplicate = std::find_if(p->pendingWormholeReports.begin(), p->pendingWormholeReports.end(),
             [&](const auto& r) { return r.kind == kind && r.knowledge.endpoint == knowledge.endpoint
                 && r.observedTurn == turn && r.deliveryTurn <= due && r.knowledge.stability >= knowledge.stability; });
         if (duplicate != p->pendingWormholeReports.end()) return;
     }
-    if(due!=kAwaitingTransmission) record_report_transmission(state,owner,source,turn,fleet);
+    if (dispatchedRoute) detail::record_dispatched_report(state, owner, source, turn, *dispatchedRoute);
+    else if (due != kAwaitingTransmission) record_report_transmission(state, owner, source, turn, fleet);
     p->pendingWormholeReports.push_back({kind, turn, due, fleet, knowledge,
-        held_report_source(state,owner,source,turn,fleet)});
+        dispatchedRoute ? 0 : held_report_source(state, owner, source, turn, fleet)});
 }
 
 void observe(GameState& state, PlayerId owner, FleetId fleet, Position start, Position end,
-    double range, bool detector, std::uint64_t turn, bool collapsed = false)
+    double range, bool detector, std::uint64_t turn, bool collapsed = false,
+    const CommunicationRoute* dispatchedRoute = nullptr)
 {
     for (const auto& hole : state.wormholes) for (const auto& mouth : hole.endpoints) {
         const auto reach = detection_range(mouth, range, detector);
@@ -89,7 +94,7 @@ void observe(GameState& state, PlayerId owner, FleetId fleet, Position start, Po
         if (detector || distance <= reach * 0.35) knowledge.stability = stability_band(hole.stability);
         knowledge.collapsed = collapsed;
         queue(state, owner, collapsed ? WormholeReportKind::Collapsed : WormholeReportKind::Observation,
-            knowledge, fleet, end, turn);
+            knowledge, fleet, end, turn, dispatchedRoute);
     }
 }
 
@@ -151,6 +156,12 @@ void observe_wormhole_sweep(GameState& state, const Fleet& fleet, Position start
 {
     observe(state, fleet.owner, fleet.id, start, end, strategic_sensor_range(state, fleet,turn),
         fleet_has_anomaly_detector(state, fleet), turn);
+}
+
+void detail::observe_transmitting_wormhole_sweep(GameState& state, const FleetSensorSweep& sweep,
+    double effectiveRange, std::uint64_t turn, const CommunicationRoute& route)
+{
+    observe(state, sweep.owner, sweep.fleet, sweep.start, sweep.end, effectiveRange, sweep.anomalyDetector, turn, false, &route);
 }
 
 void observe_current_wormholes(GameState& state, std::uint64_t turn)

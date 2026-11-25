@@ -21,7 +21,7 @@ a radar field.
 
 Outside the connected mesh, a finite-speed subspace signal travels between physical transceivers. A scanner field has no receiver distributed over its imaginary boundary, so its radius is never subtracted from the slow path.
 
-A detached group of overlapping scanner fields remains an instantaneous local island. Traffic can cross that island without delay to its physical ship nearest the empire mesh; the slow hop is then measured between that ship and the nearest physical transceiver in the colony-rooted component.
+A detached group of overlapping scanner fields remains an instantaneous local island. Traffic can cross that island without delay through its ship and colony radios. The slow hop uses the closest pair of physical radios between the island and the colony-rooted component.
 
 ```text
 slow distance = shortest physical transceiver-to-transceiver gap
@@ -40,8 +40,10 @@ fast radio at ships, colonies and relays within 90 ly. A clean route can use
 other relays. A jammed endpoint uses the ordinary slow hop between physical
 radios at 150 ly/year. A jammed homeworld continues to receive slow packets
 and share data locally with fleets in orbit. A fleet outside the field can use
-its own fast relay chain before the slow hop to that homeworld. Flyby reports
-choose their route from the shared end positions of simultaneous fleet legs.
+its own fast relay chain, including working colony radars, before the slow hop
+to that homeworld. Flyby reports ready to transmit use the shared radio geometry
+after all movement, including continued legs after rendezvous. The recorded
+segment and its scanner fit come from the flight where the reading was taken.
 Packets already in flight keep their scheduled delivery.
 
 Ships and colonies report jamming and its clearance through their usual

@@ -13,6 +13,7 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/scanners.hpp"
 #include "suns/deep_space.hpp"
+#include "fleet_sensor_sweep.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -235,20 +236,22 @@ void queue_survey_report_impl(
     FleetId sourceFleet,
     Position sourcePosition,
     std::uint64_t observationTurn,
-    SurveyLevel level, bool finalSurfaceObservation)
+    SurveyLevel level, bool finalSurfaceObservation, const CommunicationRoute* dispatchedRoute = nullptr)
 {
     if (survey_level(state, playerId, star) > level && level < SurveyLevel::OrbitalSurvey) return;
     auto* player = mutable_player(state, playerId);
     if (!player) return;
 
-    const auto deliveryTurn = fleet_report_delivery_turn(state, playerId, sourcePosition,observationTurn,sourceFleet);
+    const auto deliveryTurn = dispatchedRoute
+        ? observationTurn + dispatchedRoute->propagationTurns + dispatchedRoute->receiverDelay
+        : fleet_report_delivery_turn(state, playerId, sourcePosition, observationTurn, sourceFleet);
     std::optional<PlayerId> observedOwner;
     if (level >= SurveyLevel::OrbitalSurvey) {
         if (const auto* planet = find_planet_at_star(state, star)) observedOwner = planet->owner;
     }
     PendingSurveyReport candidate{
         star, sourceFleet, observationTurn, deliveryTurn, level, observedOwner,
-        held_report_source(state,playerId,sourcePosition,observationTurn,sourceFleet)};
+        dispatchedRoute ? 0 : held_report_source(state, playerId, sourcePosition, observationTurn, sourceFleet)};
     candidate.planetSnapshot = capture_planet_survey(state, playerId, star, level, observationTurn);
     if (finalSurfaceObservation && candidate.planetSnapshot) {
         if (candidate.planetSnapshot->surfaceMinerals) candidate.planetSnapshot->surfaceMinerals->finalSurface = true;
@@ -285,7 +288,8 @@ void queue_survey_report_impl(
             && (report.level < SurveyLevel::BasicScan || report.observedTurn <= observationTurn);
     });
     player->pendingSurveyReports.push_back(candidate);
-    if(deliveryTurn!=kAwaitingTransmission) record_report_transmission(state,playerId,sourcePosition,observationTurn,sourceFleet);
+    if (dispatchedRoute) detail::record_dispatched_report(state, playerId, sourcePosition, observationTurn, *dispatchedRoute);
+    else if (deliveryTurn != kAwaitingTransmission) record_report_transmission(state, playerId, sourcePosition, observationTurn, sourceFleet);
 }
 
 SurveyLevel best_observed_level(const GameState& state, PlayerId playerId, StarId star)
@@ -421,10 +425,11 @@ double sensor_sweep_cloud_slope(const GameState& state)
     return slope;
 }
 
-bool sweep_reaches_target(const GameState& state, const Fleet& fleet, Position start, Position end,
+bool sweep_reaches_target(const GameState& state, const detail::FleetSensorSweep& sweep,
     Position target, double range, std::uint64_t turn, double cloudSlope,
     std::optional<std::vector<SensorInterferenceSpan>>& interference)
 {
+    const auto start = sweep.start, end = sweep.end;
     const double dx = end.x - start.x, dy = end.y - start.y;
     const double lengthSquared = dx * dx + dy * dy;
     const double projection = lengthSquared > 0 ? ((target.x - start.x) * dx + (target.y - start.y) * dy) / lengthSquared : 0;
@@ -440,12 +445,12 @@ bool sweep_reaches_target(const GameState& state, const Fleet& fleet, Position s
             * medium_active_path_factor(state, sample, target) - distance;
     };
     const auto covered = [&](double t) {
-        return margin(t, range * (1 - sensor_interference(state, fleet.owner, position(t), turn))) >= 0;
+        return margin(t, range * (1 - sensor_interference(state, sweep.owner, position(t), turn))) >= 0;
     };
     if (covered(closest)) return true;
     if (lengthSquared == 0) return false;
 
-    if (!interference) interference = sensor_interference_spans(state, fleet.owner, start, end, turn);
+    if (!interference) interference = sensor_interference_spans(state, sweep.owner, start, end, turn);
     const auto flightLength = std::sqrt(lengthSquared);
     for (const auto& span : *interference) {
         const auto localRange = range * (1 - span.strength);
@@ -478,44 +483,99 @@ bool sweep_reaches_target(const GameState& state, const Fleet& fleet, Position s
     return false;
 }
 
-void observe_remote_geology(GameState& state, const Fleet& fleet, Position start, Position end,
-    std::uint64_t turn, double cloudSlope, std::optional<std::vector<SensorInterferenceSpan>>& interference)
+double geological_scanner_range(const GameState& state, const Fleet& fleet, std::uint64_t turn)
 {
     if (state.mediumObserver || !fleet_active_sensors(fleet, turn)
-        || (fleet.outpost != OutpostKind::None && !outpost_online(fleet))) return;
+        || (fleet.outpost != OutpostKind::None && !outpost_online(fleet))) return 0;
     double range = 0;
     for (const auto& stack : fleet_ship_stacks(fleet))
         if (const auto* design = find_ship_design(state, stack.design))
             for (const auto component : design->components)
                 if (const auto* scanner = scanner_technology(component))
                     range = std::max(range, scanner->geologicalRange);
-    if (range <= 0) return;
-    auto* player = mutable_player(state, fleet.owner);
+    return range;
+}
+
+void observe_remote_geology(GameState& state, const detail::FleetSensorSweep& sweep, std::uint64_t turn,
+    double cloudSlope, std::optional<std::vector<SensorInterferenceSpan>>& interference, const CommunicationRoute& route)
+{
+    if (sweep.geologicalRange <= 0) return;
+    auto* player = mutable_player(state, sweep.owner);
     if (!player) return;
-    const auto delivery = fleet_report_delivery_turn(state, fleet.owner, end, turn, fleet.id);
+    const auto delivery = turn + route.propagationTurns + route.receiverDelay;
     for (const auto& star : state.stars) {
-        if (same_position(end, star.position)
-            || !sweep_reaches_target(state, fleet, start, end, star.position, range, turn, cloudSlope, interference)) continue;
+        if (same_position(sweep.end, star.position)
+            || !sweep_reaches_target(state, sweep, star.position, sweep.geologicalRange, turn, cloudSlope, interference)) continue;
         const auto* planet = find_planet_at_star(state, star.id);
-        if (!planet || planet_geology_known(state, fleet.owner, planet->id)) continue;
+        if (!planet || planet_geology_known(state, sweep.owner, planet->id)) continue;
         const auto matches = [&](const auto& report) {
             return report.kind == PlayerReportKind::RemoteGeologyObserved && report.planet == planet->id;
         };
         if (std::any_of(player->pendingPlayerReports.begin(), player->pendingPlayerReports.end(), [&](const auto& report) {
-                return matches(report) && report.observedTurn >= turn && report.deliveryTurn <= delivery
-                    && (report.fleet == fleet.id || report.deliveryTurn != kAwaitingTransmission);
+                return matches(report) && report.observedTurn >= turn && report.deliveryTurn <= delivery;
             })) continue;
         std::erase_if(player->pendingPlayerReports, [&](const auto& report) {
-            return matches(report) && report.transmissionFleet == fleet.id && report.observedTurn < turn;
+            return matches(report) && report.transmissionFleet == sweep.fleet && report.observedTurn < turn;
         });
         const auto c = planet_mineral_concentration(state, *planet);
         const auto band = [](double value) { return std::floor(std::clamp(value, 0.0, 99.0) / 10) * 10; };
-        queue_player_report(state, fleet.owner, PlayerReportKind::RemoteGeologyObserved, end, turn,
-            star.id, planet->id, fleet.id, 0, ProductionKind::ColonyShip, 0, ResearchField::Electronics, 0,
-            {band(c.ironium), band(c.boranium), band(c.germanium)});
+        player->pendingPlayerReports.push_back({
+            .kind = PlayerReportKind::RemoteGeologyObserved,
+            .observedTurn = turn,
+            .deliveryTurn = delivery,
+            .star = star.id,
+            .planet = planet->id,
+            .fleet = sweep.fleet,
+            .position = sweep.end,
+            .deliveredMinerals = {band(c.ironium), band(c.boranium), band(c.germanium)},
+        });
+        detail::record_dispatched_report(state, sweep.owner, sweep.end, turn, route);
     }
 }
 } // namespace
+
+std::optional<detail::FleetSensorSweep> detail::prepare_fleet_sensor_sweep(
+    GameState& state, const Fleet& fleet, Position start, Position end, std::uint64_t turn)
+{
+    FleetSensorSweep sweep{fleet.owner, fleet.id, start, end};
+    if (fleet_active_sensors(fleet, turn) && fleet_has_scanner(state, fleet)) {
+        sweep.scannerRange = fleet_sensor_range(state, fleet);
+        sweep.penetratingRange = fleet_penetrating_sensor_range(state, fleet);
+    }
+    sweep.geologicalRange = geological_scanner_range(state, fleet, turn);
+    sweep.anomalyDetector = !state.wormholes.empty() && fleet_has_anomaly_detector(state, fleet);
+    if (!sweep.scannerRange && sweep.geologicalRange <= 0 && !sweep.anomalyDetector) return std::nullopt;
+    if (!fleet_transmits(fleet, turn) && held_report_source(state, fleet.owner, end, turn, fleet.id)) {
+        // Only the passive anomaly detector can make a flyby observation
+        // without transmission. Keep it in the onboard outbox immediately.
+        observe_wormhole_sweep(state, fleet, start, end, turn);
+        return std::nullopt;
+    }
+    return sweep;
+}
+
+void detail::observe_fleet_sensor_sweep(GameState& state, const FleetSensorSweep& sweep, std::uint64_t turn)
+{
+    const auto route = communication_route(state, sweep.owner, sweep.end, turn);
+    if (!state.wormholes.empty()) {
+        const auto range = sweep.scannerRange.value_or(0.0) * (1 - sensor_interference(state, sweep.owner, sweep.end, turn))
+            * medium_active_sensor_factor(state, sweep.end);
+        observe_transmitting_wormhole_sweep(state, sweep, range, turn, route);
+    }
+    const auto cloudSlope = sensor_sweep_cloud_slope(state);
+    std::optional<std::vector<SensorInterferenceSpan>> interference;
+    observe_remote_geology(state, sweep, turn, cloudSlope, interference, route);
+    if (!sweep.scannerRange) return;
+
+    for (const auto& star : state.stars) {
+        if (!sweep_reaches_target(state, sweep, star.position, *sweep.scannerRange, turn, cloudSlope, interference)) continue;
+        const auto level = sweep.penetratingRange > 0 && sweep_reaches_target(state, sweep,
+            star.position, sweep.penetratingRange, turn, cloudSlope, interference)
+            ? SurveyLevel::BasicScan
+            : SurveyLevel::SystemScan;
+        queue_survey_report_impl(state, sweep.owner, star.id, sweep.fleet, sweep.end, turn, level, false, &route);
+    }
+}
 
 void observe_fleet_sensor_sweep(
     GameState& state,
@@ -524,23 +584,8 @@ void observe_fleet_sensor_sweep(
     Position end,
     std::uint64_t observationTurn)
 {
-    observe_wormhole_sweep(state, fleet, start, end, observationTurn);
-    if (!fleet_active_sensors(fleet, observationTurn)) return;
-    const auto cloudSlope = sensor_sweep_cloud_slope(state);
-    std::optional<std::vector<SensorInterferenceSpan>> interference;
-    observe_remote_geology(state, fleet, start, end, observationTurn, cloudSlope, interference);
-    if (!fleet_has_scanner(state, fleet)) return;
-    const auto range = fleet_sensor_range(state, fleet);
-    const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
-
-    for (const auto& star : state.stars) {
-        if (!sweep_reaches_target(state, fleet, start, end, star.position, range, observationTurn, cloudSlope, interference)) continue;
-        const auto level = penetratingRange > 0 && sweep_reaches_target(state, fleet, start, end,
-            star.position, penetratingRange, observationTurn, cloudSlope, interference)
-            ? SurveyLevel::BasicScan
-            : SurveyLevel::SystemScan;
-        queue_survey_report(state, fleet.owner, star.id, fleet.id, end, observationTurn, level);
-    }
+    if (const auto sweep = detail::prepare_fleet_sensor_sweep(state, fleet, start, end, observationTurn))
+        detail::observe_fleet_sensor_sweep(state, *sweep, observationTurn);
 }
 
 void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn)
@@ -605,8 +650,14 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
     const auto cloudSlope = sensor_sweep_cloud_slope(state);
     for (const auto& fleet : state.fleets) {
+        const auto range = geological_scanner_range(state, fleet, observationTurn);
+        if (range <= 0) continue;
+        const detail::FleetSensorSweep sweep{
+            .owner = fleet.owner, .fleet = fleet.id, .start = fleet.position, .end = fleet.position, .geologicalRange = range,
+        };
         std::optional<std::vector<SensorInterferenceSpan>> interference;
-        observe_remote_geology(state, fleet, fleet.position, fleet.position, observationTurn, cloudSlope, interference);
+        const auto route = communication_route(state, fleet.owner, fleet.position, observationTurn);
+        observe_remote_geology(state, sweep, observationTurn, cloudSlope, interference, route);
     }
 }
 
