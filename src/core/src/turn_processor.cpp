@@ -934,6 +934,12 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::ScrapFleet:
     case FleetArrivalActionKind::BroadcastDecoy:
         return false;
+    case FleetArrivalActionKind::ScanOnce:
+        if (fleet_has_scanner(state, fleet)) {
+            fleet.waypointScanTurn = state.turn + 1;
+            record_scan_transmission(state, fleet, fleet.waypointScanTurn);
+        }
+        return false;
     case FleetArrivalActionKind::LoadMinerals:
     case FleetArrivalActionKind::LoadAllAvailable: {
         const auto waitForMinimum = [&] {
@@ -3435,6 +3441,7 @@ TurnResult TurnProcessor::process_with_events(
     observe_visitors(next);
     observe_interstellar_medium(next,next.turn);
     observe_emission_pulses(next,next.turn);
+    for (auto& fleet : next.fleets) fleet.waypointScanTurn = 0;
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);

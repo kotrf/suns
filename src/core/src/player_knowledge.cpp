@@ -70,6 +70,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::FleetsMerged: return GameEventKind::FleetsMerged;
     case PlayerReportKind::FleetScrapStatus: return GameEventKind::FleetScrapStatus;
     case PlayerReportKind::DecoyBroadcastStatus: return GameEventKind::DecoyBroadcastStatus;
+    case PlayerReportKind::RadioSilenceEnded: return GameEventKind::RadioSilenceEnded;
     case PlayerReportKind::ProductionWaitingForShipyard:
         return GameEventKind::ProductionWaitingForShipyard;
     case PlayerReportKind::PrecursorArtifactsDiscovered:

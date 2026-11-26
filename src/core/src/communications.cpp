@@ -250,7 +250,7 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::BroadcastDecoy) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::ScanOnce) return false;
         if (!mineral_load_policy_valid(action) || !transport_unload_valid(action)
             || action.recoveryTarget>0x7fffffffU || (action.kind!=FleetArrivalActionKind::RecoverSample && action.recoveryTarget)) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
@@ -302,6 +302,7 @@ bool route_work_equipment_valid(const GameState& state, const Fleet& fleet, cons
 {
     const auto valid = [&](const FleetArrivalAction& action) {
         if (action.kind == FleetArrivalActionKind::BroadcastDecoy) return decoy_probe_available(state, fleet);
+        if (action.kind == FleetArrivalActionKind::ScanOnce) return fleet_has_scanner(state, fleet);
         const auto task = arrival_work_task(action.kind);
         return !task || fleet_task_equipment_available(state, fleet, *task);
     };
@@ -702,7 +703,8 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
 }
 
 namespace {
-void record_pulse(GameState& state, PlayerId owner, Position position, std::uint64_t turn, SignalChannel channel)
+void record_pulse(GameState& state, PlayerId owner, Position position, std::uint64_t turn, SignalChannel channel,
+    FleetId scanner = 0)
 {
     if (!find_player(state,owner)) return;
     if (std::any_of(state.emissions.begin(),state.emissions.end(),[&](const auto& p) {
@@ -710,6 +712,7 @@ void record_pulse(GameState& state, PlayerId owner, Position position, std::uint
     })) return; // One physical annual packet batch, not one marker per payload.
     EmissionPulse pulse; pulse.id=state.nextEmissionId++; pulse.owner=owner;
     pulse.position=position; pulse.emittedTurn=turn; pulse.channel=channel;
+    pulse.fleet = scanner;
     // Preserve a pulse through every currently fitted receiver's possible reach.
     // This bounds host storage without querying a future target or its position.
     pulse.maximumRange=2*kColonySensorRange;
@@ -745,6 +748,10 @@ void record_report_transmission(GameState& state,PlayerId owner,Position positio
 {
     if(held_report_source(state,owner,position,turn,observer)) return;
     detail::record_dispatched_report(state, owner, position, turn, communication_route(state, owner, position, turn));
+}
+void record_scan_transmission(GameState& state, const Fleet& fleet, std::uint64_t turn)
+{
+    record_pulse(state, fleet.owner, fleet.position, turn, SignalChannel::Fast, fleet.id);
 }
 void record_command_transmission(GameState& state,PlayerId owner,Position target,std::uint64_t turn)
 {

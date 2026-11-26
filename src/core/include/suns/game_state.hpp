@@ -972,6 +972,7 @@ enum class PlayerReportKind {
     MobileStargateTransit, // Total fuel containers spent by the mobile gates.
     MobileStargateTransitFailed,
     DecoyBroadcastStatus,
+    RadioSilenceEnded,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1549,6 +1550,7 @@ struct ElectronicsProgram {
     std::uint64_t firstBurstTurn{};
     bool activeBurst{};
     bool wakeOnArrival{};
+    bool wakeOnContactOrCombat{};
 };
 
 enum class FleetArrivalActionKind {
@@ -1574,6 +1576,7 @@ enum class FleetArrivalActionKind {
     UnloadTransportStop, // Multi-stop visit: one bounded delivery, retain surplus for later stops.
     ScrapFleet, // Terminal, one-shot dismantling of the complete fleet.
     BroadcastDecoy, // Terminal, one-shot broadcast by an expendable Survey Probe.
+    ScanOnce, // Activate scanners for this waypoint's observation boundary.
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1873,6 +1876,7 @@ struct Fleet {
     std::uint64_t appliedBattlePlanSequence{};
     std::vector<PendingBattlePlan> battlePlansInTransit;
     std::optional<MobileGateTransit> mobileGate;
+    std::uint64_t waypointScanTurn{}; // Transient host state during turn resolution.
 };
 
 struct Minefield {

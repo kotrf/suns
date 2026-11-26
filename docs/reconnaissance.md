@@ -79,8 +79,19 @@ The arrow beside Sensors
 opens the optional **Passive and emission ranges** overlay: gold is the passive
 hull baseline, violet is reception of other ships' emissions, not the distance
 at which the displayed ship broadcasts. Switching Sensors off hides all ranges.
-Passive hull reach also depends on target motion and cloak; the overlay is a
-baseline rather than guaranteed detection. Layer tooltips identify each coverage type.
+Passive hull reach is a baseline. Target hull mass, fitted equipment and cargo
+contribute with diminishing returns. Actual motion increases the signature at
+higher Warp, with a smaller increase for flight at or below an engine's free Warp.
+Cloaking still reduces detection range. Layer tooltips identify each coverage type.
+
+Set **Wake on contact or combat** in Radio silence to return to Standard
+when the fleet's own sensors detect a foreign hull or it survives a space
+battle. The fleet's report of the wake-up follows ordinary delivery. A fleet
+can instead use **Scan once** at a named waypoint and set an ordinary
+waypoint for its withdrawal. The scan creates a single physical emission and
+uses active sensors at arrival. The fleet retains its emission policy and
+uploads its observations when that policy next permits it or at a friendly
+colony. Save v138 and orders v64 carry the wake option and scan waypoint.
 
 Colonies and scanner ships can intercept transmitting enemies beyond reflected
 hull range. Emissions remain unidentified 20 ly cells with 15 ly uncertainty:

@@ -23,6 +23,7 @@
 namespace suns {
 namespace {
 constexpr double epsilon = 1e-6;
+bool active_electronics(const Fleet&, std::uint64_t turn);
 
 template<class F> void components(const GameState& state, const Fleet& fleet, F visit)
 {
@@ -79,7 +80,7 @@ void visit_stationary_sensor_interference(const GameState& state, std::optional<
 template<class Visitor>
 void visit_fleet_sensor_interference(const GameState& state, const Fleet& fleet, std::uint64_t turn, bool includeArea, Visitor visit)
 {
-    if (!fleet_active_sensors(fleet, turn)) return;
+    if (!active_electronics(fleet, turn)) return;
     if (includeArea && !state.mediumObserver)
         visit(fleet.position, kAreaJammerRangeLy, [&] {
             return fleet_area_jammer_active(state, fleet, turn) ? kAreaJammerSensorReduction : 0.0;
@@ -217,7 +218,7 @@ bool fleet_has_area_jammer(const GameState& state, const Fleet& fleet)
 
 bool fleet_area_jammer_active(const GameState& state, const Fleet& fleet, std::uint64_t turn)
 {
-    return fleet.damagePercent < 100 && fleet_active_sensors(fleet, turn)
+    return fleet.damagePercent < 100 && active_electronics(fleet, turn)
         && (fleet.outpost == OutpostKind::None || outpost_online(fleet)) && fleet_has_area_jammer(state, fleet);
 }
 
@@ -362,14 +363,22 @@ double strategic_sensor_range(const GameState& state,const Fleet& detector,std::
         *medium_active_sensor_factor(state,detector.position);
 }
 
-double fleet_detection_range(const GameState& state, const Fleet& target, double range, double tachyon, bool passive)
+double fleet_detection_range(const GameState& state, const Fleet& target, double range, double tachyon, bool passive,
+    std::uint64_t turn)
 {
     const double cloak = fleet_cloak_fraction(state, target) * (1 - tachyon);
     double reflected = range * (1 - cloak);
     if (passive) {
-        // A passive receiver localizes only close hull/engine signatures.
-        const double motion = target.destination ? std::min(2.0, 0.5 + target.warp/5.0) : 0.5;
-        reflected *= 0.25 * motion;
+        // Mass includes the fitted equipment and cargo. Sublinear scaling
+        // keeps even heavy fleets below the ordinary active scanner range.
+        const double massFactor = std::clamp(std::pow(fleet_gross_mass(state, target) / 100, 0.2), 0.60, 2.0);
+        const auto observedTurn = turn ? turn : state.turn;
+        double motion = 0.5;
+        if (target.lastMovedTurn && target.lastMovedTurn == observedTurn) {
+            motion += 0.14 * target.warp;
+            if (target.warp <= fleet_free_warp(state, target)) motion *= 0.8;
+        }
+        reflected *= 0.25 * massFactor * motion;
     }
     return reflected;
 }
@@ -388,7 +397,7 @@ bool detector_detects_fleet(const GameState& state, const Fleet& detector, const
     const double range = passive ? fleet_sensor_range(state, detector)*(1-sensor_interference(state,detector.owner,detector.position,turn)) : strategic_sensor_range(state, detector,turn);
     return fleet_has_scanner(state, detector) && distance_between(detector.position, target.position)
         <= fleet_detection_range(state, target, range*(passive?1:medium_active_path_factor(state,detector.position,target.position)),
-            fleet_tachyon_fraction(state, detector), passive) + epsilon;
+            fleet_tachyon_fraction(state, detector), passive, turn) + epsilon;
 }
 
 std::string fleet_task_name(FleetTask task)
@@ -452,6 +461,8 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
         return "Use the installation's decommission controls before Scrap Fleet.";
     if (action == FleetArrivalActionKind::BroadcastDecoy && !decoy_probe_available(state, fleet))
         return "Broadcast Decoy requires a lone Survey Probe with a Decoy Transmitter.";
+    if (action == FleetArrivalActionKind::ScanOnce && !fleet_has_scanner(state, fleet))
+        return "Scan once requires a fitted scanner.";
     if (action == FleetArrivalActionKind::DeployOutpost) return outpost_deployment_error(state, fleet, destination);
     if (!task) return {};
     if (!fleet_task_equipment_available(state, fleet, *task)) {
@@ -737,15 +748,22 @@ bool electronics_program_valid(const ElectronicsProgram& e)
     return e.mode<=EmissionMode::RadioSilence
         && ((e.mode==EmissionMode::RadioSilence)==bool(e.resumeTurn))
         && (!e.deception || e.mode==EmissionMode::Standard)
-        && (e.mode==EmissionMode::RadioSilence || (!e.burstInterval && !e.firstBurstTurn && !e.activeBurst && !e.wakeOnArrival))
+        && (e.mode==EmissionMode::RadioSilence || (!e.burstInterval && !e.firstBurstTurn && !e.activeBurst
+            && !e.wakeOnArrival && !e.wakeOnContactOrCombat))
         && ((e.burstInterval!=0)==bool(e.firstBurstTurn)) && e.burstInterval<=100
         && (!e.activeBurst || e.burstInterval) && (!e.firstBurstTurn || e.firstBurstTurn<=e.resumeTurn);
 }
 bool burst_window(const ElectronicsProgram& e,std::uint64_t turn)
 { return e.mode==EmissionMode::RadioSilence && e.burstInterval && turn>=e.firstBurstTurn && (turn-e.firstBurstTurn)%e.burstInterval==0; }
-bool fleet_active_sensors(const Fleet& f,std::uint64_t turn)
+namespace {
+bool active_electronics(const Fleet& f, std::uint64_t turn)
 { return f.electronics.mode==EmissionMode::Standard || (f.electronics.activeBurst && burst_window(f.electronics,turn))
     || (f.electronics.resumeTurn && turn>=f.electronics.resumeTurn); }
+}
+bool fleet_active_sensors(const Fleet& f, std::uint64_t turn)
+{
+    return (f.waypointScanTurn && f.waypointScanTurn == turn) || active_electronics(f, turn);
+}
 std::uint64_t fleet_available_turn(const Fleet& f,std::uint64_t turn)
 {
     if(f.electronics.mode==EmissionMode::Passive) return kAwaitingTransmission;
@@ -788,6 +806,15 @@ bool fleet_transmits(const Fleet& f,std::uint64_t turn)
         || burst_window(f.electronics,turn) || (f.electronics.resumeTurn && turn>=f.electronics.resumeTurn);
 }
 void apply_electronics_program(Fleet& fleet, ElectronicsProgram program) { fleet.electronics = program; }
+void wake_radio_after_encounter(GameState& state, Fleet& fleet, std::uint64_t turn, bool combat)
+{
+    const auto& program = fleet.electronics;
+    if (state.mediumObserver || program.mode != EmissionMode::RadioSilence
+        || !program.wakeOnContactOrCombat || turn >= program.resumeTurn) return;
+    apply_electronics_program(fleet, {});
+    queue_player_report(state, fleet.owner, PlayerReportKind::RadioSilenceEnded, fleet.position, turn,
+        0, 0, fleet.id, fleet.design, ProductionKind::ColonyShip, combat ? 1 : 0);
+}
 bool submit_electronics_command(GameState& state, PlayerId player, FleetId id, ElectronicsProgram program)
 {
     auto* fleet = fleet_by_id(state, id);

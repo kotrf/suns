@@ -1837,22 +1837,28 @@ void reconnaissance_and_programs_round_trip()
     auto result=TurnProcessor{}.process_with_events(s,{}); save.state=result.state; save.strategicMessages=result.events;
     assert(save.state.players[0].pendingEnemyContacts.size()==1);
     auto& own=save.state.fleets.front();
-    const ElectronicsProgram program{EmissionMode::RadioSilence,11,false,2,4,true,true};
+    const ElectronicsProgram program{EmissionMode::RadioSilence,11,false,2,4,true,true,true};
     own.electronics=program; own.telemetry.electronics=program;
     own.pendingCommands.push_back({2,4,{},{},program});
-    save.pendingOrders.orders={SetFleetElectronicsOrder{own.id,program}}; save.pendingDescriptions={"Burst program"};
+    save.pendingOrders.orders = {SetFleetElectronicsOrder{own.id,program},
+        MoveFleetOrder{own.id, {425, 0}, 5, {FleetArrivalActionKind::ScanOnce}, {{{390, 0}, 5, {}}}}};
+    save.pendingDescriptions = {"Burst program", "Scan and withdraw"};
     const auto path=dir.filePath("reconnaissance.suns"); SaveGameData loaded;
     assert(write_save_game_file(path,save,error));
     const auto good=read_save_game_file(path,loaded,error); if(!good) std::cerr<<error.toStdString()<<'\n'; assert(good);
     assert(loaded.state.players[0].pendingEnemyContacts.front().shipCount==3);
     assert(loaded.state.players[0].observedEnemyFleets.front().observation.quality==ContactQuality::Identified);
     assert(loaded.state.fleets.front().electronics.burstInterval==2 && loaded.state.fleets.front().electronics.wakeOnArrival);
+    assert(loaded.state.fleets.front().electronics.wakeOnContactOrCombat);
     assert(loaded.state.fleets.front().telemetry.electronics.firstBurstTurn==4);
     assert(loaded.state.fleets.front().pendingCommands.back().electronics->activeBurst);
     TurnOrderFileData packet{32,save.state.turn,33,save.pendingOrders,save.pendingDescriptions}, imported;
     const auto orders=dir.filePath("reconnaissance.sunsorders");
     assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,imported,error));
-    assert(std::get<SetFleetElectronicsOrder>(imported.orders.orders.front()).program.firstBurstTurn==4);
+    const auto& receivedProgram = std::get<SetFleetElectronicsOrder>(imported.orders.orders.front()).program;
+    assert(receivedProgram.firstBurstTurn == 4 && receivedProgram.wakeOnContactOrCombat);
+    const auto& receivedRoute = std::get<MoveFleetOrder>(imported.orders.orders.back());
+    assert(receivedRoute.arrivalAction.kind == FleetArrivalActionKind::ScanOnce && receivedRoute.queuedWaypoints.size() == 1);
     const auto due=loaded.state.players[0].pendingEnemyContacts.front().deliveryTurn;
     loaded.state.fleets.clear(); loaded.pendingOrders={1,{}}; loaded.pendingDescriptions.clear();
     while(loaded.state.turn<due) {

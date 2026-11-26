@@ -412,7 +412,14 @@ void apply_battle(GameState& state, const BattleResult& result)
     const auto& report = result.report;
     std::set<PlayerId> recipients;
     std::set<FleetId> fleetIds;
-    for (const auto& u : report.units) { recipients.insert(u.owner); if (u.fleet) fleetIds.insert(u.fleet); }
+    std::set<FleetId> survivingFleets;
+    for (const auto& u : report.units) {
+        recipients.insert(u.owner);
+        if (u.fleet) fleetIds.insert(u.fleet);
+        if (u.fleet && u.survivingShips) survivingFleets.insert(u.fleet);
+    }
+    for (auto& fleet : state.fleets)
+        if (survivingFleets.contains(fleet.id)) wake_radio_after_encounter(state, fleet, report.observedTurn, true);
     std::map<PlayerId, std::uint64_t> deliveries;
     // Broadcast result packets while the pre-casualty relay network still
     // exists. This does not require a destroyed ship to transmit later.

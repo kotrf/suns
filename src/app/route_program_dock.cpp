@@ -373,6 +373,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Recover wreckage (persistent)", static_cast<int>(FleetArrivalActionKind::RecoverWreckage));
     actionCombo->addItem("Scrap Fleet (dismantle all ships)", static_cast<int>(FleetArrivalActionKind::ScrapFleet));
     actionCombo->addItem("Broadcast Decoy (expends probe)", static_cast<int>(FleetArrivalActionKind::BroadcastDecoy));
+    actionCombo->addItem("Scan once", static_cast<int>(FleetArrivalActionKind::ScanOnce));
     actionCombo->addItem("Refuel at depot", int(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Deploy outpost (permanent)", int(FleetArrivalActionKind::DeployOutpost));
     actionCombo->addItem("Transfer fuel to fleet / outpost", int(FleetArrivalActionKind::SupplyOutpost));
@@ -395,6 +396,8 @@ void attachRouteProgramDock(MainWindow& window)
     workTip(FleetArrivalActionKind::BroadcastDecoy, "Expends a lone Survey Probe fitted with a Decoy Transmitter at the final waypoint. "
         "Creates one false signal area. The probe needs transmissions or local colony exchange for its final report. "
         "Materials are recovered using the normal dismantling rules.");
+    workTip(FleetArrivalActionKind::ScanOnce, "Uses fitted scanners once at this waypoint. The fleet then follows its next waypoint "
+        "under its emission policy. Passive and radio-silent fleets buffer the results until their next permitted upload.");
     workTip(FleetArrivalActionKind::RecoverWreckage, "Requires a scanner and cargo capacity. Within 10 ly, collects one nearest wreck per year. Mineral salvage fills only free shared hold space; the remainder stays. Scientific wrecks may yield unfamiliar technology. Wrecks expire after 20 years.");
     workTip(FleetArrivalActionKind::DeployOutpost, "One ship with one paid kit, no colonists, at least 5 ly from stars and 1 ly from another installation. Permanent; last waypoint only, no repeat.");
     workTip(FleetArrivalActionKind::SupplyOutpost, "Choose a friendly fleet in Destination to follow it and transfer fuel on arrival, keeping the specified donor reserve. At a coordinate waypoint, supplies an owned outpost. Actual fuel and tank space are checked on arrival.");
@@ -515,9 +518,10 @@ void attachRouteProgramDock(MainWindow& window)
             || action == FleetArrivalActionKind::UnloadAll;
         workHereButton->setEnabled(window.selectedFleetForRouteProgram() != 0
             && (arrival_work_task(action).has_value() || action == FleetArrivalActionKind::ScrapFleet
-                || action == FleetArrivalActionKind::BroadcastDecoy));
+                || action == FleetArrivalActionKind::BroadcastDecoy || action == FleetArrivalActionKind::ScanOnce));
         workHereButton->setText(action == FleetArrivalActionKind::ScrapFleet ? "Scrap here"
             : action == FleetArrivalActionKind::BroadcastDecoy ? "Broadcast here"
+            : action == FleetArrivalActionKind::ScanOnce ? "Scan here"
             : action == FleetArrivalActionKind::RemoteMining ? "Start mining here" : "Start work here");
         cargoCombo->setEnabled(transfersCargo);
         reserveSpin->setEnabled(

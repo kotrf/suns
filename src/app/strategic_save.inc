@@ -3,18 +3,23 @@
 constexpr quint32 kStrategicExtensionMagic = 0x53545241u; // STRA
 
 void writeElectronics(QDataStream& stream, const ElectronicsProgram& value)
-{ writeEnum(stream, value.mode); stream << quint64(value.resumeTurn) << quint8(value.deception)
-    << quint8(value.burstInterval) << quint64(value.firstBurstTurn) << quint8(value.activeBurst) << quint8(value.wakeOnArrival); }
+{
+    const auto wakeFlags = quint8((value.wakeOnArrival ? 1 : 0) | (value.wakeOnContactOrCombat ? 2 : 0));
+    writeEnum(stream, value.mode); stream << quint64(value.resumeTurn) << quint8(value.deception)
+        << quint8(value.burstInterval) << quint64(value.firstBurstTurn) << quint8(value.activeBurst) << wakeFlags;
+}
 void readElectronics(QDataStream& stream, ElectronicsProgram& value)
 {
     quint64 resume{}; quint8 deception{};
     if (!readEnum(stream, value.mode, quint8(EmissionMode::RadioSilence))) return;
     stream >> resume >> deception; value.resumeTurn = resume; value.deception = deception != 0;
     if(gReadSaveFormatVersion>=66) {
-        quint64 first{}; quint8 active{},arrival{};
-        stream >> value.burstInterval >> first >> active >> arrival;
-        value.firstBurstTurn=first; value.activeBurst=active; value.wakeOnArrival=arrival;
-        if(active>1 || arrival>1) markCorrupt(stream);
+        quint64 first{}; quint8 active{},wakeFlags{};
+        stream >> value.burstInterval >> first >> active >> wakeFlags;
+        value.firstBurstTurn=first; value.activeBurst=active;
+        value.wakeOnArrival = (wakeFlags & 1) != 0;
+        value.wakeOnContactOrCombat = (wakeFlags & 2) != 0;
+        if (active > 1 || wakeFlags > (gReadSaveFormatVersion >= 138 ? 3 : 1)) markCorrupt(stream);
     }
     if(deception>1 || !electronics_program_valid(value)) markCorrupt(stream);
 }

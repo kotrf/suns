@@ -756,6 +756,28 @@ void newer_battle_plan_survives_overtaken_packet()
     assert(guard.battlePlan == escort && guard.battlePlansInTransit.empty());
 }
 
+void only_a_surviving_battle_participant_can_wake_its_radio()
+{
+    auto state = arena({C::Laser}, {C::CompletePhaseShield});
+    auto& defender = state.fleets[1];
+    defender.electronics = {EmissionMode::RadioSilence, state.turn + 20};
+    defender.electronics.wakeOnContactOrCombat = true;
+    const auto program = defender.electronics;
+    const auto id = defender.id;
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    assert(fleet(result.state, id)->electronics.mode == EmissionMode::Standard);
+    assert(std::any_of(result.events.begin(), result.events.end(), [id](const auto& event) {
+        return event.kind == GameEventKind::RadioSilenceEnded && event.recipient == 2 && event.fleet == id && event.quantity == 1;
+    }));
+    state = arena({C::ArmageddonMissile}, {});
+    state.fleets[1].electronics = program;
+    const auto loss = TurnProcessor{}.process_with_events(state, {});
+    assert(!fleet(loss.state, id));
+    assert(std::none_of(loss.events.begin(), loss.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::RadioSilenceEnded;
+    }));
+}
+
 int main()
 {
     simultaneous_and_initiative();
@@ -776,4 +798,5 @@ int main()
     anchored_escort_stays_in_place();
     withdrawals_near_stations();
     newer_battle_plan_survives_overtaken_packet();
+    only_a_surviving_battle_participant_can_wake_its_radio();
 }
