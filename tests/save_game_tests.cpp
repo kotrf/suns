@@ -2604,8 +2604,6 @@ void survey_snapshots_round_trip_and_keep_hidden_terraforming_private()
     planet.environment.temperature=67;
     state.fleets[0].position={1000,0};
     observe_current_sensor_coverage(state,9);
-    // Use signal metadata representable in the v82 fixture assembled below.
-    for (auto& pulse : state.emissions) pulse.activity = SignalActivity::Unclassified;
     state.fleets.clear();
     const auto path=dir.filePath("survey.suns"); SaveGameData loaded;
     assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));

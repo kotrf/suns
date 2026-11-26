@@ -3481,6 +3481,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeBattlePlans(stream, data.state);
     writeRemoteGeology(stream, data.state);
     writeMobileGateCommands(stream, data.state, data.mode == SessionMode::PlayerTurn);
+    writeEmissionActivities(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3622,6 +3623,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (version >= 133) readBattlePlans(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version >= 134) readRemoteGeology(stream, loaded.state);
     if (version >= 135) readMobileGateCommands(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
+    if (version >= 139) readEmissionActivities(stream, loaded.state);
     loaded.galaxyConfig.slowResearch = loaded.state.slowResearch;
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
