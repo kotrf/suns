@@ -56,7 +56,7 @@ void version130_ranges_keep_old_layouts_and_reject_invalid_new_motion()
 {
     QTemporaryDir dir;QString error;SaveGameData loaded;const auto path=dir.filePath("version.suns");
     auto h=host();assert(write_save_game_file(path,h,error));auto current=bytes(path);
-    { QDataStream in(current);quint32 magic{},version{};in>>magic>>version;assert(version==136); }
+    { QDataStream in(current);quint32 magic{},version{};in>>magic>>version;assert(version==137); }
     auto prior=current;
     { QDataStream patch(&prior,QIODevice::ReadWrite);assert(patch.device()->seek(4));patch<<quint32{130}; }
     raw(path,prior);assert(read_save_game_file(path,loaded,error) && loaded.state.unknownObjects.front().kind==UnknownObjectKind::RoguePlanetoid);

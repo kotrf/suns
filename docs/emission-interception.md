@@ -40,8 +40,27 @@ position; sufficiently strong tachyon reception rejects only the false area.
 Contemporaneous known hull evidence can suppress a redundant anonymous marker;
 old pulses never query a departed source's current state.
 
-Save v76 stores in-flight pulses, receiver receipts and dated report/message
-metadata. Player exports contain delivered anonymous evidence, never host pulses,
-source identities, unsent reports or incoming intelligence. Orders remain v25.
-Advanced traffic classification, specialized SIGINT hardware, physical decoys and
-slow-link interference remain later work under #58/#101/#205.
+## Expendable decoy probes
+
+Fit one Decoy Transmitter to a Survey Probe after Energy 8 and Electronics 12
+(the hull requires Construction 16). Assign a single probe a final,
+non-repeating **Broadcast Decoy** waypoint at a system or deep-space
+coordinates. The probe travels under ordinary movement, detection and combat
+rules. On arrival it sends one forged fast signal and is expended. Normal
+dismantling returns part of the minerals and preserves any ordinary mineral
+cargo. The probe waits if it cannot send its final report or upload it at an
+owned colony. Its owner's confirmed contact disappears when the completion
+report arrives.
+
+The forged pulse reaches hostile receivers no more than 240 ly from the site's
+physical position and still within their own reception range. Its apparent
+area has the same displacement and uncertainty as jammer deception.
+A combined tachyon rating of 18% or more suppresses the forged pulse;
+the probe's genuine communication packets still follow ordinary interception
+rules. Genuine and forged emission observations are keyed by the apparent cell,
+emission year and channel. Exported evidence carries no pulse ID or decoy flag.
+
+Save v137 stores the decoy flag only in the host's in-flight pulses. Player turn
+files carry delivered anonymous evidence. Orders v63 carry the new waypoint
+action and ship fitting. Advanced traffic classification and specialized SIGINT
+remain design candidates under #58/#205.

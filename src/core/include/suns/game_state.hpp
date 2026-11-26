@@ -405,9 +405,10 @@ enum class ShipComponentType {
     GeologicalScanner,
     ExpeditionStargate,
     AreaJammer,
+    DecoyTransmitter,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::AreaJammer;
+inline constexpr auto kLastShipComponent = ShipComponentType::DecoyTransmitter;
 
 enum class ShipComponentKind {
     Engine,
@@ -970,6 +971,7 @@ enum class PlayerReportKind {
     RemoteGeologyObserved,
     MobileStargateTransit, // Total fuel containers spent by the mobile gates.
     MobileStargateTransitFailed,
+    DecoyBroadcastStatus,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1343,6 +1345,7 @@ struct EmissionPulse {
     FleetId fleet{};
     PlanetId colony{};
     std::vector<EmissionReceipt> receipts;
+    bool decoyOnly{}; // This pulse generates fabricated evidence only.
 };
 enum class StrategicObjectKind : std::uint8_t { Minefield, Wreck, Emission };
 // Immutable sensor evidence, never a reference to current hidden truth.
@@ -1570,6 +1573,7 @@ enum class FleetArrivalActionKind {
     UnloadTransportLine, // Ordinary mineral unload with frozen receipt attribution.
     UnloadTransportStop, // Multi-stop visit: one bounded delivery, retain surplus for later stops.
     ScrapFleet, // Terminal, one-shot dismantling of the complete fleet.
+    BroadcastDecoy, // Terminal, one-shot broadcast by an expendable Survey Probe.
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1593,7 +1597,7 @@ enum class FleetArrivalActionKind {
 {
     return arrival_work_task(kind).has_value() || kind == FleetArrivalActionKind::Colonize
         || kind == FleetArrivalActionKind::MergeWithFleet || kind == FleetArrivalActionKind::EnterWormhole
-        || kind == FleetArrivalActionKind::ScrapFleet;
+        || kind == FleetArrivalActionKind::ScrapFleet || kind == FleetArrivalActionKind::BroadcastDecoy;
 }
 
 enum class FleetCargoKind {

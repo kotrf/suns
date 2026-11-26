@@ -11,6 +11,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/production.hpp"
 #include "suns/mining.hpp"
+#include "suns/fleet_recycling.hpp"
 #include "fleet_sensor_sweep.hpp"
 
 #include <algorithm>
@@ -249,7 +250,7 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::ScrapFleet) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::BroadcastDecoy) return false;
         if (!mineral_load_policy_valid(action) || !transport_unload_valid(action)
             || action.recoveryTarget>0x7fffffffU || (action.kind!=FleetArrivalActionKind::RecoverSample && action.recoveryTarget)) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
@@ -300,6 +301,7 @@ bool route_tasks_valid(const FleetRouteProgram& program)
 bool route_work_equipment_valid(const GameState& state, const Fleet& fleet, const FleetRouteProgram& program)
 {
     const auto valid = [&](const FleetArrivalAction& action) {
+        if (action.kind == FleetArrivalActionKind::BroadcastDecoy) return decoy_probe_available(state, fleet);
         const auto task = arrival_work_task(action.kind);
         return !task || fleet_task_equipment_available(state, fleet, *task);
     };
@@ -478,6 +480,7 @@ bool projection_needs_arrival_outcome(const FleetArrivalAction& action)
 {
     return action.kind==FleetArrivalActionKind::TransitStargate
         || action.kind==FleetArrivalActionKind::ScrapFleet
+        || action.kind==FleetArrivalActionKind::BroadcastDecoy
         || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum)
         || action.kind==FleetArrivalActionKind::UnloadTransportStop
         || (action.kind==FleetArrivalActionKind::UnloadTransportLine && (action.destinationTarget || action.transportDestinationFleet));
@@ -703,7 +706,7 @@ void record_pulse(GameState& state, PlayerId owner, Position position, std::uint
 {
     if (!find_player(state,owner)) return;
     if (std::any_of(state.emissions.begin(),state.emissions.end(),[&](const auto& p) {
-        return p.owner==owner && p.emittedTurn==turn && p.channel==channel && same_position(p.position,position);
+        return !p.decoyOnly && p.owner==owner && p.emittedTurn==turn && p.channel==channel && same_position(p.position,position);
     })) return; // One physical annual packet batch, not one marker per payload.
     EmissionPulse pulse; pulse.id=state.nextEmissionId++; pulse.owner=owner;
     pulse.position=position; pulse.emittedTurn=turn; pulse.channel=channel;

@@ -1558,7 +1558,8 @@ void equipment_catalog_round_trip()
     value.pendingOrders.player = 1;
     value.state.players.front().technology.levels.fill(26);
     for (const auto& equipment : equipment_technologies()) {
-        auto hull = equipment.component == ShipComponentType::SurveyAutopilot ? ShipHullType::SurveyProbe
+        auto hull = equipment.component == ShipComponentType::SurveyAutopilot
+            || equipment.component == ShipComponentType::DecoyTransmitter ? ShipHullType::SurveyProbe
             : (equipment.component == ShipComponentType::ExpeditionDock || equipment.component == ShipComponentType::ExpeditionWorkshop || equipment.component >= ShipComponentType::OrbitalShipyardKit) ? ShipHullType::ExpeditionBase
             : equipment.kind == ShipComponentKind::Bomb ? ShipHullType::B52Bomber
             : equipment.kind == ShipComponentKind::Mining ? ShipHullType::Miner
@@ -2192,6 +2193,64 @@ void emission_pulses_and_dated_reports_round_trip()
     assert(write_save_game_file(path,invalid,error) && !read_save_game_file(path,loaded,error));
 }
 
+void decoy_program_and_consumed_probe_round_trip()
+{
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData save;
+    save.campaignId = 190;
+    save.turnToken = 191;
+    save.mode = SessionMode::Host;
+    save.playerTokens = {{1, 191}};
+    save.state = make_demo_game();
+    auto& fleet = save.state.fleets.front();
+    const auto position = fleet.position;
+    const auto fleetId = fleet.id;
+    const std::vector components{ShipComponentType::FuelMizer, ShipComponentType::DecoyTransmitter};
+    const auto hull = ShipHullType::SurveyProbe;
+    ShipDesign design{save.state.nextShipDesignId++, 1, "Decoy Probe", hull, components};
+    normalize_ship_design_placement(design);
+    save.state.shipDesigns.push_back(design);
+    fleet.design = design.id;
+    fleet.ships = {{design.id, 1}};
+    fleet.telemetry = {};
+    fleet.colonists = 0;
+    fleet.minerals = {};
+
+    const auto action = FleetArrivalAction{FleetArrivalActionKind::BroadcastDecoy};
+    const auto move = MoveFleetOrder{fleetId, position, 5, action};
+    const auto path = dir.filePath("decoy.sunsorders");
+    TurnOrderFileData orders;
+    orders.campaignId = save.campaignId;
+    orders.turnToken = save.turnToken;
+    orders.turn = save.state.turn;
+    orders.orders = {1, {move, CreateShipDesignOrder{design.name, hull, components, design.placements}}};
+    orders.descriptions = {"Broadcast Decoy", "Design a probe"};
+    TurnOrderFileData imported;
+    assert(write_turn_order_file(path, orders, error) && read_turn_order_file(path, imported, error));
+    assert(std::get<MoveFleetOrder>(imported.orders.orders[0]).arrivalAction == action);
+    assert(std::get<CreateShipDesignOrder>(imported.orders.orders[1]).components == components);
+    imported.orders.orders.pop_back();
+    auto result = TurnProcessor{}.process_with_events(save.state, {imported.orders});
+    save.state = std::move(result.state);
+    save.strategicMessages = std::move(result.events);
+    save.pendingOrders = {1, {}};
+
+    const auto hostPath = dir.filePath("decoy-host.suns");
+    SaveGameData loaded;
+    assert(write_save_game_file(hostPath, save, error) && read_save_game_file(hostPath, loaded, error));
+    const auto pulse = std::find_if(loaded.state.emissions.begin(), loaded.state.emissions.end(),
+        [](const auto& p) { return p.decoyOnly; });
+    assert(pulse != loaded.state.emissions.end() && pulse->fleet == fleetId && same_position(pulse->position, position));
+    assert(std::none_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [fleetId](const auto& f) { return f.id == fleetId; }));
+    assert(std::any_of(loaded.strategicMessages.begin(), loaded.strategicMessages.end(), [](const auto& event) {
+        return event.kind == GameEventKind::DecoyBroadcastStatus && event.quantity == 1;
+    }));
+    const auto playerPath = dir.filePath("decoy-player.suns");
+    assert(write_save_game_file(playerPath, make_player_turn(loaded, 1), error) && read_save_game_file(playerPath, save, error));
+    assert(save.state.emissions.empty());
+}
+
 void planetary_war_damage_and_reconstruction_round_trip()
 {
     QTemporaryDir dir; QString error;
@@ -2739,6 +2798,7 @@ int main()
     v77_reconstruction_saves_default_to_no_contamination();
     planetary_war_damage_and_reconstruction_round_trip();
     emission_pulses_and_dated_reports_round_trip();
+    decoy_program_and_consumed_probe_round_trip();
     reconnaissance_and_programs_round_trip();
     area_jammer_round_trips_in_host_and_player_turns();
     stargate_orders_round_trip();

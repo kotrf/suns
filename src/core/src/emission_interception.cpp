@@ -29,17 +29,16 @@ std::vector<Receiver> receivers(const GameState& state,std::uint64_t turn)
     });
     return result;
 }
-void record(GameState& state,const Receiver& receiver,const EmissionPulse& pulse,Position area,
-    std::uint32_t id,std::uint64_t turn)
+void record(GameState& state,const Receiver& receiver,const EmissionPulse& pulse,Position area,std::uint64_t turn)
 {
     auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==receiver.player;});
     if(player==state.players.end()) return;
     const auto due=dispatch_report_delivery_turn(state,receiver.player,receiver.position,turn,receiver.fleet);
     const auto held=held_report_source(state,receiver.player,receiver.position,turn,receiver.fleet);
     const EmissionObservation observation{pulse.emittedTurn,pulse.channel};
-    StrategicIntel intel{id,StrategicObjectKind::Emission,area,15,0,turn,due,0,
+    StrategicIntel intel{0,StrategicObjectKind::Emission,area,15,0,turn,due,0,
         std::uint8_t(pulse.channel),held,observation};
-    const auto same=[&](const auto& old){return old.type==intel.type && old.id==id;};
+    const auto same = [&](const auto& old) { return same_strategic_intel_subject(old, intel); };
     // An earlier received copy and a still-held duplicate are separate physical
     // reports; keep the earliest dispatch rather than replacing old evidence.
     if(std::none_of(player->strategicIntel.begin(),player->strategicIntel.end(),same)) {
@@ -59,6 +58,20 @@ void record(GameState& state,const Receiver& receiver,const EmissionPulse& pulse
     else if(due<old->deliveryTurn) *old=report;
 }
 }
+void record_decoy_pulse(GameState& state, const Fleet& fleet, std::uint64_t turn)
+{
+    EmissionPulse pulse;
+    pulse.id = state.nextEmissionId++;
+    pulse.owner = fleet.owner;
+    pulse.fleet = fleet.id;
+    pulse.position = fleet.position;
+    pulse.emittedTurn = turn;
+    pulse.maximumRange = kDecoyPulseRangeLy;
+    pulse.deceptionStrength = kDecoyPulseStrength;
+    pulse.decoyOnly = true;
+    state.emissions.push_back(std::move(pulse));
+}
+
 void observe_emission_pulses(GameState& state,std::uint64_t turn)
 {
     std::erase_if(state.emissions,[&](const auto& p) {
@@ -92,8 +105,9 @@ void observe_emission_pulses(GameState& state,std::uint64_t turn)
             if(pulse.deceptionStrength>receiver.tachyon) {
                 const Position ghost{std::floor((pulse.position.x+40)/20)*20+10,
                     std::floor((pulse.position.y+20)/20)*20+10};
-                record(state,receiver,pulse,ghost,pulse.id*2+1,turn);
+                record(state,receiver,pulse,ghost,turn);
             }
+            if (pulse.decoyOnly) continue;
             // Suppress only redundant contemporaneous hull evidence. An old
             // pulse never queries a departed/destroyed emitter's current truth.
             bool hullSeen=false;
@@ -112,7 +126,7 @@ void observe_emission_pulses(GameState& state,std::uint64_t turn)
                 }
             }
             if(!hullSeen) record(state,receiver,pulse,{std::floor(pulse.position.x/20)*20+10,
-                std::floor(pulse.position.y/20)*20+10},pulse.id*2,turn);
+                std::floor(pulse.position.y/20)*20+10},turn);
         }
     }
 }

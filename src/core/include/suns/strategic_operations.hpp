@@ -5,6 +5,8 @@
 namespace suns {
 inline constexpr double kAreaJammerRangeLy = 90.0;
 inline constexpr double kAreaJammerSensorReduction = 0.40;
+inline constexpr double kDecoyPulseRangeLy = 240.0;
+inline constexpr double kDecoyPulseStrength = 0.18;
 
 [[nodiscard]] double minefield_radius(const Minefield&);
 [[nodiscard]] std::uint8_t minefield_safe_warp(std::uint8_t kind);
@@ -41,6 +43,8 @@ void advance_minefields(GameState&);
     std::span<const Minefield> navigationFields = {});
 [[nodiscard]] Position minefield_navigation_endpoint(const GameState&, const Fleet&, Position end);
 void run_strategic_tasks(GameState&, std::uint64_t);
+[[nodiscard]] bool same_strategic_intel_subject(const StrategicIntel&, const StrategicIntel&);
+void record_decoy_pulse(GameState&, const Fleet&, std::uint64_t turn);
 void observe_emission_pulses(GameState&, std::uint64_t);
 void observe_strategic_objects(GameState&, std::uint64_t);
 void deliver_strategic_intel(GameState&);

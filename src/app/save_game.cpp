@@ -42,11 +42,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 136;
+constexpr quint32 kSaveFormatVersion = 137;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 62;
+constexpr quint32 kTurnOrderFormatVersion = 63;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -69,7 +69,8 @@ quint8 newestUnknownObjectKind()
 
 quint8 newestShipComponent()
 {
-    return static_cast<quint8>(gReadSaveFormatVersion >= 136 ? ShipComponentType::AreaJammer
+    return static_cast<quint8>(gReadSaveFormatVersion >= 137 ? ShipComponentType::DecoyTransmitter
+        : gReadSaveFormatVersion >= 136 ? ShipComponentType::AreaJammer
         : gReadSaveFormatVersion >= 135 ? ShipComponentType::ExpeditionStargate
         : gReadSaveFormatVersion >= 134 ? ShipComponentType::GeologicalScanner
         : gReadSaveFormatVersion >= 129 ? ShipComponentType::CargoCacheKit : gReadSaveFormatVersion >= 123 ? ShipComponentType::SensorArrayKit : gReadSaveFormatVersion >= 97 ? ShipComponentType::AdvancedRadiationScreen : gReadSaveFormatVersion >= 88 ? ShipComponentType::SurveyAutopilot : gReadSaveFormatVersion >= 84
@@ -280,7 +281,8 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 109 ? FleetArrivalActionKind::ScrapFleet : gReadSaveFormatVersion >= 107 ? FleetArrivalActionKind::UnloadTransportStop : gReadSaveFormatVersion >= 104 ? FleetArrivalActionKind::UnloadTransportLine : gReadSaveFormatVersion >= 103 ? FleetArrivalActionKind::LoadMinerals : gReadSaveFormatVersion >= 96 ? FleetArrivalActionKind::TransitStargate : gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
+    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 137 ? FleetArrivalActionKind::BroadcastDecoy
+        : gReadSaveFormatVersion >= 109 ? FleetArrivalActionKind::ScrapFleet : gReadSaveFormatVersion >= 107 ? FleetArrivalActionKind::UnloadTransportStop : gReadSaveFormatVersion >= 104 ? FleetArrivalActionKind::UnloadTransportLine : gReadSaveFormatVersion >= 103 ? FleetArrivalActionKind::LoadMinerals : gReadSaveFormatVersion >= 96 ? FleetArrivalActionKind::TransitStargate : gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
         ? FleetArrivalActionKind::SupplyOutpost : gReadSaveFormatVersion >= 74
         ? FleetArrivalActionKind::RecoverWreckage : gReadSaveFormatVersion >= 54
         ? FleetArrivalActionKind::EnterWormhole : FleetArrivalActionKind::MergeWithFleet))) return;
@@ -369,7 +371,7 @@ bool invalidWaypointWork(const FleetRouteProgram& value)
     if (gReadSaveFormatVersion < 74) return false;
     const auto work = [](const FleetArrivalAction& action) {
         return arrival_work_task(action.kind).has_value() || action.colonyPlan.has_value()
-            || action.kind == FleetArrivalActionKind::TransitStargate;
+            || action.kind == FleetArrivalActionKind::TransitStargate || action.kind == FleetArrivalActionKind::BroadcastDecoy;
     };
     const bool hasWork = work(value.arrivalAction) || std::any_of(
         value.queuedWaypoints.begin(), value.queuedWaypoints.end(),
@@ -1152,7 +1154,8 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 135 ? GameEventKind::MobileStargateTransitFailed
+    const auto newestEventKind = gReadSaveFormatVersion >= 137 ? GameEventKind::DecoyBroadcastStatus
+            : gReadSaveFormatVersion >= 135 ? GameEventKind::MobileStargateTransitFailed
             : gReadSaveFormatVersion >= 134 ? GameEventKind::RemoteGeologyObserved : gReadSaveFormatVersion >= 121 ? GameEventKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? GameEventKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
@@ -1764,7 +1767,8 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 135 ? PlayerReportKind::MobileStargateTransitFailed
+        const auto newestReportKind = gReadSaveFormatVersion >= 137 ? PlayerReportKind::DecoyBroadcastStatus
+            : gReadSaveFormatVersion >= 135 ? PlayerReportKind::MobileStargateTransitFailed
             : gReadSaveFormatVersion >= 134 ? PlayerReportKind::RemoteGeologyObserved : gReadSaveFormatVersion >= 121 ? PlayerReportKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? PlayerReportKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -3824,7 +3828,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 62 ? 136 : version >= 61 ? 135 : version >= 60 ? 134 : version >= 59 ? 133 : version >= 58 ? 132 : version >= 57 ? 131 : version >= 56 ? 129 : version >= 55 ? 127 : version >= 54 ? 126 : version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 63 ? 137 : version >= 62 ? 136 : version >= 61 ? 135 : version >= 60 ? 134 : version >= 59 ? 133 : version >= 58 ? 132 : version >= 57 ? 131 : version >= 56 ? 129 : version >= 55 ? 127 : version >= 54 ? 126 : version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

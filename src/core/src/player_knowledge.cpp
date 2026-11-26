@@ -69,6 +69,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::FleetTargetLost: return GameEventKind::FleetTargetLost;
     case PlayerReportKind::FleetsMerged: return GameEventKind::FleetsMerged;
     case PlayerReportKind::FleetScrapStatus: return GameEventKind::FleetScrapStatus;
+    case PlayerReportKind::DecoyBroadcastStatus: return GameEventKind::DecoyBroadcastStatus;
     case PlayerReportKind::ProductionWaitingForShipyard:
         return GameEventKind::ProductionWaitingForShipyard;
     case PlayerReportKind::PrecursorArtifactsDiscovered:
@@ -1009,7 +1010,8 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
             apply_received_station_battle(player,report);
             if (report.kind == PlayerReportKind::ScientificData) apply_scientific_data(state, player, report, events);
             auto severity = event_severity(report.kind);
-            if (report.kind == PlayerReportKind::FleetScrapStatus && report.quantity > 2) severity = GameEventSeverity::Warning;
+            if ((report.kind == PlayerReportKind::FleetScrapStatus || report.kind == PlayerReportKind::DecoyBroadcastStatus)
+                && report.quantity > 2) severity = GameEventSeverity::Warning;
             if (report.kind == PlayerReportKind::XenocrystalDepleted
                 || (report.kind == PlayerReportKind::ResonanceProjectStatus && report.quantity > kResonanceWork)) severity = GameEventSeverity::Warning;
             if (report.kind==PlayerReportKind::OrbitalBaseStatus && report.quantity>0 && !report.deliveredColonists) severity=GameEventSeverity::Information;
