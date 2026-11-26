@@ -13,15 +13,17 @@ struct Receiver {
     FleetId fleet{};
     PlanetId colony{};
     double range{}, tachyon{};
+    bool canClassify{};
 };
 std::vector<Receiver> receivers(const GameState& state,std::uint64_t turn)
 {
+    const auto classify = [&](PlayerId player) { return technology_level(state, player, ResearchField::Electronics) >= 8; };
     std::vector<Receiver> result;
     for(const auto& p:state.planets) if(p.owner && total_colony_population(p) && p.radar!=PlanetaryRadarLevel::None)
         if(const auto* star=find_star(state,p.star)) result.push_back({p.owner,star->position,0,p.id,
-            2*planetary_radar_range(p.radar)*(1-sensor_interference(state,p.owner,star->position,turn)),0});
+            2*planetary_radar_range(p.radar)*(1-sensor_interference(state,p.owner,star->position,turn)),0,classify(p.owner)});
     for(const auto& f:state.fleets) if(fleet_has_scanner(state,f)) result.push_back({f.owner,f.position,f.id,0,
-        2*fleet_sensor_range(state,f)*(1-sensor_interference(state,f.owner,f.position,turn)),fleet_tachyon_fraction(state,f)});
+        2*fleet_sensor_range(state,f)*(1-sensor_interference(state,f.owner,f.position,turn)),fleet_tachyon_fraction(state,f),classify(f.owner)});
     std::sort(result.begin(),result.end(),[](const auto& a,const auto& b) {
         if(a.player!=b.player) return a.player<b.player;
         if(a.colony!=b.colony) return a.colony>b.colony;
@@ -29,22 +31,28 @@ std::vector<Receiver> receivers(const GameState& state,std::uint64_t turn)
     });
     return result;
 }
-void record(GameState& state,const Receiver& receiver,const EmissionPulse& pulse,Position area,std::uint64_t turn)
+void record(GameState& state, const Receiver& receiver, const EmissionPulse& pulse, Position area,
+    std::uint64_t turn, SignalActivity activity)
 {
     auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==receiver.player;});
     if(player==state.players.end()) return;
     const auto due=dispatch_report_delivery_turn(state,receiver.player,receiver.position,turn,receiver.fleet);
     const auto held=held_report_source(state,receiver.player,receiver.position,turn,receiver.fleet);
-    const EmissionObservation observation{pulse.emittedTurn,pulse.channel};
+    const EmissionObservation observation{pulse.emittedTurn, pulse.channel, activity};
     StrategicIntel intel{0,StrategicObjectKind::Emission,area,15,0,turn,due,0,
         std::uint8_t(pulse.channel),held,observation};
     const auto same = [&](const auto& old) { return same_strategic_intel_subject(old, intel); };
-    // An earlier received copy and a still-held duplicate are separate physical
-    // reports; keep the earliest dispatch rather than replacing old evidence.
+    // Favor the earliest receipt. A simultaneous received copy can add a
+    // classification. Evidence still aboard another observer stays aboard.
+    const auto prefer = [&](const auto& old) {
+        return due < old.deliveryTurn || (due == old.deliveryTurn && due != kAwaitingTransmission
+            && activity != SignalActivity::Unclassified && old.emission
+            && old.emission->activity == SignalActivity::Unclassified);
+    };
     if(std::none_of(player->strategicIntel.begin(),player->strategicIntel.end(),same)) {
         auto old=std::find_if(player->pendingStrategicIntel.begin(),player->pendingStrategicIntel.end(),same);
         if(old==player->pendingStrategicIntel.end()) player->pendingStrategicIntel.push_back(intel);
-        else if(due<old->deliveryTurn) *old=intel;
+        else if(prefer(*old)) *old=intel;
     }
     PendingPlayerReport report; report.kind=PlayerReportKind::EmissionDetected;
     report.observedTurn=turn; report.deliveryTurn=due; report.transmissionFleet=held;
@@ -55,7 +63,7 @@ void record(GameState& state,const Receiver& receiver,const EmissionPulse& pulse
     };
     auto old=std::find_if(player->pendingPlayerReports.begin(),player->pendingPlayerReports.end(),sameReport);
     if(old==player->pendingPlayerReports.end()) player->pendingPlayerReports.push_back(report);
-    else if(due<old->deliveryTurn) *old=report;
+    else if(prefer(*old)) *old=report;
 }
 }
 void record_decoy_pulse(GameState& state, const Fleet& fleet, std::uint64_t turn)
@@ -69,7 +77,19 @@ void record_decoy_pulse(GameState& state, const Fleet& fleet, std::uint64_t turn
     pulse.maximumRange = kDecoyPulseRangeLy;
     pulse.deceptionStrength = kDecoyPulseStrength;
     pulse.decoyOnly = true;
+    pulse.activity = SignalActivity::RadioTraffic;
     state.emissions.push_back(std::move(pulse));
+}
+
+const char* signal_activity_name(SignalActivity activity)
+{
+    switch (activity) {
+    case SignalActivity::RadioTraffic: return "radio traffic";
+    case SignalActivity::ActiveElectronics: return "active scanners or jamming";
+    case SignalActivity::Mixed: return "radio traffic and active electronics";
+    case SignalActivity::Unclassified: return "unclassified";
+    }
+    return "unclassified";
 }
 
 void observe_emission_pulses(GameState& state,std::uint64_t turn)
@@ -90,7 +110,10 @@ void observe_emission_pulses(GameState& state,std::uint64_t turn)
         for(const auto& receiver:sensors) {
             if(receiver.player==pulse.owner || receiver.range<=0) continue;
             const auto distance=distance_between(pulse.position,receiver.position);
-            if(distance>std::min(receiver.range,pulse.maximumRange)+1e-6) continue;
+            const auto reach = std::min(receiver.range, pulse.maximumRange);
+            if(distance>reach+1e-6) continue;
+            const auto activity = receiver.canClassify && distance <= reach * 0.5
+                ? pulse.activity : SignalActivity::Unclassified;
             if(pulse.channel==SignalChannel::Slow) {
                 // A shell, not a permanently filled detection disk. Interception
                 // happens before the observer's separate report propagation.
@@ -105,7 +128,7 @@ void observe_emission_pulses(GameState& state,std::uint64_t turn)
             if(pulse.deceptionStrength>receiver.tachyon) {
                 const Position ghost{std::floor((pulse.position.x+40)/20)*20+10,
                     std::floor((pulse.position.y+20)/20)*20+10};
-                record(state,receiver,pulse,ghost,turn);
+                record(state,receiver,pulse,ghost,turn,activity);
             }
             if (pulse.decoyOnly) continue;
             // Suppress only redundant contemporaneous hull evidence. An old
@@ -126,7 +149,7 @@ void observe_emission_pulses(GameState& state,std::uint64_t turn)
                 }
             }
             if(!hullSeen) record(state,receiver,pulse,{std::floor(pulse.position.x/20)*20+10,
-                std::floor(pulse.position.y/20)*20+10},turn);
+                std::floor(pulse.position.y/20)*20+10},turn,activity);
         }
     }
 }

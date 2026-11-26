@@ -60,7 +60,22 @@ the probe's genuine communication packets still follow ordinary interception
 rules. Genuine and forged emission observations are keyed by the apparent cell,
 emission year and channel. Exported evidence carries no pulse ID or decoy flag.
 
-Save v137 stores the decoy flag only in the host's in-flight pulses. Player turn
-files carry delivered anonymous evidence. Orders v63 carry the new waypoint
-action and ship fitting. Advanced traffic classification and specialized SIGINT
-remain design candidates under #58/#205.
+Save v137 introduced the host-only decoy flag. Player turn files carry
+delivered anonymous evidence. Orders v63 introduced the waypoint action and
+ship fitting.
+
+## Signal patterns
+
+With Electronics 8 a receiver in the inner half of its effective reception
+range can recognize radio traffic, active scanners or jamming, or both in the
+same annual batch. Distant signals remain unclassified. A forged pulse can
+imitate radio traffic. The map and Turn Messages show the received pattern
+with the original channel and dates. Patterns describe the observed signal
+and leave the sender and packet contents unknown. They survive save/reload
+and PBEM export from save v139.
+
+Slow reception at a jammed physical endpoint over a hop longer than 450 ly
+adds a year of decoding to addressed packets. The signal still reaches
+interceptors along the same wavefront. Timing is selected at dispatch and
+remains attached to the packet. Specialized SIGINT and authentication
+remain design candidates.

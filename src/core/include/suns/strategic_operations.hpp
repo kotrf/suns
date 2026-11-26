@@ -44,6 +44,7 @@ void advance_minefields(GameState&);
 [[nodiscard]] Position minefield_navigation_endpoint(const GameState&, const Fleet&, Position end);
 void run_strategic_tasks(GameState&, std::uint64_t);
 [[nodiscard]] bool same_strategic_intel_subject(const StrategicIntel&, const StrategicIntel&);
+[[nodiscard]] const char* signal_activity_name(SignalActivity);
 void record_decoy_pulse(GameState&, const Fleet&, std::uint64_t turn);
 void observe_emission_pulses(GameState&, std::uint64_t);
 void observe_strategic_objects(GameState&, std::uint64_t);

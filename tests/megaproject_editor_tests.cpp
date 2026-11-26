@@ -79,7 +79,7 @@ void versioned_orders_and_paused_completed_experiments_roundtrip()
     assert(apply_planetary_engineering_order(s,s.planets.front(),test::mega_order(1,E::RadicalTransformation,A::Pause)));
     auto h=host(s);SaveGameData loaded;assert(write_save_game_file(save,h,error) && read_save_game_file(save,loaded,error));
     assert(loaded.state.planets.front().engineering.transformation.paused && loaded.state.planets.front().engineering.transformation.shelterCapacity==s.planets.front().population);
-    old=bytes(save);assert(quint8(old[7])==138);old[7]=char(131);raw(save,old);assert(!read_save_game_file(save,loaded,error));
+    old=bytes(save);assert(quint8(old[7])==139);old[7]=char(131);raw(save,old);assert(!read_save_game_file(save,loaded,error));
     h.state.planets.front().engineering.transformation.years=30;assert(!write_save_game_file(save,h,error));
     assert(apply_planetary_engineering_order(s,s.planets.front(),test::mega_order(1,E::RadicalTransformation,A::StartOrResume)));
     while(surface_sheltered(s.planets.front()))s=TurnProcessor{}.process(s,{});

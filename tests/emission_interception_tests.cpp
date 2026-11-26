@@ -157,9 +157,50 @@ void expendable_probe_broadcasts_at_the_final_waypoint()
     assert(std::none_of(state.players[0].strategicIntel.begin(), state.players[0].strategicIntel.end(), echo));
 }
 
+void only_strong_signals_reveal_anonymous_activity()
+{
+    auto state = fixture();
+    state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+    state.fleets[0].position = {510, 0};
+    auto weak = state;
+    weak.fleets[0].position = {440, 0};
+    auto earlyTechnology = state;
+    earlyTechnology.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 7;
+    const auto detect = [](GameState& s, std::uint64_t observedTurn) {
+        record_scan_transmission(s, s.fleets[1], s.turn);
+        publish_fleet_telemetry(s, s.turn);
+        observe_emission_pulses(s, observedTurn);
+    };
+    const auto activity = [](const GameState& s, SignalChannel channel) {
+        const auto& evidence = s.players[0].pendingStrategicIntel;
+        const auto observation = std::find_if(evidence.begin(), evidence.end(), [channel](const auto& e) {
+            return e.emission && e.emission->channel == channel && same_position(e.position, {610, 10});
+        });
+        assert(observation != evidence.end() && !observation->owner && !observation->id);
+        return observation->emission->activity;
+    };
+    detect(state, 11);
+    assert(activity(state, SignalChannel::Slow) == SignalActivity::RadioTraffic);
+    assert(activity(state, SignalChannel::Fast) == SignalActivity::ActiveElectronics);
+    detect(weak, 12);
+    assert(activity(weak, SignalChannel::Slow) == SignalActivity::Unclassified);
+    detect(earlyTechnology, 11);
+    assert(activity(earlyTechnology, SignalChannel::Slow) == SignalActivity::Unclassified);
+
+    auto mixed = fixture();
+    mixed.stars[1].position = {700, 0};
+    mixed.fleets[0].position = {510, 0};
+    mixed.fleets[1].electronics = {};
+    mixed.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+    publish_fleet_telemetry(mixed, mixed.turn);
+    observe_emission_pulses(mixed, mixed.turn + 1);
+    assert(activity(mixed, SignalChannel::Fast) == SignalActivity::Mixed);
+}
+
 int main()
 {
     two_physical_delays_and_immutable_source(); passive_reception_waits_for_real_dispatch();
     colony_forwards_silent_fleet_without_relocating_emission(); actual_fast_transmission_and_command_source();
     expendable_probe_broadcasts_at_the_final_waypoint();
+    only_strong_signals_reveal_anonymous_activity();
 }

@@ -2177,6 +2177,7 @@ void emission_pulses_and_dated_reports_round_trip()
     assert(write_save_game_file(path,save,error));
     const auto ok=read_save_game_file(path,loaded,error); if(!ok) std::cerr<<error.toStdString()<<'\n'; assert(ok);
     assert(loaded.state.emissions.size()==3 && loaded.state.emissions.back().emittedTurn==10);
+    assert(loaded.state.emissions.back().activity==SignalActivity::RadioTraffic);
     loaded.state.fleets.pop_back(); loaded.state.turn=12; observe_emission_pulses(loaded.state,12);
     assert(loaded.state.players[0].pendingStrategicIntel.front().emission->emittedTurn==10);
     assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,save,error));
@@ -2191,8 +2192,10 @@ void emission_pulses_and_dated_reports_round_trip()
     save.state.turn=15; deliver_strategic_intel(save.state);
     save.strategicMessages=deliver_due_player_reports(save.state);
     assert(save.strategicMessages.size()==1 && save.strategicMessages.front().emission->emittedTurn==10);
+    save.strategicMessages.front().emission->activity = SignalActivity::RadioTraffic;
     assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
     assert(loaded.strategicMessages.front().emission->channel==SignalChannel::Slow);
+    assert(loaded.strategicMessages.front().emission->activity==SignalActivity::RadioTraffic);
     auto invalid=save; invalid.state.emissions.back().emittedTurn=99;
     assert(write_save_game_file(path,invalid,error) && !read_save_game_file(path,loaded,error));
     invalid=save; invalid.strategicMessages.front().emission->emittedTurn=99;
@@ -2601,6 +2604,8 @@ void survey_snapshots_round_trip_and_keep_hidden_terraforming_private()
     planet.environment.temperature=67;
     state.fleets[0].position={1000,0};
     observe_current_sensor_coverage(state,9);
+    // Use signal metadata representable in the v82 fixture assembled below.
+    for (auto& pulse : state.emissions) pulse.activity = SignalActivity::Unclassified;
     state.fleets.clear();
     const auto path=dir.filePath("survey.suns"); SaveGameData loaded;
     assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));

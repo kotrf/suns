@@ -761,7 +761,9 @@ void slow_hop_to_jammed_capital_keeps_the_fleets_relay_chain()
     assert(communication_delay_turns(colonyRelay, 1, observerPosition) == 3);
 
     state.fleets.pop_back();
-    assert(communication_delay_turns(state, 1, observerPosition) == 4);
+    const auto direct = communication_route(state, 1, observerPosition);
+    assert(direct.propagationTurns == 4 && direct.receiverDelay == 1);
+    assert(communication_delay_turns(state, 1, observerPosition) == 5);
 }
 
 void area_jammer_reports_and_packets_follow_the_slow_route()
@@ -827,6 +829,46 @@ void area_jammer_reports_and_packets_follow_the_slow_route()
     }));
 }
 
+void interference_slows_decoding_at_the_physical_endpoint()
+{
+    auto state = area_jammer_fixture();
+    auto& observer = scout(state);
+    const auto id = observer.id;
+    observer.position = {600, 0};
+    observer.telemetry.position = observer.position;
+    state.fleets.back().position = {-50, 0};
+    const auto weak = communication_route(state, 1, observer.position);
+    assert(weak.channel == SignalChannel::Slow && weak.receiver == Position(0, 0));
+    assert(weak.propagationTurns == 4 && weak.receiverDelay == 1);
+    assert(communication_delay_turns(state, 1, observer.position) == 5);
+    const auto robust = communication_route(state, 1, {450, 0});
+    assert(robust.propagationTurns == 3 && robust.receiverDelay == 0);
+    const Position destination{610, 0};
+    assert(submit_fleet_route_command(state, 1, id, destination, 4, {}, {}));
+    const auto deliveryTurn = state.turn + 5;
+    assert(scout(state).pendingCommands.front().deliveryTurn == deliveryTurn);
+    assert(std::any_of(state.emissions.begin(), state.emissions.end(), [&](const auto& pulse) {
+        return pulse.owner == 1 && pulse.channel == SignalChannel::Slow
+            && pulse.emittedTurn == state.turn && pulse.position == weak.receiver;
+    }));
+    auto spying = state;
+    spying.shipDesigns.back().components.push_back(ShipComponentType::RhinoScanner);
+    observe_emission_pulses(spying, state.turn + 1);
+    const auto& intercepted = spying.players[1].pendingStrategicIntel;
+    assert(std::any_of(intercepted.begin(), intercepted.end(), [&](const auto& evidence) {
+        return evidence.emission && evidence.emission->channel == SignalChannel::Slow
+            && evidence.emission->emittedTurn == state.turn && evidence.observedTurn == state.turn + 1;
+    }));
+
+    state.fleets.back().position = {300, 0};
+    const auto clearEndpoints = communication_route(state, 1, observer.position);
+    assert(clearEndpoints.channel == SignalChannel::Slow && clearEndpoints.propagationTurns == 4 && clearEndpoints.receiverDelay == 0);
+    while (state.turn + 1 < deliveryTurn) state = TurnProcessor{}.process(state, {});
+    assert(!scout(state).destination);
+    state = TurnProcessor{}.process(state, {});
+    assert(scout(state).destination && same_position(*scout(state).destination, destination));
+}
+
 } // namespace
 
 int main()
@@ -854,6 +896,7 @@ int main()
     area_jammer_station_limits_detection_and_emits();
     slow_hop_to_jammed_capital_keeps_the_fleets_relay_chain();
     area_jammer_reports_and_packets_follow_the_slow_route();
+    interference_slows_decoding_at_the_physical_endpoint();
     std::cout << "communications tests passed\n";
     return 0;
 }
