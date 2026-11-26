@@ -80,6 +80,7 @@ enum class GameEventKind {
     RemoteGeologyObserved,
     MobileStargateTransit,
     MobileStargateTransitFailed,
+    DecoyBroadcastStatus,
 };
 
 inline constexpr bool is_visitor_event(GameEventKind kind)

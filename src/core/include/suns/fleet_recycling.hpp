@@ -7,4 +7,6 @@ inline constexpr double kColonyScrapRecovery = 0.75;
 // Executes once at a physical waypoint. The caller removes a successful
 // fleet only after the completion packet and its old contact are preserved.
 [[nodiscard]] bool scrap_fleet(GameState&, const Fleet&, std::uint64_t turn);
+[[nodiscard]] bool decoy_probe_available(const GameState&, const Fleet&);
+[[nodiscard]] bool broadcast_decoy(GameState&, const Fleet&, std::uint64_t turn);
 } // namespace suns

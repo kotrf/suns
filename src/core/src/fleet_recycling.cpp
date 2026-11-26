@@ -1,6 +1,7 @@
 #include "suns/fleet_recycling.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/strategic_operations.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -22,12 +23,12 @@ double recoveryRate(const GameState& state, const Fleet& fleet, bool colony, boo
     const auto loss = value % 100 < 20 ? 5 + mix(value + 1) % 11 : 0;
     return (colony ? kColonyScrapRecovery : kSpaceScrapRecovery) - double(loss) / 100;
 }
-}
-bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
+
+bool retire_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn, PlayerReportKind kind)
 {
     const auto report = [&](unsigned status, PlanetId planet = 0, MineralCargo minerals = {}) {
         const auto* colony = planet ? find_planet(state, planet) : nullptr;
-        queue_player_report(state, fleet.owner, PlayerReportKind::FleetScrapStatus, fleet.position, turn,
+        queue_player_report(state, fleet.owner, kind, fleet.position, turn,
             colony ? colony->star : 0, planet, fleet.id, fleet.design, ProductionKind::ColonyShip,
             status, ResearchField::Electronics, 0, minerals);
     };
@@ -35,6 +36,10 @@ bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
     // cargo require deliberate unloading, never implicit destruction.
     if (fleet.colonists || !fleet.scienceSamples.empty() || fleet.xenocrystal) { report(3); return false; }
     if (fleet.outpost != OutpostKind::None) { report(4); return false; }
+    if (kind == PlayerReportKind::DecoyBroadcastStatus && !decoy_probe_available(state, fleet)) {
+        report(7);
+        return false;
+    }
     if (fleet_report_delivery_turn(state, fleet.owner, fleet.position, turn, fleet.id) == kAwaitingTransmission) {
         report(5); return false;
     }
@@ -81,6 +86,29 @@ bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
         contact.pendingCommands.clear();
         state.pendingFleetLossContacts.push_back({std::move(contact), due});
     }
+    return true;
+}
+} // namespace
+
+bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
+{
+    return retire_fleet(state, fleet, turn, PlayerReportKind::FleetScrapStatus);
+}
+
+bool decoy_probe_available(const GameState& state, const Fleet& fleet)
+{
+    const auto stacks = fleet_ship_stacks(fleet);
+    if (fleet.outpost != OutpostKind::None || stacks.size() != 1 || stacks.front().count != 1) return false;
+    const auto* design = find_ship_design(state, stacks.front().design);
+    return design && design->hull == ShipHullType::SurveyProbe
+        && std::find(design->components.begin(), design->components.end(), ShipComponentType::DecoyTransmitter)
+            != design->components.end();
+}
+
+bool broadcast_decoy(GameState& state, const Fleet& fleet, std::uint64_t turn)
+{
+    if (!retire_fleet(state, fleet, turn, PlayerReportKind::DecoyBroadcastStatus)) return false;
+    record_decoy_pulse(state, fleet, turn);
     return true;
 }
 } // namespace suns

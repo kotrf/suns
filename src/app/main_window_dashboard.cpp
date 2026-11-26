@@ -128,6 +128,7 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::FieldResearch: return "field research";
     case FleetArrivalActionKind::RecoverWreckage: return "recover wreckage";
     case FleetArrivalActionKind::ScrapFleet: return "Scrap Fleet";
+    case FleetArrivalActionKind::BroadcastDecoy: return "Broadcast Decoy";
     case FleetArrivalActionKind::RecoverSample: return "recover scientific specimen";
     case FleetArrivalActionKind::DeployOutpost: return "deploy permanent outpost";
     case FleetArrivalActionKind::SupplyOutpost: return QString("transfer fuel; keep %1 mg").arg(action.reserveFuel);

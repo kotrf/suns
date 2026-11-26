@@ -101,6 +101,7 @@ std::span<const EquipmentTechnology> equipment_technologies()
         make_equipment(C::ExpeditionWorkshop, "Expedition Workshop", K::Mechanical, 200, 300, {100, 60, 50}, {6, 0, 12, 0, 0, 0}, A::Any, false, false, false, {}),
         make_equipment(C::ExpeditionStargate, "Expedition Stargate", K::Mechanical, 350, 450, {150, 60, 180}, {18, 0, 16, 18, 0, 0}, A::Any, false, false, false, {}),
         make_equipment(C::AreaJammer, "Area Jammer", K::Electrical, 45, 95, {12, 8, 32}, {10, 0, 0, 14, 0, 0}, A::Any, false, false, false, {}),
+        make_equipment(C::DecoyTransmitter, "Decoy Transmitter", K::Electrical, 25, 60, {8, 12, 24}, {8, 0, 0, 12, 0, 0}, A::Any, false, false, false, {}),
         make_equipment(C::StarsCargoPod, "Cargo Pod", K::Mechanical, 5, 10, {5, 0, 2}, {0, 0, 3, 0, 0, 0}, A::Any, false, false, false, {.cargoCapacity = 50}),
         make_equipment(C::SuperCargoPod, "Super Cargo Pod", K::Mechanical, 7, 15, {8, 0, 2}, {3, 0, 9, 0, 0, 0}, A::Any, false, false, false, {.cargoCapacity = 100}),
         make_equipment(C::MultiCargoPod, "Multi Cargo Pod", K::Mechanical, 9, 25, {12, 0, 3}, {5, 0, 11, 5, 0, 0}, A::MysteryTrader, false, false, false, {.cargoCapacity = 250, .armor = 50}),
@@ -284,6 +285,9 @@ std::string equipment_effect_description(const EquipmentTechnology& entry)
         out << "External jamming field of " << kAreaJammerRangeLy << " ly. Reduces hostile detection range by "
             << kAreaJammerSensorReduction * 100 << "% and blocks fast radio at affected receivers and relays. "
             << "Ships emit in Standard mode and active scan windows. Fits ships and orbital stations.\n";
+    if (entry.component == ShipComponentType::DecoyTransmitter)
+        out << "Fits a Survey Probe. Broadcast Decoy expends the probe at the final waypoint and creates one false signal area "
+            << "visible to receivers within " << kDecoyPulseRangeLy << " ly and their own reception range. Tachyon detectors can reject it.\n";
     if (s.accuracyBonusPercent) out << "Reduces torpedo inaccuracy by " << s.accuracyBonusPercent << "%; initiative +" << int(s.initiativeBonus) << ".\n";
     if (s.beamBonusPercent) out << "Beam damage bonus " << s.beamBonusPercent << "%.\n";
     if (s.beamDeflectionPercent) out << "Beam deflection " << s.beamDeflectionPercent << "%.\n";

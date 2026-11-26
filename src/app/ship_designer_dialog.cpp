@@ -952,9 +952,10 @@ void ShipDesignerDialog::filterCatalog(bool preserveScroll)
         const auto component = static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
         auto kind = component_spec(component).kind;
         if (kind == ShipComponentKind::Fuel || kind == ShipComponentKind::Cargo) kind = ShipComponentKind::Mechanical;
-        const bool compatible = std::any_of(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const auto& slot) {
-            return ship_slot_accepts(slot, component);
-        });
+        const bool compatible = (component != ShipComponentType::DecoyTransmitter || hull.type == ShipHullType::SurveyProbe)
+            && std::any_of(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const auto& slot) {
+                return ship_slot_accepts(slot, component);
+            });
         const bool visible = (query.isEmpty() || item->text().contains(query, Qt::CaseInsensitive))
             && (wanted < 0 || wanted == int(kind)) && (!componentFitsHull_->isChecked() || compatible);
         item->setHidden(!visible);

@@ -223,6 +223,8 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::FleetsMerged: subject = QString("Fleets merged into %1").arg(fleetName); break;
     case GameEventKind::FleetScrapStatus: subject = QString("Scrap Fleet — %1%2").arg(fleetName,
         event.quantity <= 2 ? "" : " (waiting)"); break;
+    case GameEventKind::DecoyBroadcastStatus: subject = QString("Broadcast Decoy — %1%2").arg(fleetName,
+        event.quantity <= 2 ? "" : " (waiting)"); break;
     case GameEventKind::ProductionWaitingForShipyard:
         subject = QString("%1 waits for a shipyard on %2").arg(production_item_name(state, event), planetName);
         break;
@@ -743,17 +745,25 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(fleetName)
                    .arg(event.quantity);
-    } else if (event.kind == GameEventKind::FleetScrapStatus) {
-        text = event.quantity <= 2 ? QString("Scrap Fleet completed. Recovered I %1 / B %2 / G %3 kt %4. Mineral cargo is included intact; no production resources are refunded.")
+    } else if (event.kind == GameEventKind::FleetScrapStatus || event.kind == GameEventKind::DecoyBroadcastStatus) {
+        const bool decoy = event.kind == GameEventKind::DecoyBroadcastStatus;
+        const auto action = decoy ? QString("Broadcast Decoy") : QString("Scrap Fleet");
+        if (event.quantity <= 2) {
+            text = decoy ? QString("False signal sent. The probe was expended. ") : QString("Scrap Fleet completed. ");
+            text += QString("Recovered I %1 / B %2 / G %3 kt %4. Mineral cargo is included intact; no production resources are refunded.")
             .arg(event.deliveredMinerals.ironium,0,'f',2).arg(event.deliveredMinerals.boranium,0,'f',2)
             .arg(event.deliveredMinerals.germanium,0,'f',2)
             .arg(event.quantity == 1 ? "on the colony surface"
                 : event.deliveredMinerals.ironium + event.deliveredMinerals.boranium + event.deliveredMinerals.germanium > 0
-                    ? "as collectible wreckage (20-year lifetime)" : "— no recoverable material remains")
-            : event.quantity == 3 ? "Scrap Fleet waits: unload colonists, scientific samples and xenocrystals first. Stop cancels this order."
-            : event.quantity == 4 ? "Scrap Fleet waits: use the installation's decommission controls."
-            : event.quantity == 6 ? "Scrap Fleet waits: the colony mineral stock is full."
-            : "Scrap Fleet waits: enable transmissions or reach a friendly populated colony to send the final report.";
+                    ? "as collectible wreckage (20-year lifetime)" : "— no recoverable material remains");
+        } else {
+            text = action + " waits. "
+                + (event.quantity == 3 ? "Unload colonists, scientific samples and xenocrystals first. Stop cancels this order."
+                    : event.quantity == 4 ? "Use the installation's decommission controls."
+                    : event.quantity == 6 ? "The colony mineral stock is full."
+                    : event.quantity == 7 ? "Separate a Survey Probe fitted with a Decoy Transmitter."
+                    : "Enable transmissions or reach a friendly populated colony to send the final report.");
+        }
     } else if (event.kind == GameEventKind::FleetsMerged) {
         text = QString("Turn %1  •  Fleet %2 rendezvoused with %3 and merged into it")
                    .arg(static_cast<qulonglong>(event.turn))

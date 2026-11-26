@@ -2,6 +2,7 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/campaign.hpp"
+#include "suns/turn_processor.hpp"
 #include <cassert>
 #include <algorithm>
 using namespace suns;
@@ -100,8 +101,65 @@ void actual_fast_transmission_and_command_source()
     publish_fleet_telemetry(noScanner,10); observe_emission_pulses(noScanner,12);
     assert(noScanner.players[0].pendingStrategicIntel.empty());
 }
+
+void expendable_probe_broadcasts_at_the_final_waypoint()
+{
+    auto state = fixture();
+    state.stars[1].position = {680, 0};
+    state.shipDesigns[1] = {2, 2, "Decoy Probe", ShipHullType::SurveyProbe, {C::FuelMizer, C::DecoyTransmitter}};
+    assert(ship_design_validation_error(state.shipDesigns[1]).empty());
+    state.fleets[1].electronics = {};
+    const Position waypoint{560, 0};
+    const FleetArrivalAction action{FleetArrivalActionKind::BroadcastDecoy};
+    auto wrongHull = fixture();
+    assert(!submit_fleet_route_command(wrongHull, 2, 2, waypoint, 5, action, {}));
+    auto stacked = state;
+    stacked.fleets[1].ships.front().count = 2;
+    assert(!submit_fleet_route_command(stacked, 2, 2, waypoint, 5, action, {}));
+    assert(!fleet_route_tasks_valid({waypoint, 5, action, {{{550, 0}, 5, {}}}}));
+    const auto decoy = [](const EmissionPulse& pulse) { return pulse.decoyOnly; };
+    const TurnProcessor processor;
+    state = processor.process(state, {{2, {MoveFleetOrder{2, waypoint, 5, action}}}});
+    assert(state.fleets.size() == 2 && std::none_of(state.emissions.begin(), state.emissions.end(), decoy));
+    auto tachyon = state;
+    tachyon.shipDesigns[0].components.insert(tachyon.shipDesigns[0].components.end(), 4, C::TachyonDetector);
+    auto waiting = state;
+    waiting.fleets[1].electronics.mode = EmissionMode::Passive;
+    waiting = processor.process(waiting, {});
+    assert(waiting.fleets.size() == 2 && same_position(waiting.fleets[1].position, waypoint));
+    assert(std::none_of(waiting.emissions.begin(), waiting.emissions.end(), decoy));
+
+    auto launch = processor.process_with_events(state, {});
+    assert(launch.state.fleets.size() == 1);
+    const auto pulse = std::find_if(launch.state.emissions.begin(), launch.state.emissions.end(), decoy);
+    assert(pulse != launch.state.emissions.end() && pulse->fleet == 2 && same_position(pulse->position, waypoint));
+    assert(std::count_if(launch.state.emissions.begin(), launch.state.emissions.end(), decoy) == 1);
+    assert(std::any_of(launch.events.begin(), launch.events.end(), [](const auto& event) {
+        return event.recipient == 2 && event.kind == GameEventKind::DecoyBroadcastStatus && event.quantity == 2;
+    }));
+    const auto echo = [year = launch.state.turn](const StrategicIntel& evidence) {
+        return evidence.emission && evidence.emission->emittedTurn == year
+            && same_position(evidence.position, {610, 30});
+    };
+    const auto& pending = launch.state.players[0].pendingStrategicIntel;
+    const auto evidence = std::find_if(pending.begin(), pending.end(), echo);
+    assert(evidence != pending.end() && !evidence->id && !evidence->owner && evidence->deliveryTurn > launch.state.turn);
+    const auto due = evidence->deliveryTurn;
+    auto view = make_player_view(launch.state, 1);
+    assert(view.state.emissions.empty() && view.state.players[0].pendingStrategicIntel.empty());
+    tachyon = processor.process(tachyon, {});
+    assert(std::none_of(tachyon.players[0].pendingStrategicIntel.begin(), tachyon.players[0].pendingStrategicIntel.end(), echo));
+    while (launch.state.turn < due) launch.state = processor.process(launch.state, {});
+    view = make_player_view(launch.state, 1);
+    assert(view.state.emissions.empty());
+    assert(std::count_if(view.state.players[0].strategicIntel.begin(), view.state.players[0].strategicIntel.end(), echo) == 1);
+    state = processor.process(launch.state, {});
+    assert(std::none_of(state.players[0].strategicIntel.begin(), state.players[0].strategicIntel.end(), echo));
+}
+
 int main()
 {
     two_physical_delays_and_immutable_source(); passive_reception_waits_for_real_dispatch();
     colony_forwards_silent_fleet_without_relocating_emission(); actual_fast_transmission_and_command_source();
+    expendable_probe_broadcasts_at_the_final_waypoint();
 }

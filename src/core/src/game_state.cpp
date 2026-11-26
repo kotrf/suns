@@ -631,11 +631,15 @@ std::string ship_design_validation_error(const ShipDesign& design)
     }) > 1) return "Only one radiation screen may be fitted; upgrade it instead of stacking.";
     if (std::count(design.components.begin(), design.components.end(), ShipComponentType::ExpeditionStargate) > 1)
         return "Only one Expedition Stargate may be fitted.";
+    if (std::count(design.components.begin(), design.components.end(), ShipComponentType::DecoyTransmitter) > 1)
+        return "Only one Decoy Transmitter may be fitted.";
     for (const auto component : design.components) {
         if (component >= ShipComponentType::OrbitalShipyardKit && component <= ShipComponentType::AdvancedRadiationScreen
             && design.hull != ShipHullType::ExpeditionBase) return "Orbital base equipment requires an Expedition Base hull.";
         if (component == ShipComponentType::SurveyAutopilot && design.hull != ShipHullType::SurveyProbe)
             return "Survey Autopilot requires a Survey Probe hull.";
+        if (component == ShipComponentType::DecoyTransmitter && design.hull != ShipHullType::SurveyProbe)
+            return "Decoy Transmitter requires a Survey Probe hull.";
         if (design.hull == ShipHullType::SurveyProbe && construction_kit_kind(component) != OutpostKind::None
             && component != ShipComponentType::DeepSpaceRelayKit)
             return "Survey Probes can carry a Deep-space Relay Kit.";

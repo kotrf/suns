@@ -932,6 +932,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         return false; // Persistent work handled before this switch.
     case FleetArrivalActionKind::None:
     case FleetArrivalActionKind::ScrapFleet:
+    case FleetArrivalActionKind::BroadcastDecoy:
         return false;
     case FleetArrivalActionKind::LoadMinerals:
     case FleetArrivalActionKind::LoadAllAvailable: {
@@ -1570,8 +1571,12 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
-    if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::ScrapFleet) {
-        if (scrap_fleet(state, fleet, state.turn + 1)) {
+    const auto actionKind = fleet.arrivalAction ? fleet.arrivalAction->kind : FleetArrivalActionKind::None;
+    if (actionKind == FleetArrivalActionKind::ScrapFleet || actionKind == FleetArrivalActionKind::BroadcastDecoy) {
+        const auto consumed = actionKind == FleetArrivalActionKind::BroadcastDecoy
+            ? broadcast_decoy(state, fleet, state.turn + 1)
+            : scrap_fleet(state, fleet, state.turn + 1);
+        if (consumed) {
             consumedFleets.push_back(fleet.id);
             return true;
         }
@@ -1981,14 +1986,15 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     fleetIds.reserve(state.fleets.size());
     for (const auto& fleet : state.fleets) fleetIds.push_back(fleet.id);
     std::sort(fleetIds.begin(), fleetIds.end());
-    // Gate and scrap steps already at their source run before motion/battles.
+    // Gate and fleet retirement steps already at their source run before motion/battles.
     // In particular, an immobilized fleet can dismantle itself without flying.
     // An approach arriving later in the year waits for the following boundary.
     for (const auto id : fleetIds) {
         auto* fleet = fleet_by_id(state,id);
         if (!fleet || !fleet->destination || !same_position(fleet->position,*fleet->destination)
             || !fleet->arrivalAction || (fleet->arrivalAction->kind != FleetArrivalActionKind::TransitStargate
-                && fleet->arrivalAction->kind != FleetArrivalActionKind::ScrapFleet)) continue;
+                && fleet->arrivalAction->kind != FleetArrivalActionKind::ScrapFleet
+                && fleet->arrivalAction->kind != FleetArrivalActionKind::BroadcastDecoy)) continue;
         fleet->destination.reset();
         (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight, depotFuel);
         skipMovement.push_back(id);

@@ -46,7 +46,8 @@ void readStrategicFleet(QDataStream& stream, Fleet& f)
 }
 void writeStrategicIntel(QDataStream& stream, const StrategicIntel& i)
 {
-    stream << quint32(i.id); writeEnum(stream, i.type); writePosition(stream, i.position);
+    stream << quint32(i.type == StrategicObjectKind::Emission ? 0 : i.id);
+    writeEnum(stream, i.type); writePosition(stream, i.position);
     stream << i.radius << quint32(i.owner) << quint64(i.observedTurn) << quint64(i.deliveryTurn)
            << i.quantity << quint8(i.kind);
     writeEmissionObservation(stream,i.emission);
@@ -56,6 +57,7 @@ void readStrategicIntel(QDataStream& stream, StrategicIntel& i)
     quint32 id{}, owner{}; quint64 observed{}, delivery{}; quint8 kind{};
     stream >> id; i.id = id;
     if (!readEnum(stream, i.type, quint8(StrategicObjectKind::Emission))) return;
+    if (i.type == StrategicObjectKind::Emission) i.id = 0;
     readPosition(stream, i.position);
     stream >> i.radius >> owner >> observed >> delivery >> i.quantity >> kind;
     i.owner = owner; i.observedTurn = observed; i.deliveryTurn = delivery; i.kind = kind;
@@ -67,12 +69,15 @@ void readStrategicIntel(QDataStream& stream, StrategicIntel& i)
         || i.quantity < 0 || kind > 2 || delivery < observed
         || (i.type == StrategicObjectKind::Emission && owner != 0)) markCorrupt(stream);
 }
+constexpr quint8 kDecoyPulseFlag = 0x80;
+
 void writeEmissionPulses(QDataStream& stream,const GameState& state)
 {
     stream << quint32(state.nextEmissionId) << quint32(state.emissions.size());
     for(const auto& pulse:state.emissions) {
         stream << quint32(pulse.id) << quint32(pulse.owner); writePosition(stream,pulse.position);
-        stream << quint64(pulse.emittedTurn) << quint8(pulse.channel) << pulse.maximumRange << pulse.deceptionStrength
+        const auto channel = quint8(quint8(pulse.channel) | (pulse.decoyOnly ? kDecoyPulseFlag : 0));
+        stream << quint64(pulse.emittedTurn) << channel << pulse.maximumRange << pulse.deceptionStrength
             << quint32(pulse.fleet) << quint32(pulse.colony) << quint32(pulse.receipts.size());
         for(const auto& receipt:pulse.receipts) stream << quint32(receipt.player) << quint32(receipt.fleet) << quint32(receipt.colony);
     }
@@ -85,12 +90,17 @@ void readEmissionPulses(QDataStream& stream,GameState& state)
         EmissionPulse pulse; quint64 turn{}; quint8 channel{}; quint32 receipts{};
         stream >> pulse.id >> pulse.owner; readPosition(stream,pulse.position);
         stream >> turn >> channel >> pulse.maximumRange >> pulse.deceptionStrength >> pulse.fleet >> pulse.colony;
+        if (gReadSaveFormatVersion >= 137) {
+            pulse.decoyOnly = (channel & kDecoyPulseFlag) != 0;
+            channel &= ~kDecoyPulseFlag;
+        }
         pulse.emittedTurn=turn; pulse.channel=SignalChannel(channel);
         if(!pulse.id || pulse.id>=state.nextEmissionId || !find_player(state,pulse.owner)
             || !turn || turn>state.turn || channel>quint8(SignalChannel::Slow)
             || !std::isfinite(pulse.maximumRange) || pulse.maximumRange<0 || pulse.maximumRange>20000
             || !std::isfinite(pulse.deceptionStrength) || pulse.deceptionStrength<0 || pulse.deceptionStrength>0.95
             || (pulse.fleet && pulse.colony) || (pulse.colony && pulse.deceptionStrength)
+            || (pulse.decoyOnly && (!pulse.fleet || pulse.channel != SignalChannel::Fast || pulse.deceptionStrength <= 0))
             || std::any_of(state.emissions.begin(),state.emissions.end(),[&](const auto& p){return p.id==pulse.id;})
             || !readCount(stream,receipts)) { markCorrupt(stream); return; }
         for(quint32 i=0;i<receipts;++i) {

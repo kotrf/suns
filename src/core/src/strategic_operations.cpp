@@ -10,6 +10,7 @@
 #include "suns/communications.hpp"
 #include "suns/equipment.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/fleet_recycling.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -449,6 +450,8 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
     const auto task = arrival_work_task(action);
     if (action == FleetArrivalActionKind::ScrapFleet && fleet.outpost != OutpostKind::None)
         return "Use the installation's decommission controls before Scrap Fleet.";
+    if (action == FleetArrivalActionKind::BroadcastDecoy && !decoy_probe_available(state, fleet))
+        return "Broadcast Decoy requires a lone Survey Probe with a Decoy Transmitter.";
     if (action == FleetArrivalActionKind::DeployOutpost) return outpost_deployment_error(state, fleet, destination);
     if (!task) return {};
     if (!fleet_task_equipment_available(state, fleet, *task)) {
@@ -828,6 +831,17 @@ void observe_strategic_objects(GameState& state, std::uint64_t turn)
     }
 }
 
+bool same_strategic_intel_subject(const StrategicIntel& left, const StrategicIntel& right)
+{
+    if (left.type != right.type) return false;
+    if (left.type != StrategicObjectKind::Emission) return left.id == right.id;
+    // Anonymous evidence is matched by received facts. A physical pulse ID
+    // would disclose whether a signal was real or a decoy in a player packet.
+    const auto leftTurn = left.emission ? left.emission->emittedTurn : left.observedTurn;
+    const auto rightTurn = right.emission ? right.emission->emittedTurn : right.observedTurn;
+    return leftTurn == rightTurn && left.kind == right.kind && same_position(left.position, right.position);
+}
+
 void deliver_strategic_intel(GameState& state)
 {
     for (auto& player : state.players) {
@@ -838,7 +852,7 @@ void deliver_strategic_intel(GameState& state)
         for (const auto& packet : player.pendingStrategicIntel) {
             if (packet.deliveryTurn > state.turn) continue;
             auto old = std::find_if(player.strategicIntel.begin(), player.strategicIntel.end(), [&](const auto& i) {
-                return i.type == packet.type && i.id == packet.id;
+                return same_strategic_intel_subject(i, packet);
             });
             if (packet.type == StrategicObjectKind::Emission && packet.deliveryTurn < state.turn) continue;
             if (old == player.strategicIntel.end()) player.strategicIntel.push_back(packet);
