@@ -3,12 +3,19 @@
 #include <span>
 
 namespace suns {
+inline constexpr double kAreaJammerRangeLy = 90.0;
+inline constexpr double kAreaJammerSensorReduction = 0.40;
+
 [[nodiscard]] double minefield_radius(const Minefield&);
 [[nodiscard]] std::uint8_t minefield_safe_warp(std::uint8_t kind);
 [[nodiscard]] double fleet_cloak_fraction(const GameState&, const Fleet&);
 [[nodiscard]] double fleet_tachyon_fraction(const GameState&, const Fleet&);
 [[nodiscard]] double strategic_sensor_range(const GameState&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] double sensor_interference(const GameState&, PlayerId, Position, std::uint64_t atTurn = 0);
+[[nodiscard]] bool fleet_has_area_jammer(const GameState&, const Fleet&);
+[[nodiscard]] bool fleet_area_jammer_active(const GameState&, const Fleet&, std::uint64_t turn);
+[[nodiscard]] bool station_area_jammer_active(const OrbitalStation&);
+[[nodiscard]] std::vector<Position> hostile_area_jammers(const GameState&, PlayerId, std::uint64_t turn);
 struct SensorInterferenceSpan {
     double begin, end, strength; // Interior of a normalized flight interval.
 };

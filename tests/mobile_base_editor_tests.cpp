@@ -181,7 +181,7 @@ void gate_persistence(GameState state)
     assert(write_save_game_file(path, host, error));
     auto previous = bytes(path);
     const auto extension = previous.lastIndexOf(QByteArray("MGAT"));
-    assert(extension >= 0 && quint8(previous[7]) == 135);
+    assert(extension >= 0 && quint8(previous[7]) == 136);
     previous.truncate(extension);
     previous[7] = char(134);
     QFile legacy(path);

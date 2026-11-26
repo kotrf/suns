@@ -62,6 +62,7 @@ void dispatch_fleet_report_outbox(GameState&, FleetId onlyFleet = 0, std::uint64
     const GameState& state,
     PlayerId player,
     Position position, std::uint64_t atTurn = 0);
+[[nodiscard]] bool fast_communication_jammed_at(const GameState&, PlayerId, Position, std::uint64_t atTurn = 0);
 
 struct CommunicationRoute {
     SignalChannel channel{SignalChannel::Fast};

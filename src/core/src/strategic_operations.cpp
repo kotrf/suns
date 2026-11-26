@@ -17,6 +17,8 @@
 #include <map>
 #include <utility>
 
+#include "flight_sensor_fields.hpp"
+
 namespace suns {
 namespace {
 constexpr double epsilon = 1e-6;
@@ -43,38 +45,71 @@ double combined_rating(const GameState& state, const Fleet& fleet, double ShipCo
 }
 
 template<class Visitor>
-void visit_sensor_interference(const GameState& state, PlayerId owner, std::uint64_t turn, Visitor visit)
+void visit_stationary_sensor_interference(const GameState& state, std::optional<PlayerId> owner, bool includeArea, Visitor visit)
 {
     const auto vortex = [&](const auto& object) {
         if (object.kind == UnknownObjectKind::IonVortex)
-            visit(object.position, kIonVortexRadiusLy, [] { return kIonVortexInterference; });
+            visit(PlayerId{0}, object.position, kIonVortexRadiusLy, [] { return kIonVortexInterference; });
     };
     if (state.mediumObserver) {
-        if (const auto* player = find_player(state, owner))
+        if (const auto* player = owner ? find_player(state, *owner) : nullptr)
             for (const auto& observation : player->objectKnowledge)
                 if (observation.receivedTurn && observation.receivedTurn <= state.turn
                     && observation.level >= ObjectKnowledgeLevel::Classified) vortex(observation);
     } else {
         for (const auto& object : state.unknownObjects) vortex(object);
     }
-    for (const auto& enemy : state.fleets) {
-        if (enemy.owner == owner || !fleet_active_sensors(enemy, turn)) continue;
-        visit(enemy.position, std::max(30.0, fleet_sensor_range(state, enemy)), [&] {
-            return combined_rating(state, enemy, &ShipComponentSpec::jammingPercent);
-        });
-    }
     for (const auto& station : state.orbitalStations) {
-        if (station.owner == owner) continue;
+        if (owner && station.owner == *owner) continue;
         const auto* planet = find_planet(state, station.planet);
         const auto* star = planet ? find_star(state, planet->star) : nullptr;
         if (!star) continue;
-        visit(star->position, 30.0, [&] {
+        if (includeArea && !state.mediumObserver && station_area_jammer_active(station))
+            visit(station.owner, star->position, kAreaJammerRangeLy, [] { return kAreaJammerSensorReduction; });
+        visit(station.owner, star->position, 30.0, [&] {
             double remaining = 1;
             for (const auto component : station.components)
                 remaining *= 1 - component_spec(component).jammingPercent / 100;
             return 1 - remaining;
         });
     }
+}
+
+template<class Visitor>
+void visit_fleet_sensor_interference(const GameState& state, const Fleet& fleet, std::uint64_t turn, bool includeArea, Visitor visit)
+{
+    if (!fleet_active_sensors(fleet, turn)) return;
+    if (includeArea && !state.mediumObserver)
+        visit(fleet.position, kAreaJammerRangeLy, [&] {
+            return fleet_area_jammer_active(state, fleet, turn) ? kAreaJammerSensorReduction : 0.0;
+        });
+    visit(fleet.position, std::max(30.0, fleet_sensor_range(state, fleet)), [&] {
+        return combined_rating(state, fleet, &ShipComponentSpec::jammingPercent);
+    });
+}
+
+template<class Visitor>
+void visit_sensor_interference(const GameState& state, PlayerId owner, std::uint64_t turn, bool includeArea, Visitor visit)
+{
+    visit_stationary_sensor_interference(state, owner, includeArea, [&](PlayerId, Position center, double radius, auto strength) {
+        visit(center, radius, strength);
+    });
+    for (const auto& fleet : state.fleets)
+        if (fleet.owner != owner) visit_fleet_sensor_interference(state, fleet, turn, includeArea, visit);
+}
+
+double interference_strength(const GameState& state, PlayerId owner, Position position, std::uint64_t turn, bool includeArea)
+{
+    double strength = 0;
+    visit_sensor_interference(state, owner, turn, includeArea, [&](Position center, double radius, auto field_strength) {
+        if (distance_between(position, center) <= radius) strength = std::max(strength, field_strength());
+    });
+    return std::min(0.75, strength);
+}
+
+bool has_area_jammer(std::span<const ShipComponentType> components)
+{
+    return std::find(components.begin(), components.end(), ShipComponentType::AreaJammer) != components.end();
 }
 
 std::optional<double> entry_fraction(Position start, Position end, Position center, double radius)
@@ -160,22 +195,82 @@ double fleet_tachyon_fraction(const GameState& state, const Fleet& fleet)
 
 double sensor_interference(const GameState& state,PlayerId owner,Position position,std::uint64_t turn)
 {
-    double strength = 0;
-    visit_sensor_interference(state, owner, turn ? turn : state.turn, [&](Position center, double radius, auto field_strength) {
-        if (distance_between(position, center) <= radius) strength = std::max(strength, field_strength());
-    });
-    return std::min(0.75, strength);
+    if (!turn) turn = state.turn;
+    const auto strength = interference_strength(state, owner, position, turn, true);
+    if (state.mediumObserver && fast_communication_jammed_at(state, owner, position, turn))
+        return std::max(strength, kAreaJammerSensorReduction);
+    return strength;
 }
 
-std::vector<SensorInterferenceSpan> sensor_interference_spans(
-    const GameState& state, PlayerId owner, Position start, Position end, std::uint64_t turn)
+bool fleet_has_area_jammer(const GameState& state, const Fleet& fleet)
+{
+    const auto fitted = [&](ShipDesignId id) {
+        const auto* design = find_ship_design(state, id);
+        return design && has_area_jammer(design->components);
+    };
+    if (fleet.ships.empty()) return fitted(fleet.design);
+    return std::any_of(fleet.ships.begin(), fleet.ships.end(), [&](const auto& stack) {
+        return stack.count && fitted(stack.design);
+    });
+}
+
+bool fleet_area_jammer_active(const GameState& state, const Fleet& fleet, std::uint64_t turn)
+{
+    return fleet.damagePercent < 100 && fleet_active_sensors(fleet, turn)
+        && (fleet.outpost == OutpostKind::None || outpost_online(fleet)) && fleet_has_area_jammer(state, fleet);
+}
+
+bool station_area_jammer_active(const OrbitalStation& station)
+{
+    return station.damagePercent < 100 && has_area_jammer(station.components);
+}
+
+std::vector<Position> hostile_area_jammers(const GameState& state, PlayerId owner, std::uint64_t turn)
+{
+    std::vector<Position> positions;
+    if (state.mediumObserver) return positions;
+    if (std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [](const auto& design) {
+            return has_area_jammer(design.components);
+        })) {
+        for (const auto& fleet : state.fleets)
+            if (fleet.owner != owner && fleet_area_jammer_active(state, fleet, turn)) positions.push_back(fleet.position);
+    }
+    for (const auto& station : state.orbitalStations) {
+        if (station.owner == owner || !station_area_jammer_active(station)) continue;
+        const auto* planet = find_planet(state, station.planet);
+        if (const auto* star = planet ? find_star(state, planet->star) : nullptr) positions.push_back(star->position);
+    }
+    return positions;
+}
+
+namespace {
+
+void append_fleet_sensor_fields(const GameState& state, const Fleet& fleet, std::uint64_t turn,
+    detail::FlightSensorFields& snapshot)
+{
+    visit_fleet_sensor_interference(state, fleet, turn, true, [&](Position center, double radius, auto strength) {
+        const auto value = strength();
+        if (value > 0) snapshot.fields.push_back({fleet.owner, center, radius, value});
+    });
+}
+
+template<class Visit>
+void visit_flight_sensor_fields(const detail::FlightSensorFields& snapshot, PlayerId owner, Visit visit)
+{
+    for (const auto& field : snapshot.fields)
+        if (!field.owner || field.owner != owner)
+            visit(field.center, field.radius, [&] { return field.strength; });
+}
+
+template<class Visit, class StrengthAt>
+std::vector<SensorInterferenceSpan> interference_spans(Position start, Position end, Visit visit, StrengthAt strengthAt)
 {
     const auto dx = end.x - start.x, dy = end.y - start.y;
     const auto lengthSquared = dx * dx + dy * dy;
-    if (lengthSquared == 0) return {{0, 1, sensor_interference(state, owner, start, turn)}};
+    if (lengthSquared == 0) return {{0, 1, strengthAt(start)}};
     std::vector<SensorInterferenceSpan> fields;
     std::vector<double> cuts{0, 1};
-    visit_sensor_interference(state, owner, turn, [&](Position center, double radius, auto field_strength) {
+    visit([&](Position center, double radius, auto field_strength) {
         const auto x = center.x - start.x, y = center.y - start.y;
         const auto cross = x * dy - y * dx;
         const auto reachSquared = radius * radius - cross * cross / lengthSquared;
@@ -203,6 +298,61 @@ std::vector<SensorInterferenceSpan> sensor_interference_spans(
     }
     return spans;
 }
+
+} // namespace
+
+detail::FlightSensorFields detail::stationary_flight_sensor_fields(const GameState& state, std::uint64_t turn)
+{
+    FlightSensorFields snapshot;
+    visit_stationary_sensor_interference(state, std::nullopt, true,
+        [&](PlayerId owner, Position center, double radius, auto strength) {
+            const auto value = strength();
+            if (value > 0) snapshot.fields.push_back({owner, center, radius, value});
+        });
+    // Arrivals can change the fuel reserve of any deployed outpost. Record
+    // offline outposts too so a later refuel cannot add an earlier field.
+    for (const auto& fleet : state.fleets)
+        if (fleet.outpost != OutpostKind::None) record_fleet_sensor_fields(state, fleet, turn, snapshot);
+    return snapshot;
+}
+
+void detail::record_fleet_sensor_fields(
+    const GameState& state, const Fleet& fleet, std::uint64_t turn, FlightSensorFields& snapshot)
+{
+    if (snapshot.recordedFleets.insert(fleet.id).second) append_fleet_sensor_fields(state, fleet, turn, snapshot);
+}
+
+void detail::finish_flight_sensor_fields(const GameState& state, std::uint64_t turn, FlightSensorFields& snapshot)
+{
+    for (const auto& fleet : state.fleets)
+        if (!snapshot.recordedFleets.contains(fleet.id)) append_fleet_sensor_fields(state, fleet, turn, snapshot);
+}
+
+double detail::flight_sensor_interference(const FlightSensorFields& snapshot, PlayerId owner, Position position)
+{
+    double strength = 0;
+    visit_flight_sensor_fields(snapshot, owner, [&](Position center, double radius, auto field_strength) {
+        if (distance_between(position, center) <= radius) strength = std::max(strength, field_strength());
+    });
+    return std::min(0.75, strength);
+}
+
+std::vector<SensorInterferenceSpan> detail::flight_sensor_interference_spans(
+    const FlightSensorFields& snapshot, PlayerId owner, Position start, Position end)
+{
+    return interference_spans(start, end,
+        [&](auto visit) { visit_flight_sensor_fields(snapshot, owner, visit); },
+        [&](Position position) { return flight_sensor_interference(snapshot, owner, position); });
+}
+
+std::vector<SensorInterferenceSpan> sensor_interference_spans(
+    const GameState& state, PlayerId owner, Position start, Position end, std::uint64_t turn)
+{
+    return interference_spans(start, end,
+        [&](auto visit) { visit_sensor_interference(state, owner, turn, true, visit); },
+        [&](Position position) { return sensor_interference(state, owner, position, turn); });
+}
+
 double strategic_sensor_range(const GameState& state,const Fleet& detector,std::uint64_t turn)
 {
     if(!turn) turn=state.turn;
@@ -625,7 +775,10 @@ std::uint64_t report_transmission_turn(const GameState& state,PlayerId owner,Pos
     return found ? earliest : turn;
 }
 std::uint32_t communication_jamming_delay(const GameState& s,PlayerId owner,Position position,std::uint64_t turn)
-{ const double strength=sensor_interference(s,owner,position,turn); return strength>0?std::uint32_t(std::ceil(std::min(2.0,strength*2))):0; }
+{
+    const auto strength = interference_strength(s, owner, position, turn ? turn : s.turn, false);
+    return strength > 0 ? std::uint32_t(std::ceil(std::min(2.0, strength * 2))) : 0;
+}
 bool fleet_transmits(const Fleet& f,std::uint64_t turn)
 {
     return f.electronics.mode==EmissionMode::Standard

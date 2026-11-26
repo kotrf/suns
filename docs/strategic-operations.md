@@ -130,6 +130,21 @@ diminishing returns; the strongest local hostile fleet determines the effect,
 capped at 75% sensor reduction. Jamming adds 1–2 years to communication at the
 source. It retains its separate torpedo-combat effect.
 
+### Area Jammer
+
+Area Jammer is an electrical module for ships and orbital stations. It requires
+Energy 10 and Electronics 14, weighs 45 kt, and costs 95 work and 12/8/32 kt of
+ironium, boranium and germanium. A standard ship emission programme or an active
+scan window powers the module. Operational stations keep their fields active.
+
+Within 90 ly, the module reduces hostile sensor ranges by 40% and
+[disables fast radio at hostile receivers and relays](communications.md#area-jamming).
+The strongest local interference determines the sensor reduction. Active
+modules also produce interceptable signals. Turn Messages reports the dated
+interference measured by the affected fleet or colony.
+
+### Interception and deception
+
 [Physical emission pulses](emission-interception.md) from dispatched packets or active scanning/jamming can produce an anonymous contact at up to twice
 the receiver's fitted scanner range, even when its hull is cloaked. The contact is
 a 20 ly grid cell center with 15 ly uncertainty, never a fleet ID, owner,

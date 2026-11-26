@@ -25,16 +25,22 @@ void readReconContact(QDataStream& s,ReconContact& c)
     s >> lost >> jammed; c.lost=lost; c.jammed=jammed;
     if(lost>1 || jammed>1 || !recon_contact_valid(c)) markCorrupt(s);
 }
+constexpr quint8 kFastLinkJammedFlag = 0x80;
+
 void writeSensorStatus(QDataStream& s,const SensorStatus& x)
 {
     s << quint32(x.fleet) << quint32(x.colony); writePosition(s,x.position);
-    s << quint64(x.observedTurn) << quint64(x.deliveryTurn) << quint8(x.interferencePercent)
+    const auto interference = quint8(x.interferencePercent | (x.fastLinkJammed ? kFastLinkJammedFlag : 0));
+    s << quint64(x.observedTurn) << quint64(x.deliveryTurn) << interference
       << x.nominalRange << x.activeRange << x.passiveRange << x.emissionRange;
 }
 void readSensorStatus(QDataStream& s,SensorStatus& x)
 {
     quint64 observed{},due{}; s >> x.fleet >> x.colony; readPosition(s,x.position);
-    s >> observed >> due >> x.interferencePercent >> x.nominalRange >> x.activeRange >> x.passiveRange >> x.emissionRange;
+    quint8 interference{};
+    s >> observed >> due >> interference >> x.nominalRange >> x.activeRange >> x.passiveRange >> x.emissionRange;
+    x.fastLinkJammed = gReadSaveFormatVersion >= 136 && (interference & kFastLinkJammedFlag);
+    x.interferencePercent = x.fastLinkJammed ? quint8(interference & ~kFastLinkJammedFlag) : interference;
     x.observedTurn=observed; x.deliveryTurn=due;
     if(!sensor_status_valid(x)) markCorrupt(s);
 }

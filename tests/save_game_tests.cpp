@@ -1873,6 +1873,77 @@ void reconnaissance_and_programs_round_trip()
     assert(write_turn_order_file(orders,packet,error) && !read_turn_order_file(orders,imported,error));
 }
 
+void area_jammer_round_trips_in_host_and_player_turns()
+{
+    QTemporaryDir dir;
+    assert(dir.isValid());
+    QString error;
+    SaveGameData host;
+    host.mode = SessionMode::Host;
+    host.campaignId = 138;
+    host.turnToken = 139;
+    host.playerTokens = {{1, 139}, {2, 140}};
+    host.pendingOrders = {1, {}};
+    host.state = make_demo_game();
+    auto& state = host.state;
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.players.push_back({2, "Opposition"});
+    state.players.back().technology.levels.fill(20);
+    const auto designId = state.nextShipDesignId++;
+    const std::vector components{ShipComponentType::QuickJump5, ShipComponentType::AreaJammer};
+    state.shipDesigns.push_back({designId, 2, "Interference ship", ShipHullType::Destroyer, components});
+    const Position observerPosition{130, 0};
+    state.fleets.front().position = observerPosition;
+    state.fleets.front().telemetry.position = observerPosition;
+    Fleet jammer;
+    jammer.id = state.nextFleetId++;
+    jammer.owner = 2;
+    jammer.design = designId;
+    jammer.position = {210, 0};
+    jammer.telemetry = confirmed_fleet_telemetry(state, jammer);
+    state.fleets.push_back(jammer);
+
+    const TurnProcessor processor;
+    host.state = processor.process(host.state, {});
+    const auto hasJam = [](const auto& statuses) {
+        return std::any_of(statuses.begin(), statuses.end(), [](const auto& status) {
+            return status.fleet == 1 && status.fastLinkJammed && status.interferencePercent == 40;
+        });
+    };
+    assert(hasJam(host.state.players.front().pendingSensorStatus));
+    auto firstPacket = make_player_turn(host, 1);
+    assert(!hasJam(firstPacket.state.players.front().sensorStatus));
+    assert(firstPacket.state.players.front().pendingSensorStatus.empty());
+
+    const auto hostPath = dir.filePath("area-jammer.suns");
+    SaveGameData loaded;
+    assert(write_save_game_file(hostPath, host, error));
+    const auto readHost = read_save_game_file(hostPath, loaded, error);
+    if (!readHost) std::cerr << error.toStdString() << '\n';
+    assert(readHost);
+    assert(find_ship_design(loaded.state, designId)->components == components);
+    assert(hasJam(loaded.state.players.front().pendingSensorStatus));
+    assert(hasJam(loaded.state.players.front().observedSensorStatus));
+
+    auto result = processor.process_with_events(loaded.state, {});
+    host.state = std::move(result.state);
+    host.strategicMessages = std::move(result.events);
+    assert(hasJam(host.state.players.front().sensorStatus));
+    const auto playerPath = dir.filePath("area-jammer.sunsturn");
+    assert(write_save_game_file(playerPath, make_player_turn(host, 1), error));
+    assert(read_save_game_file(playerPath, loaded, error));
+    assert(hasJam(loaded.state.players.front().sensorStatus));
+    assert(loaded.state.players.front().observedSensorStatus.empty());
+    assert(loaded.state.players.front().pendingSensorStatus.empty());
+    assert(!find_ship_design(loaded.state, designId));
+    assert(std::any_of(loaded.strategicMessages.begin(), loaded.strategicMessages.end(), [](const auto& event) {
+        return event.kind == GameEventKind::SensorInterferenceChanged && event.sensorStatus
+            && event.sensorStatus->fastLinkJammed && event.turn > event.sensorStatus->observedTurn;
+    }));
+    assert(communication_route(loaded.state, 1, observerPosition).channel == SignalChannel::Slow);
+    assert(communication_route(loaded.state, 1, {131, 0}).channel == SignalChannel::Fast);
+}
+
 void stargate_orders_round_trip()
 {
     QTemporaryDir dir;
@@ -2669,6 +2740,7 @@ int main()
     planetary_war_damage_and_reconstruction_round_trip();
     emission_pulses_and_dated_reports_round_trip();
     reconnaissance_and_programs_round_trip();
+    area_jammer_round_trips_in_host_and_player_turns();
     stargate_orders_round_trip();
     stations_defenses_and_orders_round_trip();
     operational_losses_round_trip_and_player_isolation();

@@ -163,6 +163,8 @@ void MainWindow::refreshFleetSummary()
     table->clear();
 
     auto contacts = fleetPlanningState().fleets;
+    const auto& received = receivedPlayerState();
+    const CommunicationQueryScope communicationScope(received);
     const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     contacts.insert(contacts.end(), missing.begin(), missing.end());
     std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
@@ -208,7 +210,7 @@ void MainWindow::refreshFleetSummary()
         if (queuedRoute) route.prepend("Queued: ");
         const auto age = fleet_telemetry_age(state_, fleet);
         const auto comms = awaitingWormholeReport ? QString("Last contact • %1 yr old").arg(age)
-            : QString("%1 • %2").arg(communication_delay_turns(state_, fleet.owner, fleet.position) == 0 && age == 0 ? "LIVE" : "Delayed",
+            : QString("%1 • %2").arg(age == 0 && communication_delay_turns(received, fleet.owner, fleet.position) == 0 ? "LIVE" : "Delayed",
                 age == 0 ? QString("current") : QString("%1 yr old").arg(age));
         const auto count = fleet_ship_count(fleet);
         ++fleets;

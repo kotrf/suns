@@ -41,6 +41,8 @@
 #include <type_traits>
 #include <utility>
 #include "suns/ship_refit.hpp"
+#include "fleet_sensor_sweep.hpp"
+#include "flight_sensor_fields.hpp"
 
 namespace suns {
 
@@ -1561,8 +1563,10 @@ void queue_fleet_movement_report(
 }
 
 bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets,
-    std::vector<ColonyFreightDelivery>& freight, OrbitalDepotRefueling& depotFuel)
+    std::vector<ColonyFreightDelivery>& freight, OrbitalDepotRefueling& depotFuel,
+    detail::FlightSensorFields* flightFields = nullptr)
 {
+    if (flightFields) detail::record_fleet_sensor_fields(state, fleet, state.turn + 1, *flightFields);
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
@@ -1742,7 +1746,8 @@ bool resolve_fleet_target_arrival(
     Fleet& fleet,
     std::vector<FleetId>& consumedFleets,
     std::vector<ColonyFreightDelivery>& freight,
-    OrbitalDepotRefueling& depotFuel)
+    OrbitalDepotRefueling& depotFuel,
+    detail::FlightSensorFields* flightFields = nullptr)
 {
     if (fleet.targetFleet == 0) return false;
     auto* target = friendly_fleet(state, fleet.owner, fleet.targetFleet);
@@ -1768,7 +1773,7 @@ bool resolve_fleet_target_arrival(
         fleet.arrivalAction.reset();
     }
 
-    (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel);
+    (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel, flightFields);
     return true;
 }
 
@@ -1884,10 +1889,12 @@ void apply_overdrive_damage(Fleet& fleet, double damage)
 // pay the annual loss once, regardless of how many segments it traverses.
 using RadiationExposure = std::map<FleetId, std::uint64_t>;
 
-void apply_movement_effects(GameState& state, Fleet& fleet, Position start,
-    double overdriveDamage, RadiationExposure& exposure)
+void apply_movement_effects(GameState& state, Fleet& fleet, Position start, double overdriveDamage,
+    RadiationExposure& exposure, std::vector<detail::FleetSensorSweep>& sensorSweeps)
 {
-    observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
+    if (const auto sweep = detail::prepare_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1))
+        sensorSweeps.push_back(*sweep);
+
     if (!fleet_radiation_safe(state, fleet)) {
         const auto alreadyExposed = std::min(fleet.colonists, exposure[fleet.id]);
         auto unexposed = fleet;
@@ -1907,7 +1914,9 @@ void continue_merged_fleet_route(
     std::vector<ColonyFreightDelivery>& freight,
     std::vector<FleetMovementFuel>& movementFuel,
     RadiationExposure& exposure,
-    OrbitalDepotRefueling& depotFuel)
+    OrbitalDepotRefueling& depotFuel,
+    std::vector<detail::FleetSensorSweep>& sensorSweeps,
+    detail::FlightSensorFields* flightFields)
 {
     constexpr double epsilon = 0.000001;
     if (remainingTurnFraction <= epsilon) return;
@@ -1918,7 +1927,7 @@ void continue_merged_fleet_route(
     if (routeDistance <= epsilon) {
         if (fleet.targetFleet == 0) {
             fleet.destination.reset();
-            (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel);
+            (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel, flightFields);
         }
         return;
     }
@@ -1948,12 +1957,12 @@ void continue_merged_fleet_route(
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuel.consumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
     fleet.fuelStalled = false;
-    apply_movement_effects(state, fleet, start, budget.damage, exposure);
+    apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
 
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
         fleet.destination.reset();
-        (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel);
+        (void)finish_fleet_arrival(state, fleet, consumedFleets, freight, depotFuel, flightFields);
     }
 }
 
@@ -2280,6 +2289,14 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
     std::vector<FleetId> fixedArrivals;
     std::vector<FleetId> mineDestroyedFleets;
+    std::vector<detail::FleetSensorSweep> sensorSweeps;
+    std::vector<detail::FleetSensorReadings> sensorReadings;
+    const auto readSweeps = [&](const detail::FlightSensorFields* fields) {
+        for (const auto& sweep : sensorSweeps)
+            if (auto readings = detail::read_fleet_sensor_sweep(state, sweep, state.turn + 1, fields))
+                sensorReadings.push_back(std::move(*readings));
+        sensorSweeps.clear();
+    };
 
     for (const auto id : fleetIds) {
         auto* movingFleet = fleet_by_id(state,id); if (!movingFleet) continue;
@@ -2350,7 +2367,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         fleet.position = endpoint;
         recordFuel(budget.fuel.consumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
-        apply_movement_effects(state, fleet, start, budget.damage, exposure);
+        apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
 
         if (!mineStrike && fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
@@ -2358,6 +2375,10 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             fixedArrivals.push_back(fleet.id);
         }
     }
+
+    // Freeze observations from the shared pre-battle geometry. A later loss
+    // can reopen transmission without changing what the sensors already saw.
+    readSweeps(nullptr);
 
     // Battles precede arrival actions, so a destroyed fleet cannot unload,
     // found a colony or escape an encounter by entering a wormhole.
@@ -2373,11 +2394,18 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     }
     std::sort(fixedArrivals.begin(), fixedArrivals.end());
 
+    std::optional<detail::FlightSensorFields> continuationFields;
+    if (!state.mediumObserver && std::any_of(resolvedEncounters.begin(), resolvedEncounters.end(),
+        [](const auto& encounter) { return encounter.targetRouted; })) {
+        continuationFields = detail::stationary_flight_sensor_fields(state, state.turn + 1);
+    }
+    auto* flightFields = continuationFields ? &*continuationFields : nullptr;
+
     for (const auto id : fixedArrivals) {
         auto* fleet = fleet_by_id(state, id);
         if (!fleet || !fleet->destination || fleet_id_list_contains(consumedFleets, id)) continue;
         fleet->destination.reset();
-        (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight, depotFuel);
+        (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight, depotFuel, flightFields);
     }
 
     for (const auto id : fleetIds) {
@@ -2397,7 +2425,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         const auto* beforeMerge = fleet_by_id(state, targetId);
         const auto exposed = std::min(exposure[id], fleet->colonists)
             + (beforeMerge ? std::min(exposure[targetId], beforeMerge->colonists) : 0);
-        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight, depotFuel);
+        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight, depotFuel, flightFields);
         if (action.kind == FleetArrivalActionKind::MergeWithFleet
             && fleet_id_list_contains(consumedFleets, id)) exposure[targetId] = exposed;
         if (!resolved || encounter == resolvedEncounters.end()
@@ -2420,7 +2448,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             *merged,
             encounter->targetDestination,
             1.0 - encounter->timeFraction,
-            consumedFleets, freight, movementFuel, exposure, depotFuel);
+            consumedFleets, freight, movementFuel, exposure, depotFuel, sensorSweeps, flightFields);
     }
 
     if (!consumedFleets.empty()) {
@@ -2428,6 +2456,13 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             return fleet_id_list_contains(consumedFleets, fleet.id);
         });
     }
+
+    // Arrival actions may wake, move or remove an emitter. Continued legs
+    // use its field at the end of flight, before those actions took effect.
+    if (flightFields && !sensorSweeps.empty()) detail::finish_flight_sensor_fields(state, state.turn + 1, *flightFields);
+    readSweeps(flightFields);
+    for (auto& readings : sensorReadings)
+        detail::dispatch_fleet_sensor_readings(state, std::move(readings));
 }
 
 void grow_colonies(GameState& state)

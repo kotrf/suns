@@ -404,9 +404,10 @@ enum class ShipComponentType {
     CargoCacheKit,
     GeologicalScanner,
     ExpeditionStargate,
+    AreaJammer,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::ExpeditionStargate;
+inline constexpr auto kLastShipComponent = ShipComponentType::AreaJammer;
 
 enum class ShipComponentKind {
     Engine,
@@ -1035,6 +1036,7 @@ struct SensorStatus {
     std::uint8_t interferencePercent{};
     double nominalRange{}, activeRange{}, passiveRange{}, emissionRange{};
     FleetId transmissionFleet{};
+    bool fastLinkJammed{};
 };
 // Immutable hull evidence. Lost records retain the date of their last position.
 struct ReconContact {

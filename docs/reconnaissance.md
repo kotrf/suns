@@ -60,6 +60,11 @@ cover at least 30 ly or their ordinary scanner range. Strength combines fitted
 copies with diminishing returns; the strongest local hostile platform applies.
 The same strength adds 1–2 years of communication delay at the source.
 
+An [Area Jammer](strategic-operations.md#area-jammer) adds a 90 ly field with
+40% sensor reduction and fast-radio interference. Ships and colonies can
+measure the radio state even with no detection equipment fitted. A report
+records the receiver and its location at observation.
+
 Observers report measured nominal/effective active range, passive baseline and
 emission reception range through the same delivery policy. Sensor interference
 and clearance events are transition-based. A remote UI uses received measurements,

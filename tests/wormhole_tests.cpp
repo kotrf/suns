@@ -203,6 +203,40 @@ void seeded_risk_and_boundary_motion()
     advance_wormholes(moving);
     assert(mouth.position.x < edge.x && mouth.position.y < edge.y);
 }
+
+void passive_flyby_keeps_anomaly_report_aboard()
+{
+    auto state = fixture({325, 199.8});
+    state.players.front().wormholeKnowledge.clear();
+    state.shipDesigns.push_back({99, 1, "Anomaly scout", ShipHullType::StarsScout,
+        {ShipComponentType::QuickJump5, ShipComponentType::AnomalyDetector}});
+    auto& observer = state.fleets.front();
+    observer.design = 99;
+    observer.ships = {{99, 1}};
+    observer.position = {312.5, 0};
+    const Position end{337.5, 0};
+    observer.destination = end;
+    observer.warp = 5;
+    observer.fuel = fleet_fuel_capacity(state, observer);
+    observer.electronics.mode = EmissionMode::Passive;
+
+    const TurnProcessor processor;
+    auto next = processor.process(state, {});
+    assert(same_position(next.fleets.front().position, end));
+    assert(!known_wormhole(next, 1, 10));
+    const auto packet = std::find_if(next.players.front().pendingWormholeReports.begin(),
+        next.players.front().pendingWormholeReports.end(),
+        [](const auto& report) { return report.knowledge.endpoint == 10; });
+    assert(packet != next.players.front().pendingWormholeReports.end());
+    assert(packet->observedTurn == 2 && packet->deliveryTurn == kAwaitingTransmission && packet->transmissionFleet == 1);
+    assert(std::none_of(next.emissions.begin(), next.emissions.end(),
+        [&](const auto& pulse) { return pulse.owner == 1 && same_position(pulse.position, end); }));
+
+    next.fleets.front().electronics.mode = EmissionMode::Standard;
+    while (next.turn < 5) next = processor.process(next, {});
+    const auto* received = known_wormhole(next, 1, 10);
+    assert(received && received->observedTurn == 2);
+}
 } // namespace
 
 int main()
@@ -212,5 +246,6 @@ int main()
     loss_is_physical_but_not_omniscient();
     lifecycle_is_seeded_and_collapse_observed();
     seeded_risk_and_boundary_motion();
+    passive_flyby_keeps_anomaly_report_aboard();
     std::cout << "wormhole tests passed\n";
 }

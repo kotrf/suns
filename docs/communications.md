@@ -21,7 +21,7 @@ a radar field.
 
 Outside the connected mesh, a finite-speed subspace signal travels between physical transceivers. A scanner field has no receiver distributed over its imaginary boundary, so its radius is never subtracted from the slow path.
 
-A detached group of overlapping scanner fields remains an instantaneous local island. Traffic can cross that island without delay to its physical ship nearest the empire mesh; the slow hop is then measured between that ship and the nearest physical transceiver in the colony-rooted component.
+A detached group of overlapping scanner fields remains an instantaneous local island. Traffic can cross that island without delay through its ship and colony radios. The slow hop uses the closest pair of physical radios between the island and the colony-rooted component.
 
 ```text
 slow distance = shortest physical transceiver-to-transceiver gap
@@ -32,6 +32,25 @@ delay turns = ceil(slow distance / 150 ly per turn)
 Only positions inside the colony-rooted scanner mesh have a zero-turn subspace link to headquarters. Any non-zero subspace hop arrives at a later annual planning boundary. The signal speed is deliberately provisional. Orbital stations will later provide durable physical transceivers and scanner fields without requiring a second field-radius number.
 
 Signals have the same propagation time regardless of message priority. Priority can matter only if a future relay has finite processing or transmission capacity; there is no artificial faster channel in the base model.
+
+### Area jamming
+
+An active hostile [Area Jammer](strategic-operations.md#area-jammer) disables
+fast radio at ships, colonies and relays within 90 ly. A clean route can use
+other relays. A jammed endpoint uses the ordinary slow hop between physical
+radios at 150 ly/year. A jammed homeworld continues to receive slow packets
+and share data locally with fleets in orbit. A fleet outside the field can use
+its own fast relay chain, including working colony radars, before the slow hop
+to that homeworld. Observations from the initial flight legs are frozen before
+combat. Observations from continued legs use the jamming fields at the end of
+flight, before arrival actions change the emitters. Deployed outposts keep
+their pre-arrival power state for these observations. Ready reports from both
+phases use the completed radio network for dispatch.
+Packets already in flight keep their scheduled delivery.
+
+Ships and colonies report jamming and its clearance through their usual
+communications. The player sees the observed year and position of their own
+receiver. Estimates use received measurements at those locations.
 
 ## Commands
 
@@ -173,7 +192,8 @@ The same model is intended to support:
 - jamming, interception and communication warfare
 - technology improvements to range, signal speed and resistance to interference
 
-Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the subspace hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.
+Further work could limit the reliable range of slow hops under interference.
+Authentication and deliberately forged messages remain future ideas.
 
 When no new command can arrive, a fleet keeps executing its onboard waypoint queue and stops after the program is exhausted. Conditional contingency commands such as "if no contact for N turns, return to the nearest friendly relay" are a future autonomy layer rather than implicit fleet behaviour.
 

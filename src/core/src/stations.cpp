@@ -136,7 +136,7 @@ bool station_hull_available(const GameState& s, PlayerId owner, OrbitalStationHu
 bool station_component_supported(ShipComponentType component)
 {
     const auto s = component_spec(component);
-    return stargate_spec(component) || radiation_screen_protection(component)
+    return stargate_spec(component) || radiation_screen_protection(component) || component == ShipComponentType::AreaJammer
         || s.kind == ShipComponentKind::BeamWeapon || s.kind == ShipComponentKind::Torpedo
         || s.kind == ShipComponentKind::Armor || s.kind == ShipComponentKind::Shield
         || (s.kind == ShipComponentKind::Electrical && (s.initiativeBonus || s.accuracyBonusPercent

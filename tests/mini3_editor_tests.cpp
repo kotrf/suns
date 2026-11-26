@@ -76,6 +76,30 @@ struct MainWindowTestAccess {
         assert(w.currentDistanceSelectionKind_ == 1 && w.currentDistanceSelectionId_ == report.star);
         load(w);
     }
+    static void areaJammingReport(MainWindow& w) {
+        load(w);
+        w.state_.turn = 3;
+        GameEvent report;
+        report.id = 1002;
+        report.recipient = 1;
+        report.kind = GameEventKind::SensorInterferenceChanged;
+        report.turn = 3;
+        report.observedTurn = 2;
+        report.fleet = w.state_.fleets.front().id;
+        report.position = {130, 0};
+        report.quantity = 40;
+        report.sensorStatus = SensorStatus{
+            report.fleet, 0, report.position, 2, 3, 40, 100, 60, 15, 120, 0, true
+        };
+        w.turnMessages_ = {report};
+        w.refreshTurnMessages();
+        w.turnMessagesList_->setCurrentRow(0);
+        const auto body = w.turnMessageBody_->toPlainText();
+        assert(body.contains("Observed year 2. Received year 3."));
+        assert(body.contains("Fast radio was jammed here."));
+        assert(body.contains("Distant commands and reports use slow radio"));
+        load(w);
+    }
     static double mapScale(MainWindow& w){return std::abs(w.view_->transform().m11());}
     static QPointF center(MainWindow& w){return w.view_->mapToScene(w.view_->viewport()->rect().center());}
     static QGraphicsView* mapView(MainWindow& w){return w.view_;}
@@ -287,6 +311,7 @@ int main(int argc,char** argv) {
     const auto center=MainWindowTestAccess::center(w);assert(std::abs(center.x()-100)*MainWindowTestAccess::mapScale(w)<2 && std::abs(center.y()-120)*MainWindowTestAccess::mapScale(w)<2);
     const auto labText=MainWindowTestAccess::laboratory(w);assert(labText.contains("42 / 600") && !labText.contains("waiting for minerals"));
     MainWindowTestAccess::geologyReport(w);
+    MainWindowTestAccess::areaJammingReport(w);
     auto s=make_demo_game();auto extra=s.shipDesigns.front();extra.id=s.nextShipDesignId++;extra.name="ZZ Archive";extra.retired=true;s.shipDesigns.push_back(extra);
     ShipDesignerDialog designer(s,1);auto* templates=designer.findChild<QComboBox*>("shipDesignTemplate");assert(templates->itemText(0)=="New design");assert(templates->findData(extra.id)<0);
     for(int i=2;i<templates->count();++i)assert(QString::compare(templates->itemText(i-1),templates->itemText(i),Qt::CaseInsensitive)<=0);

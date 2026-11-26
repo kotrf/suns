@@ -272,7 +272,10 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::EnemyFleetReclassified:
         subject=QString("Contact %1 reclassified: %2").arg(event.fleet).arg(event.contact?contact_quality_name(event.contact->quality):"unknown"); break;
     case GameEventKind::SensorInterferenceChanged:
-        subject=event.quantity?QString("Sensor interference: %1% reduction").arg(event.quantity):"Sensor interference cleared"; break;
+        subject = event.sensorStatus && event.sensorStatus->fastLinkJammed
+            ? QString("Fast radio jammed • detection range reduced by %1%").arg(event.quantity)
+            : event.quantity ? QString("Sensor interference: %1% reduction").arg(event.quantity) : "Sensor interference cleared";
+        break;
     case GameEventKind::EnemyFleetLost:
         subject = QString("Contact lost: %1").arg(event.fleet);
         break;
@@ -521,10 +524,13 @@ QString event_text(const GameState& state, const GameEvent& event)
     }
     if(event.sensorStatus) {
         const auto& s=*event.sensorStatus;
-        return QString("Observer %1 — sensor interference %2%\nObserved year %3; received year %4. Active range %5 ly; passive hull baseline %6 ly; emission reception %7 ly.\nInterference also delays communication. These are received measurements, not current hidden enemy equipment.")
+        auto status = QString("Observer %1 — sensor interference %2%\nObserved year %3. Received year %4.\nActive range %5 ly. Passive hull baseline %6 ly. Emission reception %7 ly.")
             .arg(s.fleet?QString("fleet %1").arg(s.fleet):QString("colony %1").arg(s.colony))
             .arg(s.interferencePercent).arg(qulonglong(s.observedTurn)).arg(qulonglong(event.turn))
             .arg(s.activeRange,0,'f',1).arg(s.passiveRange,0,'f',1).arg(s.emissionRange,0,'f',1);
+        if (s.fastLinkJammed) status += "\nFast radio was jammed here. Distant commands and reports use slow radio while the interference lasts.";
+        else if (s.interferencePercent) status += "\nLocal interference can also delay communication.";
+        return status;
     }
 
     const auto* star = find_star(state, event.star);
