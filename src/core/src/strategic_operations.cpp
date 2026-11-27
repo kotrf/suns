@@ -873,6 +873,7 @@ bool same_strategic_intel_subject(const StrategicIntel& left, const StrategicInt
 void deliver_strategic_intel(GameState& state)
 {
     for (auto& player : state.players) {
+        discard_redundant_emission_intel(player, state.turn);
         // Emissions are one planning-year evidence. Historical events survive.
         std::erase_if(player.strategicIntel, [&](const auto& i) {
             return i.type == StrategicObjectKind::Emission && i.deliveryTurn < state.turn;

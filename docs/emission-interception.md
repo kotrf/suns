@@ -37,8 +37,9 @@ contents. It records emission, interception and delivery years, and never follow
 a moved/destroyed emitter. The map marker lasts one receipt planning year; the
 message remains in history. Decoys use the emission-time jammer strength and
 position; sufficiently strong tachyon reception rejects only the false area.
-Contemporaneous known hull evidence can suppress a redundant anonymous marker;
-old pulses never query a departed source's current state.
+A contemporaneous hull sighting can replace an unclassified signal marker.
+A classified signal adds information about activity even when the receiver
+also sees the hull.
 
 ## Expendable decoy probes
 
@@ -73,6 +74,9 @@ imitate radio traffic. The map and Turn Messages show the received pattern
 with the original channel and dates. Patterns describe the observed signal
 and leave the sender and packet contents unknown. They survive save/reload
 and PBEM export from save v139.
+The first alert can arrive before a separate report with the classification.
+The refinement appears on the map and in Turn Messages in its own delivery
+year. Each listening ship carries its own copy until it can transmit.
 
 Slow reception at a jammed physical endpoint over a hop longer than 450 ly
 adds a year of decoding to addressed packets. The signal still reaches

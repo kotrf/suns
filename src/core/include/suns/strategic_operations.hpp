@@ -45,6 +45,8 @@ void advance_minefields(GameState&);
 void run_strategic_tasks(GameState&, std::uint64_t);
 [[nodiscard]] bool same_strategic_intel_subject(const StrategicIntel&, const StrategicIntel&);
 [[nodiscard]] const char* signal_activity_name(SignalActivity);
+void discard_redundant_emission_intel(Player&, std::uint64_t turn);
+void discard_redundant_emission_reports(Player&, std::uint64_t turn);
 void record_decoy_pulse(GameState&, const Fleet&, std::uint64_t turn);
 void observe_emission_pulses(GameState&, std::uint64_t);
 void observe_strategic_objects(GameState&, std::uint64_t);

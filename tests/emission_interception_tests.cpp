@@ -197,10 +197,85 @@ void only_strong_signals_reveal_anonymous_activity()
     assert(activity(mixed, SignalChannel::Fast) == SignalActivity::Mixed);
 }
 
+void late_classification_survives_the_first_alert()
+{
+    for (const bool silent : {false, true}) {
+        auto state = fixture();
+        const Position area{210, 10};
+        state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+        state.fleets[0].position = {285, 0};
+        state.fleets[1].position = {200, 0};
+        record_scan_transmission(state, state.fleets[1], 10);
+        state.fleets.pop_back(); // Isolate receipt ordering from simultaneous hull detection.
+        if (silent) {
+            state.fleets[0].electronics.mode = EmissionMode::Passive;
+            auto secondReceiver = state.fleets[0];
+            secondReceiver.id = state.nextFleetId++;
+            state.fleets.push_back(secondReceiver);
+        }
+        observe_emission_pulses(state, 10);
+        auto& player = state.players.front();
+        assert(player.pendingStrategicIntel.size() == (silent ? 3 : 2));
+        assert(player.pendingPlayerReports.size() == player.pendingStrategicIntel.size());
+        deliver_strategic_intel(state);
+        const auto alert = deliver_due_player_reports(state);
+        assert(alert.size() == 1 && alert[0].emission->activity == SignalActivity::Unclassified);
+        assert(player.strategicIntel.size() == 1 && player.strategicIntel[0].emission->activity == SignalActivity::Unclassified);
+        const auto reported = make_player_view(state, 1);
+        assert(reported.state.players.front().pendingStrategicIntel.empty());
+        assert(reported.state.players.front().pendingPlayerReports.empty());
+        state.turn = 11;
+        deliver_strategic_intel(state);
+        assert(deliver_due_player_reports(state).empty() && player.strategicIntel.empty());
+        if (silent) {
+            // The second listener reaches a friendly colony first. The original
+            // listener still has its copy aboard and stays in Passive.
+            state.turn = 13;
+            state.fleets.back().position = {0, 0};
+            dispatch_fleet_report_outbox(state);
+        } else {
+            state.turn = 12;
+        }
+        deliver_strategic_intel(state);
+        const auto refinement = deliver_due_player_reports(state);
+        assert(refinement.size() == 1 && refinement[0].emission->activity == SignalActivity::ActiveElectronics);
+        assert(refinement[0].observedTurn == 10 && refinement[0].emission->emittedTurn == 10);
+        assert(refinement[0].turn == state.turn && same_position(refinement[0].position, area));
+        assert(player.strategicIntel.size() == 1 && player.strategicIntel[0].emission->activity == SignalActivity::ActiveElectronics);
+        assert(!player.strategicIntel[0].owner && !player.strategicIntel[0].id);
+        assert(player.pendingStrategicIntel.empty() && player.pendingPlayerReports.empty());
+    }
+}
+
+void a_hull_contact_does_not_hide_a_classified_signal()
+{
+    auto state = fixture();
+    state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+    state.fleets[1].position = {485, 0};
+    assert(detector_detects_fleet(state, state.fleets[0], state.fleets[1]));
+    record_scan_transmission(state, state.fleets[1], 10);
+    auto earlyTechnology = state;
+    earlyTechnology.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 7;
+    observe_emission_pulses(earlyTechnology, 10);
+    assert(earlyTechnology.players[0].pendingStrategicIntel.empty());
+    observe_emission_pulses(state, 10);
+    const auto& pending = state.players[0].pendingStrategicIntel;
+    assert(pending.size() == 1 && pending.front().emission->activity == SignalActivity::ActiveElectronics);
+    assert(pending.front().deliveryTurn == 13 && same_position(pending.front().position, {490, 10}));
+    state.turn = 13;
+    deliver_strategic_intel(state);
+    const auto reports = deliver_due_player_reports(state);
+    assert(reports.size() == 1 && !reports[0].fleet && !reports[0].contactOwner);
+    assert(reports[0].emission->activity == SignalActivity::ActiveElectronics);
+    assert(state.players[0].strategicIntel.front().emission->activity == SignalActivity::ActiveElectronics);
+}
+
 int main()
 {
     two_physical_delays_and_immutable_source(); passive_reception_waits_for_real_dispatch();
     colony_forwards_silent_fleet_without_relocating_emission(); actual_fast_transmission_and_command_source();
     expendable_probe_broadcasts_at_the_final_waypoint();
     only_strong_signals_reveal_anonymous_activity();
+    late_classification_survives_the_first_alert();
+    a_hull_contact_does_not_hide_a_classified_signal();
 }

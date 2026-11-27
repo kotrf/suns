@@ -31,6 +31,65 @@ std::vector<Receiver> receivers(const GameState& state,std::uint64_t turn)
     });
     return result;
 }
+
+bool same_emission_report(const PendingPlayerReport& a, const PendingPlayerReport& b)
+{
+    return a.kind == PlayerReportKind::EmissionDetected && b.kind == a.kind && a.emission && b.emission
+        && a.emission->emittedTurn == b.emission->emittedTurn && a.emission->channel == b.emission->channel
+        && same_position(a.contactPosition, b.contactPosition);
+}
+
+bool classified(const auto& evidence)
+{
+    return evidence.emission && evidence.emission->activity != SignalActivity::Unclassified;
+}
+
+bool dominates(const auto& earlier, const auto& later)
+{
+    return earlier.deliveryTurn <= later.deliveryTurn && classified(earlier) >= classified(later);
+}
+
+template<class Evidence, class SameSubject>
+void stage(std::vector<Evidence>& queue, const Evidence& evidence, SameSubject same)
+{
+    // Different outboxes can send their copies in either order. Compare
+    // scheduled deliveries or observations aboard the same ship.
+    const auto comparable = [&](const auto& other) {
+        return evidence.transmissionFleet == other.transmissionFleet && same(evidence, other);
+    };
+    if (std::any_of(queue.begin(), queue.end(), [&](const auto& other) {
+            return comparable(other) && dominates(other, evidence);
+        })) return;
+    std::erase_if(queue, [&](const auto& other) {
+        return comparable(other) && dominates(evidence, other);
+    });
+    queue.push_back(evidence);
+}
+
+template<class Evidence, class SameSubject>
+void discard_redundant_arrivals(std::vector<Evidence>& queue, std::uint64_t turn, SameSubject same)
+{
+    std::vector<std::size_t> arrived;
+    for (std::size_t i = 0; i < queue.size(); ++i)
+        if (queue[i].emission && queue[i].deliveryTurn <= turn) arrived.push_back(i);
+    if (arrived.empty()) return;
+
+    // Once a copy arrives it can retire equivalent and weaker copies still
+    // in flight or aboard a different receiver. Preserve later refinements.
+    std::vector<bool> redundant(queue.size());
+    for (std::size_t i = 0; i < queue.size(); ++i) {
+        const auto& item = queue[i];
+        if (!item.emission) continue;
+        redundant[i] = std::any_of(arrived.begin(), arrived.end(), [&](std::size_t j) {
+            const auto& copy = queue[j];
+            return j != i && same(copy, item) && dominates(copy, item)
+                && (copy.deliveryTurn < item.deliveryTurn || classified(copy) != classified(item) || j < i);
+        });
+    }
+    std::size_t index{};
+    std::erase_if(queue, [&](const auto&) { return redundant[index++]; });
+}
+
 void record(GameState& state, const Receiver& receiver, const EmissionPulse& pulse, Position area,
     std::uint64_t turn, SignalActivity activity)
 {
@@ -41,31 +100,28 @@ void record(GameState& state, const Receiver& receiver, const EmissionPulse& pul
     const EmissionObservation observation{pulse.emittedTurn, pulse.channel, activity};
     StrategicIntel intel{0,StrategicObjectKind::Emission,area,15,0,turn,due,0,
         std::uint8_t(pulse.channel),held,observation};
-    const auto same = [&](const auto& old) { return same_strategic_intel_subject(old, intel); };
-    // Favor the earliest receipt. A simultaneous received copy can add a
-    // classification. Evidence still aboard another observer stays aboard.
-    const auto prefer = [&](const auto& old) {
-        return due < old.deliveryTurn || (due == old.deliveryTurn && due != kAwaitingTransmission
-            && activity != SignalActivity::Unclassified && old.emission
-            && old.emission->activity == SignalActivity::Unclassified);
-    };
-    if(std::none_of(player->strategicIntel.begin(),player->strategicIntel.end(),same)) {
-        auto old=std::find_if(player->pendingStrategicIntel.begin(),player->pendingStrategicIntel.end(),same);
-        if(old==player->pendingStrategicIntel.end()) player->pendingStrategicIntel.push_back(intel);
-        else if(prefer(*old)) *old=intel;
-    }
+    if (std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(), [&](const auto& known) {
+            return same_strategic_intel_subject(known, intel) && dominates(known, intel);
+        })) return;
+    stage(player->pendingStrategicIntel, intel, same_strategic_intel_subject);
+
     PendingPlayerReport report; report.kind=PlayerReportKind::EmissionDetected;
     report.observedTurn=turn; report.deliveryTurn=due; report.transmissionFleet=held;
     report.position=receiver.position; report.contactPosition=area; report.quantity=15; report.emission=observation;
-    const auto sameReport=[&](const auto& old) {
-        return old.kind==report.kind && old.emission && old.emission->emittedTurn==pulse.emittedTurn
-            && old.emission->channel==pulse.channel && same_position(old.contactPosition,area);
-    };
-    auto old=std::find_if(player->pendingPlayerReports.begin(),player->pendingPlayerReports.end(),sameReport);
-    if(old==player->pendingPlayerReports.end()) player->pendingPlayerReports.push_back(report);
-    else if(prefer(*old)) *old=report;
+    stage(player->pendingPlayerReports, report, same_emission_report);
 }
 }
+
+void discard_redundant_emission_intel(Player& player, std::uint64_t turn)
+{
+    discard_redundant_arrivals(player.pendingStrategicIntel, turn, same_strategic_intel_subject);
+}
+
+void discard_redundant_emission_reports(Player& player, std::uint64_t turn)
+{
+    discard_redundant_arrivals(player.pendingPlayerReports, turn, same_emission_report);
+}
+
 void record_decoy_pulse(GameState& state, const Fleet& fleet, std::uint64_t turn)
 {
     EmissionPulse pulse;
@@ -131,10 +187,10 @@ void observe_emission_pulses(GameState& state,std::uint64_t turn)
                 record(state,receiver,pulse,ghost,turn,activity);
             }
             if (pulse.decoyOnly) continue;
-            // Suppress only redundant contemporaneous hull evidence. An old
-            // pulse never queries a departed/destroyed emitter's current truth.
+            // A hull sighting can replace an anonymous alert. A classified
+            // signal also carries information about the emitter's activity.
             bool hullSeen=false;
-            if(!age && pulse.fleet) {
+            if(activity == SignalActivity::Unclassified && !age && pulse.fleet) {
                 const auto target=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f) {
                     return f.id==pulse.fleet && f.owner==pulse.owner && same_position(f.position,pulse.position);
                 });

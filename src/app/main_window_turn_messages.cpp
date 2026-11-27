@@ -155,7 +155,11 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::SampleDelivered: subject = QString("Specimen X%1 delivered to %2").arg(event.quantity).arg(planetName); break;
     case GameEventKind::SampleRetained: subject = QString("Specimen X%1 retained as a working research artifact").arg(event.quantity); break;
     case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
-    case GameEventKind::EmissionDetected: subject = QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity); break;
+    case GameEventKind::EmissionDetected:
+        subject = event.emission && event.emission->activity != SignalActivity::Unclassified
+            ? QString("Emission pattern — %1").arg(signal_activity_name(event.emission->activity))
+            : QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity);
+        break;
     case GameEventKind::AnomalyDetected: subject = QString("Spatial anomaly %1 detected").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeClassified: subject = QString("WH %1 classified").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeEntered: subject = QString("%1 entered WH %2").arg(fleetName).arg(event.wormholeEndpoint); break;
