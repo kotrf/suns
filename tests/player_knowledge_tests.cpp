@@ -151,6 +151,57 @@ void remote_geology_uses_the_actual_flyby_and_delivers_coarse_evidence()
     assert(known_remote_geology(observed, 1, 2)->observedTurn == packet.observedTurn);
 }
 
+void scan_once_holds_remote_geology_until_the_fleet_can_transmit()
+{
+    const Position scanPoint{512.5, 0};
+    auto state = survey_fixture({500, 0}, {550, 0}, 10);
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.planets[1].observedConcentration = MineralCargo{23, 88, 100};
+    state.shipDesigns.push_back({99, 1, "Geology Scout", ShipHullType::StarsScout,
+        {ShipComponentType::QuickJump5, ShipComponentType::GeologicalScanner}});
+    auto& scout = state.fleets.front();
+    const auto id = scout.id;
+    scout.design = 99;
+    scout.ships = {{99, 1}};
+    scout.destination = scanPoint;
+    scout.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::ScanOnce};
+    scout.waypointQueue = {{{450, 0}, 5, {}}};
+    scout.warp = 5;
+    scout.fuel = fleet_fuel_capacity(state, scout);
+    scout.electronics = {EmissionMode::RadioSilence, 16};
+    const TurnProcessor processor;
+    state = processor.process(state, {});
+    assert(state.turn == 11 && same_position(state.fleets.front().position, scanPoint));
+    const auto packet = [&] {
+        const auto& reports = state.players.front().pendingPlayerReports;
+        return std::find_if(reports.begin(), reports.end(), [id](const auto& report) {
+            return report.kind == PlayerReportKind::RemoteGeologyObserved && report.planet == 2
+                && report.fleet == id && report.observedTurn == 11;
+        });
+    };
+    assert(packet() != state.players.front().pendingPlayerReports.end());
+    assert(packet()->transmissionFleet == id && packet()->deliveryTurn == kAwaitingTransmission);
+    assert(std::count_if(state.emissions.begin(), state.emissions.end(), [&](const auto& pulse) {
+        return pulse.fleet == id && pulse.emittedTurn == state.turn && same_position(pulse.position, scanPoint);
+    }) == 1);
+    state.planets[1].observedConcentration = MineralCargo{90, 10, 30};
+    while (state.turn < 15) {
+        state = processor.process(state, {});
+        assert(!known_remote_geology(make_player_view(state, 1).state, 1, 2));
+        assert(packet() != state.players.front().pendingPlayerReports.end());
+        assert(packet()->transmissionFleet == id && packet()->deliveryTurn == kAwaitingTransmission);
+    }
+    state = processor.process(state, {});
+    assert(state.turn == 16 && same_position(state.fleets.front().position, {450, 0}));
+    assert(packet() != state.players.front().pendingPlayerReports.end());
+    assert(packet()->transmissionFleet == 0 && packet()->deliveryTurn == 19);
+    while (state.turn < 19) state = processor.process(state, {});
+    const auto* estimate = known_remote_geology(state, 1, 2);
+    assert(estimate && estimate->observedTurn == 11);
+    assert(estimate->bandLower.ironium == 20 && estimate->bandLower.boranium == 80
+        && estimate->bandLower.germanium == 90);
+}
+
 void remote_geology_finds_clear_parts_of_an_interfered_flyby()
 {
     const Position start{445, 0}, end{526, 0};
@@ -913,6 +964,7 @@ int main()
     ordinary_scanner_reports_system_contact_without_planet_data();
     penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_geology_uses_the_actual_flyby_and_delivers_coarse_evidence();
+    scan_once_holds_remote_geology_until_the_fleet_can_transmit();
     remote_geology_finds_clear_parts_of_an_interfered_flyby();
     flyby_uses_area_jamming_at_the_observation_point();
     flyby_dispatch_uses_the_jammers_completed_movement();

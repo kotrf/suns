@@ -1830,6 +1830,11 @@ struct PendingFleetTelemetry {
     FleetTelemetry telemetry;
 };
 
+struct FleetFlightSignature {
+    std::uint8_t warp{};
+    std::uint8_t freeWarp{};
+};
+
 struct Fleet {
     FleetId id{};
     PlayerId owner{};
@@ -1880,6 +1885,7 @@ struct Fleet {
     std::vector<PendingBattlePlan> battlePlansInTransit;
     std::optional<MobileGateTransit> mobileGate;
     std::uint64_t waypointScanTurn{}; // Transient host state during turn resolution.
+    FleetFlightSignature flightSignature; // Actual engine use during turn resolution.
 };
 
 struct Minefield {

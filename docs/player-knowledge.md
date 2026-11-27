@@ -67,7 +67,9 @@ source fleet and observation year. Use the concentration display in System
 Details or the Exploration filter in Turn Messages. **Show on map** opens the
 surveyed system. A geological survey in
 orbit gives exact concentrations and the appropriate surface evidence.
-Delivered estimates use their own record and respect transmission delays.
+Each estimate enters the ordinary report outbox. A fleet that uses **Scan once**
+in radio silence keeps its dated measurements aboard until a transmission
+window or an orbital upload at an owned colony.
 Unchanged estimates refresh the observation year quietly.
 
 ## Delivery and events

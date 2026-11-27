@@ -1709,6 +1709,7 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     // pursuing FleetId just as they do an explicit merge order.
     destination.lastMovedTurn = std::max(destination.lastMovedTurn, source.lastMovedTurn);
     destination.lastServiceTurn = std::max(destination.lastServiceTurn, source.lastServiceTurn);
+    if (!destination.flightSignature.warp) destination.flightSignature = source.flightSignature;
     const auto sourceId = source.id;
     const auto destinationShips = fleet_dry_mass(state, destination);
     const auto sourceShipCount = fleet_dry_mass(state, source);
@@ -1793,6 +1794,7 @@ struct MovementBudget {
     double damage{};
     FleetFuelAmounts fuel;
     double fuelMinimum{}, fuelMaximum{};
+    FleetFlightSignature flightSignature;
 };
 
 MovementBudget fleet_movement_budget(
@@ -1849,6 +1851,10 @@ MovementBudget fleet_movement_budget(
         const auto coastBounds=fleet_segment_fuel_bounds(state,coasting,freeDistance);
         result.fuelMinimum+=coastBounds.consumedMinimum; result.fuelMaximum+=coastBounds.consumedMaximum;
     }
+    if (result.distance > epsilon) {
+        const auto actualWarp = paidDistance > epsilon ? fleet.warp : freeWarp;
+        result.flightSignature = {actualWarp, freeWarp};
+    }
     return result;
 }
 
@@ -1900,9 +1906,11 @@ void apply_overdrive_damage(Fleet& fleet, double damage)
 // pay the annual loss once, regardless of how many segments it traverses.
 using RadiationExposure = std::map<FleetId, std::uint64_t>;
 
-void apply_movement_effects(GameState& state, Fleet& fleet, Position start, double overdriveDamage,
+void apply_movement_effects(GameState& state, Fleet& fleet, Position start, const MovementBudget& budget,
     RadiationExposure& exposure, std::vector<detail::FleetSensorSweep>& sensorSweeps)
 {
+    if (budget.flightSignature.warp && !same_position(start, fleet.position))
+        fleet.flightSignature = budget.flightSignature;
     if (const auto sweep = detail::prepare_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1))
         sensorSweeps.push_back(*sweep);
 
@@ -1913,7 +1921,7 @@ void apply_movement_effects(GameState& state, Fleet& fleet, Position start, doub
         fleet.colonists -= projected_fleet_radiation_losses(state, unexposed);
         exposure[fleet.id] = fleet.colonists;
     }
-    apply_overdrive_damage(fleet, overdriveDamage);
+    apply_overdrive_damage(fleet, budget.damage);
 }
 
 void continue_merged_fleet_route(
@@ -1968,7 +1976,7 @@ void continue_merged_fleet_route(
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuel.consumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
     fleet.fuelStalled = false;
-    apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
+    apply_movement_effects(state, fleet, start, budget, exposure, sensorSweeps);
 
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
@@ -2379,7 +2387,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         fleet.position = endpoint;
         recordFuel(budget.fuel.consumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
-        apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
+        apply_movement_effects(state, fleet, start, budget, exposure, sensorSweeps);
 
         if (!mineStrike && fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
@@ -3441,7 +3449,10 @@ TurnResult TurnProcessor::process_with_events(
     observe_visitors(next);
     observe_interstellar_medium(next,next.turn);
     observe_emission_pulses(next,next.turn);
-    for (auto& fleet : next.fleets) fleet.waypointScanTurn = 0;
+    for (auto& fleet : next.fleets) {
+        fleet.waypointScanTurn = 0;
+        fleet.flightSignature = {};
+    }
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);

@@ -866,6 +866,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.orbitalBase = telemetry.orbitalBase;
     view.mobileBase = telemetry.mobileBase;
     view.lastMovedTurn = telemetry.lastMovedTurn;
+    view.flightSignature = {};
     view.lastServiceTurn = telemetry.lastServiceTurn;
     view.colonists = telemetry.colonists;
     view.arrivalAction = telemetry.arrivalAction;
