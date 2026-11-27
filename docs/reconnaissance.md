@@ -80,8 +80,8 @@ opens the optional **Passive and emission ranges** overlay: gold is the passive
 hull baseline, violet is reception of other ships' emissions, not the distance
 at which the displayed ship broadcasts. Switching Sensors off hides all ranges.
 Passive hull reach is a baseline. Target hull mass, fitted equipment and cargo
-contribute with diminishing returns. Actual motion increases the signature at
-higher Warp, with a smaller increase for flight at or below an engine's free Warp.
+contribute with diminishing returns. The signature uses the Warp flown in the
+observed year. Flight at or below an engine's free Warp produces a weaker signal.
 Cloaking still reduces detection range. Layer tooltips identify each coverage type.
 
 Set **Wake on contact or combat** in Radio silence to return to Standard

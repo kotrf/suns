@@ -374,9 +374,10 @@ double fleet_detection_range(const GameState& state, const Fleet& target, double
         const double massFactor = std::clamp(std::pow(fleet_gross_mass(state, target) / 100, 0.2), 0.60, 2.0);
         const auto observedTurn = turn ? turn : state.turn;
         double motion = 0.5;
-        if (target.lastMovedTurn && target.lastMovedTurn == observedTurn) {
-            motion += 0.14 * target.warp;
-            if (target.warp <= fleet_free_warp(state, target)) motion *= 0.8;
+        const auto flight = target.flightSignature;
+        if (flight.warp && target.lastMovedTurn == observedTurn) {
+            motion += 0.14 * flight.warp;
+            if (flight.warp <= flight.freeWarp) motion *= 0.8;
         }
         reflected *= 0.25 * massFactor * motion;
     }

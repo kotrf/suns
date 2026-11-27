@@ -256,12 +256,47 @@ void passive_signature_depends_on_mass_and_actual_motion()
     target.warp = 9;
     assert(range() == heavy);
     target.lastMovedTurn = state.turn;
+    target.flightSignature = {9, 4};
     const auto fast = range();
-    target.warp = 4;
+    target.flightSignature = {4, 4};
     assert(fast > range() && range() > heavy);
     const auto fuelMizer = range();
-    state.shipDesigns.back().components.front() = C::QuickJump5;
+    target.flightSignature.freeWarp = 1;
     assert(range() > fuelMizer);
+}
+
+void wake_on_contact_uses_the_flown_warp()
+{
+    const Position arrival{400, 0};
+    auto state = fixture({415.43, 0}, {396, 0});
+    auto& observer = state.fleets.front();
+    observer.electronics = {EmissionMode::RadioSilence, 30};
+    observer.electronics.wakeOnContactOrCombat = true;
+    auto& target = state.fleets.back();
+    target.destination = arrival;
+    target.electronics.mode = EmissionMode::Passive;
+    const auto resolve = [&](std::uint8_t flownWarp, std::uint8_t onwardWarp, double fuel) {
+        auto copy = state;
+        auto& moving = copy.fleets.back();
+        moving.warp = flownWarp;
+        moving.fuel = fuel;
+        moving.waypointQueue = {{{480, 0}, onwardWarp, {}}};
+        auto result = TurnProcessor{}.process(copy, {});
+        const auto& arrived = result.fleets.back();
+        assert(same_position(arrived.position, arrival) && arrived.warp == onwardWarp);
+        return result;
+    };
+    const auto slow = resolve(2, 2, target.fuel);
+    const auto nextFast = resolve(2, 9, target.fuel);
+    assert(slow.fleets.back().fuel == nextFast.fleets.back().fuel);
+    assert(slow.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    assert(nextFast.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    assert(slow.players.front().pendingEnemyContacts.empty() && nextFast.players.front().pendingEnemyContacts.empty());
+    const auto coasting = resolve(9, 2, 0);
+    assert(coasting.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    const auto flownFast = resolve(9, 2, target.fuel);
+    assert(flownFast.fleets.front().electronics.mode == EmissionMode::Standard);
+    assert(!flownFast.players.front().pendingEnemyContacts.empty());
 }
 
 int main()
@@ -275,4 +310,5 @@ int main()
     own_contact_wakes_and_releases_held_observations();
     waypoint_scan_emits_once_and_the_withdrawal_stays_silent();
     passive_signature_depends_on_mass_and_actual_motion();
+    wake_on_contact_uses_the_flown_warp();
 }
