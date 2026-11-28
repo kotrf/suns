@@ -5,6 +5,7 @@
 #include "suns/computer_player.hpp"
 #include "suns/production.hpp"
 #include "suns/combat.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
@@ -3632,6 +3633,8 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
     }
+    if (version >= 139 && loaded.mode != SessionMode::PlayerTurn)
+        restore_emission_intel(loaded.state, loaded.strategicMessages);
     if(version<79 && loaded.mode!=SessionMode::PlayerTurn) generate_unknown_objects(loaded.state,false);
     if (loaded.pendingDescriptions.size() != static_cast<qsizetype>(loaded.pendingOrders.orders.size())) {
         errorMessage = "The Suns! save file has an inconsistent planning-order section.";

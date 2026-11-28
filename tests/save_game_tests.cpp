@@ -2202,6 +2202,58 @@ void emission_pulses_and_dated_reports_round_trip()
     assert(write_save_game_file(path,invalid,error) && !read_save_game_file(path,loaded,error));
 }
 
+void delivered_emission_evidence_survives_an_old_host_save()
+{
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData host;
+    host.mode = SessionMode::Host;
+    host.campaignId = 81;
+    host.turnToken = 82;
+    host.playerTokens = {{1, 82}, {2, 83}};
+    host.pendingOrders = {1, {}};
+    host.state = make_demo_game();
+    host.state.turn = 12;
+    host.state.players.push_back({2, "Sender"});
+
+    EmissionPulse pulse;
+    pulse.id = host.state.nextEmissionId++;
+    pulse.owner = 2;
+    pulse.emittedTurn = 10;
+    pulse.channel = SignalChannel::Slow;
+    pulse.maximumRange = 600;
+    pulse.activity = SignalActivity::RadioTraffic;
+    host.state.emissions.push_back(pulse);
+
+    GameEvent report;
+    report.id = 1;
+    report.turn = report.observedTurn = 11;
+    report.recipient = 1;
+    report.kind = GameEventKind::EmissionDetected;
+    report.position = {10, 10};
+    report.quantity = 15;
+    report.emission = EmissionObservation{10, SignalChannel::Slow, SignalActivity::RadioTraffic};
+    // Older host saves kept the briefing after removing the map marker.
+    host.strategicMessages.push_back(report);
+
+    const auto path = dir.filePath("received-emissions.suns");
+    SaveGameData loaded;
+    const auto loadedOldHost = write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error);
+    if (!loadedOldHost) std::cerr << error.toStdString() << '\n';
+    assert(loadedOldHost);
+    const auto& evidence = loaded.state.players.front().strategicIntel;
+    assert(evidence.size() == 1 && evidence.front().deliveryTurn == 11);
+    assert(evidence.front().emission->activity == SignalActivity::RadioTraffic);
+    const auto packet = make_player_turn(loaded, 1);
+    assert(packet.state.players.front().strategicIntel.empty() && packet.strategicMessages.size() == 1);
+
+    loaded.strategicMessages.clear();
+    assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, host, error));
+    const auto& restored = host.state.players.front().strategicIntel;
+    assert(restored.size() == 1 && restored.front().deliveryTurn == 11);
+    assert(restored.front().emission->activity == SignalActivity::RadioTraffic);
+}
+
 void decoy_program_and_consumed_probe_round_trip()
 {
     QTemporaryDir dir;
@@ -2807,6 +2859,7 @@ int main()
     v77_reconstruction_saves_default_to_no_contamination();
     planetary_war_damage_and_reconstruction_round_trip();
     emission_pulses_and_dated_reports_round_trip();
+    delivered_emission_evidence_survives_an_old_host_save();
     decoy_program_and_consumed_probe_round_trip();
     reconnaissance_and_programs_round_trip();
     area_jammer_round_trips_in_host_and_player_turns();

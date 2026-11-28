@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace suns {
 namespace {
@@ -47,6 +48,31 @@ bool classified(const auto& evidence)
 bool dominates(const auto& earlier, const auto& later)
 {
     return earlier.deliveryTurn <= later.deliveryTurn && classified(earlier) >= classified(later);
+}
+
+bool within_pulse_lifetime(const EmissionPulse& pulse, std::uint64_t turn)
+{
+    const auto lifetime = pulse.channel == SignalChannel::Fast ? 1ULL
+        : std::uint64_t(std::ceil(pulse.maximumRange / kCommunicationSignalSpeed));
+    return turn <= pulse.emittedTurn || turn - pulse.emittedTurn <= lifetime;
+}
+
+auto propagating_emissions(const GameState& state)
+{
+    std::set<std::pair<std::uint64_t, SignalChannel>> emissions;
+    for (const auto& pulse : state.emissions)
+        if (pulse.emittedTurn <= state.turn && within_pulse_lifetime(pulse, state.turn))
+            emissions.emplace(pulse.emittedTurn, pulse.channel);
+    return emissions;
+}
+
+void remember_emission(Player& player, const StrategicIntel& evidence)
+{
+    const auto known = std::find_if(player.strategicIntel.begin(), player.strategicIntel.end(), [&](const auto& old) {
+        return same_strategic_intel_subject(old, evidence);
+    });
+    if (known == player.strategicIntel.end()) player.strategicIntel.push_back(evidence);
+    else if (classified(evidence) > classified(*known)) *known = evidence;
 }
 
 template<class Evidence, class SameSubject>
@@ -95,14 +121,16 @@ void record(GameState& state, const Receiver& receiver, const EmissionPulse& pul
 {
     auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==receiver.player;});
     if(player==state.players.end()) return;
-    const auto due=dispatch_report_delivery_turn(state,receiver.player,receiver.position,turn,receiver.fleet);
     const auto held=held_report_source(state,receiver.player,receiver.position,turn,receiver.fleet);
     const EmissionObservation observation{pulse.emittedTurn, pulse.channel, activity};
-    StrategicIntel intel{0,StrategicObjectKind::Emission,area,15,0,turn,due,0,
+    StrategicIntel intel{0,StrategicObjectKind::Emission,area,15,0,turn,0,0,
         std::uint8_t(pulse.channel),held,observation};
     if (std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(), [&](const auto& known) {
-            return same_strategic_intel_subject(known, intel) && dominates(known, intel);
+            return same_strategic_intel_subject(known, intel) && known.deliveryTurn <= turn
+                && classified(known) >= classified(intel);
         })) return;
+    const auto due = dispatch_report_delivery_turn(state, receiver.player, receiver.position, turn, receiver.fleet);
+    intel.deliveryTurn = due;
     stage(player->pendingStrategicIntel, intel, same_strategic_intel_subject);
 
     PendingPlayerReport report; report.kind=PlayerReportKind::EmissionDetected;
@@ -112,14 +140,52 @@ void record(GameState& state, const Receiver& receiver, const EmissionPulse& pul
 }
 }
 
-void discard_redundant_emission_intel(Player& player, std::uint64_t turn)
+void deliver_emission_intel(GameState& state)
 {
-    discard_redundant_arrivals(player.pendingStrategicIntel, turn, same_strategic_intel_subject);
+    const auto propagating = propagating_emissions(state);
+    for (auto& player : state.players) {
+        discard_redundant_arrivals(player.pendingStrategicIntel, state.turn, same_strategic_intel_subject);
+        for (const auto& evidence : player.pendingStrategicIntel)
+            if (evidence.type == StrategicObjectKind::Emission && evidence.deliveryTurn <= state.turn)
+                remember_emission(player, evidence);
+        // Markers are displayed in the receipt year. Keep the received
+        // classification while distant observers can still sample the wave.
+        std::erase_if(player.strategicIntel, [&](const auto& evidence) {
+            return evidence.type == StrategicObjectKind::Emission && evidence.deliveryTurn < state.turn
+                && (!evidence.emission
+                    || !propagating.contains({evidence.emission->emittedTurn, evidence.emission->channel}));
+        });
+    }
 }
 
 void discard_redundant_emission_reports(Player& player, std::uint64_t turn)
 {
     discard_redundant_arrivals(player.pendingPlayerReports, turn, same_emission_report);
+    std::erase_if(player.pendingPlayerReports, [&](const PendingPlayerReport& report) {
+        if (report.kind != PlayerReportKind::EmissionDetected || !report.emission) return false;
+        const StrategicIntel reading{0, StrategicObjectKind::Emission, report.contactPosition, 15, 0, report.observedTurn,
+            report.deliveryTurn, 0, std::uint8_t(report.emission->channel), report.transmissionFleet, report.emission};
+        return std::any_of(player.strategicIntel.begin(), player.strategicIntel.end(), [&](const auto& known) {
+            return known.deliveryTurn < report.deliveryTurn && known.deliveryTurn <= turn
+                && same_strategic_intel_subject(known, reading) && dominates(known, reading);
+        });
+    });
+}
+
+void restore_emission_intel(GameState& state, std::span<const GameEvent> history)
+{
+    const auto propagating = propagating_emissions(state);
+    if (propagating.empty()) return;
+    for (const auto& event : history) {
+        if (event.kind != GameEventKind::EmissionDetected || !event.emission || event.turn >= state.turn
+            || !propagating.contains({event.emission->emittedTurn, event.emission->channel})) continue;
+        const auto player = std::find_if(state.players.begin(), state.players.end(), [&](const auto& p) {
+            return p.id == event.recipient;
+        });
+        if (player == state.players.end()) continue;
+        remember_emission(*player, {0, StrategicObjectKind::Emission, event.position, 15, 0, event.observedTurn,
+            event.turn, 0, std::uint8_t(event.emission->channel), 0, event.emission});
+    }
 }
 
 void record_decoy_pulse(GameState& state, const Fleet& fleet, std::uint64_t turn)
@@ -150,11 +216,7 @@ const char* signal_activity_name(SignalActivity activity)
 
 void observe_emission_pulses(GameState& state,std::uint64_t turn)
 {
-    std::erase_if(state.emissions,[&](const auto& p) {
-        const auto lifetime=p.channel==SignalChannel::Fast?1ULL:
-            std::uint64_t(std::ceil(p.maximumRange/kCommunicationSignalSpeed));
-        return p.emittedTurn<turn && turn-p.emittedTurn>lifetime;
-    });
+    std::erase_if(state.emissions, [&](const auto& pulse) { return !within_pulse_lifetime(pulse, turn); });
     const auto sensors=receivers(state,turn);
     // Reports can create outgoing packet batches while this pass runs. Copy a
     // pulse before dispatch; the host vector may reallocate, and no new batch

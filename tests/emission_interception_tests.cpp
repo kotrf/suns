@@ -56,7 +56,8 @@ void two_physical_delays_and_immutable_source()
     assert(exported.players.front().strategicIntel.front().emission->emittedTurn==10);
     observe_emission_pulses(s,13); observe_emission_pulses(s,14);
     assert(s.players[0].pendingStrategicIntel.empty()); // No repeated reception inside a filled disk.
-    s.turn=16; deliver_strategic_intel(s); assert(s.players[0].strategicIntel.empty());
+    s.turn=16; deliver_strategic_intel(s);
+    assert(make_player_view(s,1).state.players[0].strategicIntel.empty());
 }
 void passive_reception_waits_for_real_dispatch()
 {
@@ -226,7 +227,8 @@ void late_classification_survives_the_first_alert()
         assert(reported.state.players.front().pendingPlayerReports.empty());
         state.turn = 11;
         deliver_strategic_intel(state);
-        assert(deliver_due_player_reports(state).empty() && player.strategicIntel.empty());
+        assert(deliver_due_player_reports(state).empty());
+        assert(make_player_view(state, 1).state.players.front().strategicIntel.empty());
         if (silent) {
             // The second listener reaches a friendly colony first. The original
             // listener still has its copy aboard and stays in Passive.
@@ -270,6 +272,55 @@ void a_hull_contact_does_not_hide_a_classified_signal()
     assert(state.players[0].strategicIntel.front().emission->activity == SignalActivity::ActiveElectronics);
 }
 
+void late_interception_uses_received_evidence_after_the_marker_expires()
+{
+    for (const bool classifiedFirst : {true, false}) {
+        auto state = fixture();
+        state.fleets.pop_back();
+        state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+        state.stars[0].position = {classifiedFirst ? 100.0 : 160.0, 0};
+        state.fleets[0].position = {classifiedFirst ? 310.0 : 460.0, 0};
+        state.shipDesigns[0].components.back() = classifiedFirst ? C::GazelleScanner : C::PeerlessScanner;
+        EmissionPulse pulse;
+        pulse.id = state.nextEmissionId++;
+        pulse.owner = 2;
+        pulse.emittedTurn = 10;
+        pulse.channel = SignalChannel::Slow;
+        pulse.maximumRange = 1000;
+        pulse.activity = SignalActivity::RadioTraffic;
+        state.emissions.push_back(pulse);
+        const auto intercept = [&](std::uint64_t year) {
+            state.turn = year;
+            observe_emission_pulses(state, year);
+            deliver_strategic_intel(state);
+            return deliver_due_player_reports(state);
+        };
+        const auto firstYear = classifiedFirst ? 11U : 12U;
+        const auto first = intercept(firstYear);
+        assert(first.size() == 1 && first[0].turn == firstYear && same_position(first[0].position, {10, 10}));
+        assert(first[0].emission->activity == (classifiedFirst ? SignalActivity::RadioTraffic : SignalActivity::Unclassified));
+        assert(intercept(firstYear + 1).empty());
+        assert(make_player_view(state, 1).state.players.front().strategicIntel.empty());
+
+        const auto late = intercept(firstYear + 2);
+        const auto signal = std::find_if(state.emissions.begin(), state.emissions.end(), [&](const auto& item) {
+            return item.id == pulse.id;
+        });
+        assert(signal != state.emissions.end() && signal->receipts.size() == 2);
+        const auto view = make_player_view(state, 1);
+        const auto& markers = view.state.players.front().strategicIntel;
+        if (classifiedFirst) {
+            assert(late.empty() && markers.empty());
+        } else {
+            assert(late.size() == 1 && late[0].emission->activity == SignalActivity::RadioTraffic);
+            assert(markers.size() == 1 && markers[0].emission->activity == SignalActivity::RadioTraffic);
+            assert(markers[0].emission->emittedTurn == 10);
+        }
+        assert(intercept(18).empty());
+        assert(state.players.front().strategicIntel.empty());
+    }
+}
+
 int main()
 {
     two_physical_delays_and_immutable_source(); passive_reception_waits_for_real_dispatch();
@@ -278,4 +329,5 @@ int main()
     only_strong_signals_reveal_anonymous_activity();
     late_classification_survives_the_first_alert();
     a_hull_contact_does_not_hide_a_classified_signal();
+    late_interception_uses_received_evidence_after_the_marker_expires();
 }

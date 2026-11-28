@@ -77,6 +77,9 @@ and PBEM export from save v139.
 The first alert can arrive before a separate report with the classification.
 The refinement appears on the map and in Turn Messages in its own delivery
 year. Each listening ship carries its own copy until it can transmit.
+The host keeps the received classification while the wave can still be
+intercepted. A late duplicate leaves the map and messages alone, and a late
+classification can refine the first alert after its marker expires.
 
 Slow reception at a jammed physical endpoint over a hop longer than 450 ly
 adds a year of decoding to addressed packets. The signal still reaches
