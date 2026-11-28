@@ -1,5 +1,6 @@
 #pragma once
 #include "suns/game_state.hpp"
+#include <functional>
 
 namespace suns {
 inline constexpr double kWorkshopRepairKt = 100.0;
@@ -21,7 +22,7 @@ inline constexpr MineralCargo kWorkshopMineralsPerKt{0.1, 0.05, 0.05};
 [[nodiscard]] bool mobile_gate_transit_valid(const MobileGateTransit&);
 [[nodiscard]] std::string mobile_gate_transit_error(const GameState&, const Fleet&, const MobileGateTransit&);
 [[nodiscard]] bool submit_mobile_gate_command(GameState&, PlayerId, const struct MobileGateOrder&);
-void resolve_mobile_gate_transits(GameState&);
+void resolve_mobile_gate_transits(GameState&, const std::function<void(Fleet&)>& beforeJump = {});
 // Called once after movement/combat and normal onboard repair. FleetId order
 // breaks ties between bases; each base's persistent list orders its clients.
 // Transfers between any co-located owned fleets. Mobile bases retain their

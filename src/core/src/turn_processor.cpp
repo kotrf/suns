@@ -25,6 +25,7 @@
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/production.hpp"
 #include "suns/production_template_edits.hpp"
 #include "suns/propulsion.hpp"
@@ -934,6 +935,12 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::ScrapFleet:
     case FleetArrivalActionKind::BroadcastDecoy:
         return false;
+    case FleetArrivalActionKind::ScanOnce:
+        if (fleet_has_scanner(state, fleet)) {
+            fleet.waypointScanTurn = state.turn + 1;
+            record_scan_transmission(state, fleet, fleet.waypointScanTurn);
+        }
+        return false;
     case FleetArrivalActionKind::LoadMinerals:
     case FleetArrivalActionKind::LoadAllAvailable: {
         const auto waitForMinimum = [&] {
@@ -1703,6 +1710,7 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     // pursuing FleetId just as they do an explicit merge order.
     destination.lastMovedTurn = std::max(destination.lastMovedTurn, source.lastMovedTurn);
     destination.lastServiceTurn = std::max(destination.lastServiceTurn, source.lastServiceTurn);
+    if (!destination.flightSignature.warp) destination.flightSignature = source.flightSignature;
     const auto sourceId = source.id;
     const auto destinationShips = fleet_dry_mass(state, destination);
     const auto sourceShipCount = fleet_dry_mass(state, source);
@@ -1787,6 +1795,7 @@ struct MovementBudget {
     double damage{};
     FleetFuelAmounts fuel;
     double fuelMinimum{}, fuelMaximum{};
+    FleetFlightSignature flightSignature;
 };
 
 MovementBudget fleet_movement_budget(
@@ -1843,6 +1852,10 @@ MovementBudget fleet_movement_budget(
         const auto coastBounds=fleet_segment_fuel_bounds(state,coasting,freeDistance);
         result.fuelMinimum+=coastBounds.consumedMinimum; result.fuelMaximum+=coastBounds.consumedMaximum;
     }
+    if (result.distance > epsilon) {
+        const auto actualWarp = paidDistance > epsilon ? fleet.warp : freeWarp;
+        result.flightSignature = {actualWarp, freeWarp};
+    }
     return result;
 }
 
@@ -1894,9 +1907,11 @@ void apply_overdrive_damage(Fleet& fleet, double damage)
 // pay the annual loss once, regardless of how many segments it traverses.
 using RadiationExposure = std::map<FleetId, std::uint64_t>;
 
-void apply_movement_effects(GameState& state, Fleet& fleet, Position start, double overdriveDamage,
+void apply_movement_effects(GameState& state, Fleet& fleet, Position start, const MovementBudget& budget,
     RadiationExposure& exposure, std::vector<detail::FleetSensorSweep>& sensorSweeps)
 {
+    if (budget.flightSignature.warp && !same_position(start, fleet.position))
+        fleet.flightSignature = budget.flightSignature;
     if (const auto sweep = detail::prepare_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1))
         sensorSweeps.push_back(*sweep);
 
@@ -1907,7 +1922,7 @@ void apply_movement_effects(GameState& state, Fleet& fleet, Position start, doub
         fleet.colonists -= projected_fleet_radiation_losses(state, unexposed);
         exposure[fleet.id] = fleet.colonists;
     }
-    apply_overdrive_damage(fleet, overdriveDamage);
+    apply_overdrive_damage(fleet, budget.damage);
 }
 
 void continue_merged_fleet_route(
@@ -1962,7 +1977,7 @@ void continue_merged_fleet_route(
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuel.consumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
     fleet.fuelStalled = false;
-    apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
+    apply_movement_effects(state, fleet, start, budget, exposure, sensorSweeps);
 
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
@@ -2373,7 +2388,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         fleet.position = endpoint;
         recordFuel(budget.fuel.consumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
-        apply_movement_effects(state, fleet, start, budget.damage, exposure, sensorSweeps);
+        apply_movement_effects(state, fleet, start, budget, exposure, sensorSweeps);
 
         if (!mineStrike && fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
@@ -3316,12 +3331,27 @@ TurnResult TurnProcessor::process_with_events(
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
     deploy_outposts(next, next.turn + 1);
-    resolve_mobile_gate_transits(next);
+    // A scan and an independent mobile gate order can execute in the same
+    // year. Sample the waypoint with the real pre-jump geometry and radio.
+    const auto observationTurn = next.turn + 1;
+    std::vector<WaypointContact> waypointContacts;
+    resolve_mobile_gate_transits(next, [&](Fleet& fleet) {
+        if (fleet.waypointScanTurn != observationTurn) return;
+        observe_current_sensor_coverage(next, observationTurn, fleet.id);
+        capture_waypoint_contacts(next, fleet, observationTurn, waypointContacts);
+        observe_wormhole_sweep(next, fleet, fleet.position, fleet.position, observationTurn);
+        observe_strategic_objects(next, observationTurn, fleet.id);
+        observe_planetary_aftermath(next, observationTurn, fleet.id);
+        observe_unknown_objects(next, observationTurn, fleet.id);
+        observe_visitors(next, observationTurn, fleet.id);
+        observe_interstellar_medium(next, observationTurn, fleet.id);
+        fleet.waypointScanTurn = 0;
+    });
     observe_current_wormholes(next, next.turn + 1);
     refresh_planetary_engineering(next);
     detail::assign_production_queue_ids(next);
     observe_current_sensor_coverage(next, next.turn + 1);
-    observe_enemy_fleet_contacts(next, next.turn + 1);
+    observe_reconnaissance(next, observationTurn, waypointContacts);
     std::vector<std::pair<PlayerId, std::uint64_t>> researchByPlayer;
     for (auto& planet : next.planets) {
         const auto industry=run_colony_production(next,planet); // Pays native support before retained science.
@@ -3435,6 +3465,10 @@ TurnResult TurnProcessor::process_with_events(
     observe_visitors(next);
     observe_interstellar_medium(next,next.turn);
     observe_emission_pulses(next,next.turn);
+    for (auto& fleet : next.fleets) {
+        fleet.waypointScanTurn = 0;
+        fleet.flightSignature = {};
+    }
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);

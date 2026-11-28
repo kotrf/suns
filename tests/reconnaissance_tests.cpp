@@ -190,4 +190,125 @@ void friendly_radar_reports_travel_from_the_observer_and_respect_detection_limit
     s.turn=2; observe_reconnaissance(s,2); deliver_reconnaissance(s);
     assert(s.players[0].friendlyFleetContacts.empty());
 }
-int main() { detached_snapshot_survives_both_fleets(); confidence_hysteresis_and_knowledge(); interference_and_program_windows(); periodic_scan_and_anonymous_emissions(); friendly_silence_does_not_hide_a_hull_from_homeworld_radar(); friendly_radar_reports_travel_from_the_observer_and_respect_detection_limits(); }
+void own_contact_wakes_and_releases_held_observations()
+{
+    auto state = fixture({420, 0}, {422, 0});
+    auto& observer = state.fleets.front();
+    observer.electronics = {EmissionMode::RadioSilence, 30};
+    observer.electronics.wakeOnContactOrCombat = true;
+    observer.telemetry.electronics = observer.electronics;
+    const auto id = observer.id;
+    auto distant = state;
+    distant.fleets.back().position = {470, 0};
+    distant.shipDesigns.back().components.push_back(C::RhinoScanner);
+    distant = TurnProcessor{}.process(distant, {});
+    assert(distant.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    state = TurnProcessor{}.process(state, {});
+    assert(state.fleets.front().electronics.mode == EmissionMode::Standard);
+    const auto& reports = state.players.front().pendingPlayerReports;
+    const auto wake = std::find_if(reports.begin(), reports.end(), [id](const auto& report) {
+        return report.kind == PlayerReportKind::RadioSilenceEnded && report.fleet == id && report.quantity == 0;
+    });
+    assert(wake != reports.end() && wake->deliveryTurn > state.turn && wake->deliveryTurn != kAwaitingTransmission);
+    const auto& intel = state.players.front().pendingEnemyContacts;
+    assert(!intel.empty() && intel.front().sensor == ContactSensor::Passive && intel.front().deliveryTurn == wake->deliveryTurn);
+    assert(make_player_view(state, 1).state.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+}
+
+void waypoint_scan_emits_once_and_the_withdrawal_stays_silent()
+{
+    auto state = fixture({400, 0}, {445, 0});
+    auto& observer = state.fleets.front();
+    observer.electronics = {EmissionMode::RadioSilence, 30};
+    observer.warp = 5;
+    observer.destination = Position{425, 0};
+    observer.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::ScanOnce};
+    observer.waypointQueue = {{{375, 0}, 5, {}}};
+    const auto id = observer.id;
+    const TurnProcessor processor;
+    state = processor.process(state, {});
+    const auto pulseAt = [id, &state](Position position) {
+        return std::count_if(state.emissions.begin(), state.emissions.end(), [&](const auto& p) {
+            return p.fleet == id && p.emittedTurn == state.turn && same_position(p.position, position);
+        });
+    };
+    assert(pulseAt({425, 0}) == 1);
+    assert(!fleet_active_sensors(state.fleets.front(), state.turn) && !fleet_transmits(state.fleets.front(), state.turn));
+    assert(state.fleets.front().destination && same_position(*state.fleets.front().destination, {375, 0}));
+    const auto& packet = state.players.front().pendingEnemyContacts.front();
+    assert(packet.sensor == ContactSensor::Active && packet.observedTurn == state.turn && packet.deliveryTurn == kAwaitingTransmission);
+    state = processor.process(state, {});
+    assert(state.fleets.front().position.x < 425 && pulseAt(state.fleets.front().position) == 0);
+    assert(!fleet_active_sensors(state.fleets.front(), state.turn));
+}
+
+void passive_signature_depends_on_mass_and_actual_motion()
+{
+    auto state = fixture();
+    auto& target = state.fleets.back();
+    const auto range = [&] { return fleet_detection_range(state, target, 100, 0, true); };
+    target.ships.front().count = 1;
+    const auto light = range();
+    target.ships.front().count = 6;
+    const auto heavy = range();
+    assert(heavy > light);
+    target.destination = Position{1000, 0};
+    target.warp = 9;
+    assert(range() == heavy);
+    target.lastMovedTurn = state.turn;
+    target.flightSignature = {9, 4};
+    const auto fast = range();
+    target.flightSignature = {4, 4};
+    assert(fast > range() && range() > heavy);
+    const auto fuelMizer = range();
+    target.flightSignature.freeWarp = 1;
+    assert(range() > fuelMizer);
+}
+
+void wake_on_contact_uses_the_flown_warp()
+{
+    const Position arrival{400, 0};
+    auto state = fixture({415.43, 0}, {396, 0});
+    auto& observer = state.fleets.front();
+    observer.electronics = {EmissionMode::RadioSilence, 30};
+    observer.electronics.wakeOnContactOrCombat = true;
+    auto& target = state.fleets.back();
+    target.destination = arrival;
+    target.electronics.mode = EmissionMode::Passive;
+    const auto resolve = [&](std::uint8_t flownWarp, std::uint8_t onwardWarp, double fuel) {
+        auto copy = state;
+        auto& moving = copy.fleets.back();
+        moving.warp = flownWarp;
+        moving.fuel = fuel;
+        moving.waypointQueue = {{{480, 0}, onwardWarp, {}}};
+        auto result = TurnProcessor{}.process(copy, {});
+        const auto& arrived = result.fleets.back();
+        assert(same_position(arrived.position, arrival) && arrived.warp == onwardWarp);
+        return result;
+    };
+    const auto slow = resolve(2, 2, target.fuel);
+    const auto nextFast = resolve(2, 9, target.fuel);
+    assert(slow.fleets.back().fuel == nextFast.fleets.back().fuel);
+    assert(slow.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    assert(nextFast.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    assert(slow.players.front().pendingEnemyContacts.empty() && nextFast.players.front().pendingEnemyContacts.empty());
+    const auto coasting = resolve(9, 2, 0);
+    assert(coasting.fleets.front().electronics.mode == EmissionMode::RadioSilence);
+    const auto flownFast = resolve(9, 2, target.fuel);
+    assert(flownFast.fleets.front().electronics.mode == EmissionMode::Standard);
+    assert(!flownFast.players.front().pendingEnemyContacts.empty());
+}
+
+int main()
+{
+    detached_snapshot_survives_both_fleets();
+    confidence_hysteresis_and_knowledge();
+    interference_and_program_windows();
+    periodic_scan_and_anonymous_emissions();
+    friendly_silence_does_not_hide_a_hull_from_homeworld_radar();
+    friendly_radar_reports_travel_from_the_observer_and_respect_detection_limits();
+    own_contact_wakes_and_releases_held_observations();
+    waypoint_scan_emits_once_and_the_withdrawal_stays_silent();
+    passive_signature_depends_on_mass_and_actual_motion();
+    wake_on_contact_uses_the_flown_warp();
+}

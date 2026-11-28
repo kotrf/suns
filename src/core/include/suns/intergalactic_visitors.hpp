@@ -26,7 +26,7 @@ void apply_visitor_command(GameState&, Fleet&, const VisitorMission&);
 void prepare_visitor_navigation(GameState&);
 void complete_visitor_encounter(GameState&, Fleet&, VisitorId, Position);
 void advance_visitors(GameState&);
-void observe_visitors(GameState&);
+void observe_visitors(GameState&, std::uint64_t observationTurn = 0, FleetId onlyFleet = 0);
 [[nodiscard]] std::vector<GameEvent> deliver_visitor_reports(GameState&);
 [[nodiscard]] GameState make_visitor_demo(VisitorProfile profile = VisitorProfile::Freight);
 } // namespace suns

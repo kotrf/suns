@@ -70,6 +70,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::FleetsMerged: return GameEventKind::FleetsMerged;
     case PlayerReportKind::FleetScrapStatus: return GameEventKind::FleetScrapStatus;
     case PlayerReportKind::DecoyBroadcastStatus: return GameEventKind::DecoyBroadcastStatus;
+    case PlayerReportKind::RadioSilenceEnded: return GameEventKind::RadioSilenceEnded;
     case PlayerReportKind::ProductionWaitingForShipyard:
         return GameEventKind::ProductionWaitingForShipyard;
     case PlayerReportKind::PrecursorArtifactsDiscovered:
@@ -547,27 +548,36 @@ void read_remote_geology(const GameState& state, const detail::FleetSensorSweep&
 }
 
 void publish_remote_geology(GameState& state, PlayerId owner, std::vector<PendingPlayerReport>& readings,
-    const CommunicationRoute& route)
+    const CommunicationRoute* dispatchedRoute = nullptr)
 {
     auto* player = mutable_player(state, owner);
-    if (!player) return;
+    if (!player || readings.empty()) return;
+    const auto& first = readings.front();
+    const auto turn = first.observedTurn;
+    const auto position = first.position;
+    const auto source = first.fleet;
+    const auto carrier = dispatchedRoute ? 0 : held_report_source(state, owner, position, turn, source);
+    const auto route = dispatchedRoute ? *dispatchedRoute
+        : carrier ? CommunicationRoute{} : communication_route(state, owner, position, turn);
+    const auto delivery = carrier ? kAwaitingTransmission : turn + route.propagationTurns + route.receiverDelay;
+    bool added = false;
     for (auto& reading : readings) {
-        const auto turn = reading.observedTurn;
-        const auto delivery = turn + route.propagationTurns + route.receiverDelay;
         const auto matches = [&](const auto& report) {
             return report.kind == PlayerReportKind::RemoteGeologyObserved && report.planet == reading.planet;
         };
         if (std::any_of(player->pendingPlayerReports.begin(), player->pendingPlayerReports.end(), [&](const auto& report) {
-                return matches(report) && report.observedTurn >= turn && report.deliveryTurn <= delivery;
+                return matches(report) && report.transmissionFleet == carrier
+                    && report.observedTurn >= turn && report.deliveryTurn <= delivery;
             })) continue;
         std::erase_if(player->pendingPlayerReports, [&](const auto& report) {
-            return matches(report) && report.transmissionFleet == reading.fleet && report.observedTurn < turn;
+            return matches(report) && report.transmissionFleet == source && report.observedTurn < turn;
         });
-        const auto source = reading.position;
         reading.deliveryTurn = delivery;
+        reading.transmissionFleet = carrier;
         player->pendingPlayerReports.push_back(std::move(reading));
-        detail::record_dispatched_report(state, owner, source, turn, route);
+        added = true;
     }
+    if (added && !carrier) detail::record_dispatched_report(state, owner, position, turn, route);
 }
 } // namespace
 
@@ -623,7 +633,7 @@ void detail::dispatch_fleet_sensor_readings(GameState& state, FleetSensorReading
 {
     const auto route = communication_route(state, readings.owner, readings.source, readings.observedTurn);
     dispatch_wormhole_readings(state, readings, route);
-    publish_remote_geology(state, readings.owner, readings.geology, route);
+    publish_remote_geology(state, readings.owner, readings.geology, &route);
     for (auto& survey : readings.surveys)
         publish_survey_report(state, readings.owner, readings.source, std::move(survey), &route);
 }
@@ -641,7 +651,7 @@ void observe_fleet_sensor_sweep(
         detail::dispatch_fleet_sensor_readings(state, std::move(*readings));
 }
 
-void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn)
+void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn, FleetId onlyFleet)
 {
     struct ColonyScanner { const Planet* planet; Position position; double range; };
     struct FleetScanner { Fleet* fleet; double range, penetrating; };
@@ -649,7 +659,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         return (1 - sensor_interference(state, owner, position, observationTurn)) * medium_active_sensor_factor(state, position);
     };
     std::vector<ColonyScanner> colonies;
-    for (const auto& planet : state.planets) {
+    if (!onlyFleet) for (const auto& planet : state.planets) {
         const auto radar = planetary_radar_range(planet.radar);
         if (!planet.owner || radar <= 0) continue;
         if (const auto* star = find_star(state, planet.star))
@@ -657,7 +667,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
     std::vector<FleetScanner> fleets;
     for (auto& fleet : state.fleets) {
-        if (!fleet_active_sensors(fleet, observationTurn) || !fleet_has_scanner(state, fleet)) continue;
+        if ((onlyFleet && fleet.id != onlyFleet) || !fleet_active_sensors(fleet, observationTurn)
+            || !fleet_has_scanner(state, fleet)) continue;
         const auto range = fleet_sensor_range(state, fleet);
         const auto signal = factor(fleet.owner, fleet.position);
         fleets.push_back({&fleet, range * signal, fleet_penetrating_sensor_range(state, fleet) * signal});
@@ -703,6 +714,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
     const auto cloudSlope = sensor_sweep_cloud_slope(state);
     for (const auto& fleet : state.fleets) {
+        if (onlyFleet && fleet.id != onlyFleet) continue;
         const auto range = geological_scanner_range(state, fleet, observationTurn);
         if (range <= 0) continue;
         const detail::FleetSensorSweep sweep{
@@ -711,9 +723,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         SweepInterference interference;
         std::vector<PendingPlayerReport> readings;
         read_remote_geology(state, sweep, observationTurn, cloudSlope, interference, readings);
-        if (readings.empty()) continue;
-        const auto route = communication_route(state, fleet.owner, fleet.position, observationTurn);
-        publish_remote_geology(state, fleet.owner, readings, route);
+        publish_remote_geology(state, fleet.owner, readings);
     }
 }
 

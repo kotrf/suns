@@ -24,7 +24,7 @@ struct SensorInterferenceSpan {
 [[nodiscard]] std::vector<SensorInterferenceSpan> sensor_interference_spans(
     const GameState&, PlayerId, Position start, Position end, std::uint64_t turn);
 [[nodiscard]] double fleet_detection_range(const GameState&, const Fleet&, double scannerRange,
-    double tachyon = 0, bool passive = false);
+    double tachyon = 0, bool passive = false, std::uint64_t atTurn = 0);
 [[nodiscard]] bool colony_detects_fleet(const GameState&, const Planet&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] bool detector_detects_fleet(const GameState&, const Fleet&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] bool strategic_task_available(const GameState&, const Fleet&, FleetTask);
@@ -46,12 +46,13 @@ void run_strategic_tasks(GameState&, std::uint64_t);
 [[nodiscard]] bool same_strategic_intel_subject(const StrategicIntel&, const StrategicIntel&);
 void record_decoy_pulse(GameState&, const Fleet&, std::uint64_t turn);
 void observe_emission_pulses(GameState&, std::uint64_t);
-void observe_strategic_objects(GameState&, std::uint64_t);
+void observe_strategic_objects(GameState&, std::uint64_t, FleetId onlyFleet = 0);
 void deliver_strategic_intel(GameState&);
 void apply_scientific_data(GameState&, Player&, const PendingPlayerReport&, std::vector<GameEvent>&);
 bool collect_field_science_once(GameState&,Fleet&,std::uint64_t key,Position,StarId,ResearchField,std::uint32_t,std::uint64_t);
 [[nodiscard]] bool submit_electronics_command(GameState&, PlayerId, FleetId, ElectronicsProgram);
 void apply_electronics_program(Fleet&, ElectronicsProgram);
+void wake_radio_after_encounter(GameState&, Fleet&, std::uint64_t turn, bool combat);
 [[nodiscard]] std::uint64_t fleet_available_turn(const Fleet&, std::uint64_t);
 [[nodiscard]] std::uint64_t report_transmission_turn(const GameState&, PlayerId, Position,
     std::uint64_t observationTurn, FleetId observer = 0);

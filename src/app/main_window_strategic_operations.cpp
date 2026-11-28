@@ -76,6 +76,9 @@ void MainWindow::installStrategicOperations()
     scan->setToolTip("Radio silence: enable active sensors and jamming during each scheduled one-year communication window. Requires a window interval above zero. Between windows the fleet listens passively.");
     auto* arrival=new FleetCheckBox("Wake on arrival",group); arrival->setObjectName("emissionWakeOnArrival");
     arrival->setToolTip("Radio silence: return to Standard on arrival at any route waypoint, including intermediate waypoints. The return is permanent until another emission order.");
+    auto* encounter = new FleetCheckBox("Wake on contact or combat", group);
+    encounter->setObjectName("emissionWakeOnContactOrCombat");
+    encounter->setToolTip("Return to Standard when this fleet's own sensors detect a foreign hull or the fleet survives a space battle.");
     auto* setMode = new QPushButton("Set", group); setMode->setObjectName("setFleetEmissionMode");
     row->addWidget(mode,1); row->addWidget(years); row->addWidget(setMode); body->addLayout(row);
     row = new QHBoxLayout;
@@ -84,6 +87,7 @@ void MainWindow::installStrategicOperations()
     body->addLayout(row);
     body->addWidget(scan);
     body->addWidget(arrival);
+    body->addWidget(encounter);
     auto* contacts=new QPushButton("Intelligence…",group); contacts->setObjectName("openReconnaissance"); body->addWidget(contacts);
     connect(contacts,&QPushButton::clicked,this,&MainWindow::openReconnaissance);
     auto* deception = new FleetCheckBox("Broadcast decoy signatures (jammer)",group);
@@ -94,26 +98,28 @@ void MainWindow::installStrategicOperations()
 
     mode->setToolTip("Choose a mode, then press Set to queue an emission order. Standard: active scans, jamming and transmissions. Passive: receive commands and listen, with no automatic long-range transmissions. Radio silence: the same listening posture with scheduled transmission/scan windows and wake-up. All modes receive commands with normal propagation delay and share full status locally with a friendly populated colony in orbit; the colony forwards it over its own link. Other radars can still detect silent hulls.");
     layout->insertWidget(layout->count() - 1, group);
-    connect(setMode,&QPushButton::clicked,this,[this,mode,years,deception,interval,scan,arrival] {
+    connect(setMode,&QPushButton::clicked,this,[this,mode,years,deception,interval,scan,arrival,encounter] {
         const auto* fleet = selectedFleet(); if (!fleet || fleet->owner != pendingOrders_.player) return;
         ElectronicsProgram e{EmissionMode(mode->currentIndex()), mode->currentIndex() == 2 ? state_.turn + years->value() : 0};
         e.deception = mode->currentIndex() == 0 && deception->isChecked();
         if(e.mode==EmissionMode::RadioSilence) {
             e.burstInterval=std::uint8_t(interval->value()); e.firstBurstTurn=e.burstInterval?state_.turn+e.burstInterval:0;
             e.activeBurst=e.burstInterval && scan->isChecked(); e.wakeOnArrival=arrival->isChecked();
+            e.wakeOnContactOrCombat = encounter->isChecked();
         }
         if(!electronics_program_valid(e)) return;
         appendPendingOrder(SetFleetElectronicsOrder{fleet->id,e},QString("%1: %2").arg(QString::fromStdString(fleet->name),mode->currentText()));
     });
     auto selected = std::make_shared<FleetId>(0);
     auto selectedTurn = std::make_shared<std::uint64_t>(0);
-    auto refresh = [this,mode,years,setMode,summary,selected,selectedTurn,deception,interval,scan,arrival] {
+    auto refresh = [this,mode,years,setMode,summary,selected,selectedTurn,deception,interval,scan,arrival,encounter] {
         if (shuttingDown_) return;
         const auto* fleet = selectedFleet();
         const bool owned = fleet && fleet->owner == pendingOrders_.player;
         mode->setEnabled(owned); setMode->setEnabled(owned);
         years->setEnabled(owned && mode->currentIndex() == 2);
         interval->setEnabled(owned && mode->currentIndex()==2); arrival->setEnabled(owned && mode->currentIndex()==2);
+        encounter->setEnabled(owned && mode->currentIndex() == 2);
         scan->setEnabled(owned && mode->currentIndex()==2 && interval->value()>0);
         if(owned && mode->currentIndex()==2 && interval->value()>years->value()) setMode->setEnabled(false);
         if (!owned) { deception->setEnabled(false); summary->setText("Select your fleet."); return; }
@@ -129,6 +135,7 @@ void MainWindow::installStrategicOperations()
             deception->setChecked(known.electronics.deception);
             interval->setValue(known.electronics.burstInterval); scan->setChecked(known.electronics.activeBurst);
             arrival->setChecked(known.electronics.wakeOnArrival);
+            encounter->setChecked(known.electronics.wakeOnContactOrCombat);
         }
         const auto emissionName=[](EmissionMode m) { return m==EmissionMode::RadioSilence ? "Radio silence" : m==EmissionMode::Passive ? "Passive" : "Standard"; };
         QString text = QString("Last onboard report, year %1: Activity: %2 • Emissions: %3 • Cloak %4% • %5")
@@ -144,6 +151,7 @@ void MainWindow::installStrategicOperations()
         if(known.electronics.burstInterval) text+=QString(" • window every %1 yr, first %2%3").arg(known.electronics.burstInterval)
             .arg(qulonglong(known.electronics.firstBurstTurn)).arg(known.electronics.activeBurst?" (active scan)":" (comms only)");
         if(known.electronics.wakeOnArrival) text+=" • wake on arrival";
+        if (known.electronics.wakeOnContactOrCombat) text += " • wake on contact or combat";
         const SetFleetElectronicsOrder* pendingEmission=nullptr;
         for(const auto& order:pendingOrders_.orders)
             if(const auto* e=std::get_if<SetFleetElectronicsOrder>(&order); e && e->fleet==fleet->id) pendingEmission=e;

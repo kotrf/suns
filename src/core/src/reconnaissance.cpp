@@ -19,6 +19,7 @@ struct Receiver {
     bool passive{};
     double nominal{};
     bool fastLinkJammed{};
+    bool wakeOnContact{};
 };
 bool newer(const ReconContact& a,const ReconContact& b)
 {
@@ -52,7 +53,7 @@ std::vector<Receiver> receivers(const GameState& s,PlayerId owner,std::uint64_t 
         const double jam=sensor_interference(s,owner,f.position,turn);
         const double nominal = fleet_sensor_range(s, f);
         result.push_back({f.position, f.id, 0, nominal * (1-jam) * (passive ? 1 : medium_active_sensor_factor(s, f.position)),
-            fleet_tachyon_fraction(s, f), jam, passive, nominal, fastJammed});
+            fleet_tachyon_fraction(s, f), jam, passive, nominal, fastJammed, f.electronics.wakeOnContactOrCombat});
     }
     std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){return std::tuple{bool(a.fleet),a.colony,a.fleet}<std::tuple{bool(b.fleet),b.colony,b.fleet};});
     return result;
@@ -83,7 +84,7 @@ std::optional<ReconContact> observe(const GameState& s,PlayerId owner,const Flee
 {
     // A player export's anonymous fleet placeholders are evidence, never truth to rescan.
     if(receiver.range<=0 || target.id==receiver.fleet || target.owner==0 || (!target.design && target.ships.empty())) return {};
-    const double range=fleet_detection_range(s,target,receiver.range*(receiver.passive?1:medium_active_path_factor(s,receiver.position,target.position)),receiver.tachyon,receiver.passive);
+    const double range=fleet_detection_range(s,target,receiver.range*(receiver.passive?1:medium_active_path_factor(s,receiver.position,target.position)),receiver.tachyon,receiver.passive,turn);
     const double distance=distance_between(receiver.position,target.position);
     if(range<=0 || distance>range*(tracked?1.10:1.0)+1e-6) return {};
     const auto* player=find_player(s,owner); if(!player) return {};
@@ -202,8 +203,27 @@ std::vector<SensorStatus> known_sensor_status(const GameState& s,PlayerId owner)
     return result;
 }
 
-void observe_reconnaissance(GameState& s,std::uint64_t turn)
+void capture_waypoint_contacts(const GameState& state, const Fleet& fleet, std::uint64_t turn,
+    std::vector<WaypointContact>& contacts)
 {
+    const auto* player = find_player(state, fleet.owner);
+    if (!player) return;
+    const auto sensors = receivers(state, fleet.owner, turn);
+    const auto receiver = std::find_if(sensors.begin(), sensors.end(), [&](const auto& r) { return r.fleet == fleet.id; });
+    if (receiver == sensors.end()) return;
+    for (const auto& target : state.fleets) {
+        const auto prior = std::find_if(player->observedEnemyFleets.begin(), player->observedEnemyFleets.end(),
+            [&](const auto& c) { return c.fleet == target.id && c.reportingFleet == fleet.id; });
+        const auto tracked = prior != player->observedEnemyFleets.end();
+        const auto quality = tracked ? prior->observation.quality : ContactQuality::Probable;
+        if (const auto contact = observe(state, fleet.owner, target, *receiver, turn, tracked, quality))
+            contacts.push_back({fleet.owner, *contact, receiver->wakeOnContact});
+    }
+}
+
+void observe_reconnaissance(GameState& s, std::uint64_t turn, std::span<const WaypointContact> waypointContacts)
+{
+    std::set<FleetId> contactWakes;
     for(auto& player:s.players) {
         std::vector<Player::EnemyContact> visible;
         const auto sensors=receivers(s,player.id,turn,true);
@@ -228,12 +248,22 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
         for(const auto& target:s.fleets) {
             auto previous=std::find_if(player.observedEnemyFleets.begin(),player.observedEnemyFleets.end(),[&](const auto& c){return c.fleet==target.id;});
             std::optional<ReconContact> best;
+            const auto rank = [](const auto& contact) {
+                return std::tuple{contact.deliveryTurn, -int(contact.quality), contact.uncertainty,
+                    bool(contact.sourceFleet), contact.sourceColony, contact.sourceFleet};
+            };
+            const auto consider = [&](const auto& contact, bool wake) {
+                if (wake && target.owner != player.id) contactWakes.insert(contact.sourceFleet);
+                if (!best || rank(contact) < rank(*best)) best = contact;
+            };
             for(const auto& receiver:sensors) {
                 const bool tracked=previous!=player.observedEnemyFleets.end() && previous->reportingFleet==receiver.fleet && previous->reportingColony==receiver.colony;
                 if(auto c=observe(s,player.id,target,receiver,turn,tracked,tracked?previous->observation.quality:ContactQuality::Probable))
-                    if(!best || std::tuple{c->deliveryTurn,-int(c->quality),c->uncertainty,bool(c->sourceFleet),c->sourceColony,c->sourceFleet}
-                        <std::tuple{best->deliveryTurn,-int(best->quality),best->uncertainty,bool(best->sourceFleet),best->sourceColony,best->sourceFleet}) best=*c;
+                    consider(*c, receiver.wakeOnContact);
             }
+            for (const auto& reading : waypointContacts)
+                if (reading.observer == player.id && reading.contact.fleet == target.id)
+                    consider(reading.contact, reading.wakeOnContact);
             if(!best) continue;
             if(target.owner==player.id) {
                 auto& pending=player.pendingFriendlyFleetContacts;
@@ -261,6 +291,10 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
         std::sort(visible.begin(),visible.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
         player.observedEnemyFleets=std::move(visible);
     }
+    // All observations use the same pre-wake sensor posture, even if a later
+    // transmission carries them over a newly available radio path.
+    for (auto& fleet : s.fleets)
+        if (contactWakes.contains(fleet.id)) wake_radio_after_encounter(s, fleet, turn, false);
 }
 void deliver_reconnaissance(GameState& s)
 {

@@ -84,6 +84,7 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
 {
     if (action.kind == FleetArrivalActionKind::ScrapFleet) return "Scrap Fleet (all ships)";
     if (action.kind == FleetArrivalActionKind::BroadcastDecoy) return "Broadcast Decoy (expends probe)";
+    if (action.kind == FleetArrivalActionKind::ScanOnce) return "Scan once";
     if (action.kind == FleetArrivalActionKind::TransitStargate) return QString("Gate %1 → %2%3; wait and retry if unavailable")
         .arg(gateDestinationName(state,action.gateSource),gateDestinationName(state,action.gateDestination)).arg(action.gateResonant ? " (8 source xenocrystals on success)" : "");
     if (action.kind == FleetArrivalActionKind::DeployOutpost) return "Deploy outpost — permanent";
@@ -734,7 +735,7 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
     const auto* source = selectedFleet();
     if (!source || source->owner != pendingOrders_.player
         || (!arrival_work_task(action.kind) && action.kind != FleetArrivalActionKind::ScrapFleet
-            && action.kind != FleetArrivalActionKind::BroadcastDecoy)) return false;
+            && action.kind != FleetArrivalActionKind::BroadcastDecoy && action.kind != FleetArrivalActionKind::ScanOnce)) return false;
     const auto fleet = fleet_player_view(state_, *source);
     const auto route = effectiveRoute(state_, pendingOrders_, fleet);
     if (fleet.destination || fleet.targetFleet || !fleet.waypointQueue.empty()

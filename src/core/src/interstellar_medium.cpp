@@ -253,15 +253,16 @@ std::vector<MediumRouteAlternative> medium_route_alternatives(
 }
 double medium_active_sensor_factor(const GameState& s,Position p) { return 1-0.20*interstellar_density(s,p); }
 double medium_active_path_factor(const GameState& s,Position a,Position b) { return 1-0.30*medium_segment_density(s,a,b); }
-void observe_interstellar_medium(GameState& s,std::uint64_t turn)
+void observe_interstellar_medium(GameState& s, std::uint64_t turn, FleetId onlyFleet)
 {
     if (!s.interstellarMediumEnabled || s.mediumObserver) return;
     struct Receiver { Position position; double range{}; FleetId fleet{}; PlanetId colony{}; };
     for (auto& player:s.players) {
         std::vector<Receiver> receivers;
-        for (const auto& f:s.fleets) if (f.owner==player.id && fleet_has_scanner(s,f) && fleet_active_sensors(f,turn))
+        for (const auto& f:s.fleets) if ((!onlyFleet || f.id == onlyFleet)
+            && f.owner==player.id && fleet_has_scanner(s,f) && fleet_active_sensors(f,turn))
             receivers.push_back({f.position,std::max(1.0,strategic_sensor_range(s,f,turn)),f.id,0});
-        for (const auto& p:s.planets) if (p.owner==player.id && p.population && p.radar!=PlanetaryRadarLevel::None)
+        if (!onlyFleet) for (const auto& p:s.planets) if (p.owner==player.id && p.population && p.radar!=PlanetaryRadarLevel::None)
             if (const auto* star=find_star(s,p.star)) receivers.push_back({star->position,
                 planetary_radar_range(p.radar)*(1-sensor_interference(s,player.id,star->position,turn))
                     *medium_active_sensor_factor(s,star->position),0,p.id});

@@ -229,13 +229,16 @@ int main(int argc,char** argv)
     auto* interval=window.findChild<QSpinBox*>("emissionBurstInterval");
     auto* scan=window.findChild<QCheckBox*>("activeEmissionBurst");
     auto* arrival=window.findChild<QCheckBox*>("emissionWakeOnArrival");
-    assert(interval && scan && arrival); interval->setValue(2); settle();
-    assert(scan->isEnabled()); scan->setChecked(true); arrival->setChecked(true); setMode->click();
+    auto* encounter = window.findChild<QCheckBox*>("emissionWakeOnContactOrCombat");
+    assert(interval && scan && arrival && encounter); interval->setValue(2); settle();
+    assert(scan->isEnabled() && encounter->isEnabled());
+    scan->setChecked(true); arrival->setChecked(true); encounter->setChecked(true); setMode->click();
     const auto& program=std::get<SetFleetElectronicsOrder>(MainWindowTestAccess::orders(window).orders.back()).program;
     assert(program.burstInterval==2 && program.firstBurstTurn==3 && program.activeBurst && program.wakeOnArrival);
+    assert(program.wakeOnContactOrCombat);
     // Check the rendered marks, including a checked option that becomes
     // unavailable after changing emission mode. Empty boxes remain distinct.
-    for(auto* check:{scan,arrival}) {
+    for(auto* check:{scan,arrival,encounter}) {
         check->setChecked(true); check->setEnabled(true);
         assert(brightIndicatorPixels(*check)>=8);
         check->setEnabled(false);

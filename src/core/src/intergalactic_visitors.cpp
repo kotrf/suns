@@ -43,10 +43,10 @@ const VisitorObservation* known_visitor(const GameState& s, PlayerId owner, Visi
 namespace {
 VisitorObservation snapshot(const IntergalacticVisitor& v, std::uint64_t turn, Position position)
 { return {v.id, position, v.velocity, turn, 0, v.departureTurn, !v.customer && turn < v.departureTurn, turn >= v.departureTurn, v.profile, v.courseChanged}; }
-bool sees(const GameState& s, const Fleet& f, Position position)
+bool sees(const GameState& s, const Fleet& f, Position position, std::uint64_t turn)
 {
-    if (!fleet_has_scanner(s, f) || !fleet_active_sensors(f, s.turn)) return false;
-    return distance_between(f.position, position) <= std::max(1.0, strategic_sensor_range(s, f, s.turn))
+    if (!fleet_has_scanner(s, f) || !fleet_active_sensors(f, turn)) return false;
+    return distance_between(f.position, position) <= std::max(1.0, strategic_sensor_range(s, f, turn))
         * medium_active_path_factor(s, f.position, position) + 1e-6;
 }
 void report(GameState& s, PlayerId owner, VisitorObservation x, VisitorReportKind kind, Position source, FleetId fleet)
@@ -201,7 +201,7 @@ void prepare_visitor_navigation(GameState& s)
     if (s.mediumObserver) return;
     for (auto& f : s.fleets) if (f.visitor.track.id) {
         auto& track = f.visitor.track;
-        for (const auto& v : s.visitors) if (v.id == track.id && s.turn < v.departureTurn && sees(s, f, v.position)) track = snapshot(v, s.turn, v.position);
+        for (const auto& v : s.visitors) if (v.id == track.id && s.turn < v.departureTurn && sees(s, f, v.position, s.turn)) track = snapshot(v, s.turn, v.position);
         const auto destination = visitor_intercept_destination(f, track, s.turn, f.visitor.warp);
         if (!destination || !track.available || !fleet_warp_valid(s, f, f.visitor.warp)) {
             // Failure is a mission receipt, not a new observation of hidden truth.
@@ -250,23 +250,24 @@ void advance_visitors(GameState& s)
     const auto width = s.wormholeRules.width, height = s.wormholeRules.height;
     s.visitors.push_back(crossing(s.nextVisitorId++,turn,width,height,rng));
 }
-void observe_visitors(GameState& s)
+void observe_visitors(GameState& s, std::uint64_t observationTurn, FleetId onlyFleet)
 {
     if (s.mediumObserver) return;
-    for (const auto& v : s.visitors) if (s.turn <= v.departureTurn) for (auto& p : s.players) {
+    const auto turn = observationTurn ? observationTurn : s.turn;
+    for (const auto& v : s.visitors) if (turn <= v.departureTurn) for (auto& p : s.players) {
         bool observed = false; std::uint64_t due = kAwaitingTransmission; FleetId fleet = 0; Position source;
-        for (const auto& f : s.fleets) if (f.owner == p.id && sees(s, f, v.position)) {
-            const auto candidate = fleet_report_delivery_turn(s, p.id, f.position, s.turn, f.id);
+        for (const auto& f : s.fleets) if ((!onlyFleet || f.id == onlyFleet) && f.owner == p.id && sees(s, f, v.position, turn)) {
+            const auto candidate = fleet_report_delivery_turn(s, p.id, f.position, turn, f.id);
             if (!observed || candidate < due || (candidate == due && f.id < fleet)) { observed = true; due = candidate; fleet = f.id; source = f.position; }
         }
-        for (const auto& colony : s.planets) if (colony.owner == p.id && colony.population && colony.radar != PlanetaryRadarLevel::None) {
+        if (!onlyFleet) for (const auto& colony : s.planets) if (colony.owner == p.id && colony.population && colony.radar != PlanetaryRadarLevel::None) {
             const auto* star = find_star(s, colony.star); if (!star) continue;
-            const auto range = planetary_radar_range(colony.radar)*(1-sensor_interference(s,p.id,star->position,s.turn))*medium_active_sensor_factor(s,star->position);
+            const auto range = planetary_radar_range(colony.radar)*(1-sensor_interference(s,p.id,star->position,turn))*medium_active_sensor_factor(s,star->position);
             if (distance_between(star->position, v.position) > range*medium_active_path_factor(s,star->position,v.position)) continue;
-            const auto candidate = fleet_report_delivery_turn(s, p.id, star->position, s.turn, 0);
+            const auto candidate = fleet_report_delivery_turn(s, p.id, star->position, turn, 0);
             if (!observed || candidate <= due) { observed = true; due = candidate; fleet = 0; source = star->position; }
         }
-        if (observed) report(s, p.id, snapshot(v, s.turn, v.position), s.turn == v.departureTurn ? VisitorReportKind::Departed : VisitorReportKind::Sighted, source, fleet);
+        if (observed) report(s, p.id, snapshot(v, turn, v.position), turn == v.departureTurn ? VisitorReportKind::Departed : VisitorReportKind::Sighted, source, fleet);
     }
 }
 std::vector<GameEvent> deliver_visitor_reports(GameState& s)

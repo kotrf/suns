@@ -225,6 +225,7 @@ QString event_subject(const GameState& state, const GameEvent& event)
         event.quantity <= 2 ? "" : " (waiting)"); break;
     case GameEventKind::DecoyBroadcastStatus: subject = QString("Broadcast Decoy — %1%2").arg(fleetName,
         event.quantity <= 2 ? "" : " (waiting)"); break;
+    case GameEventKind::RadioSilenceEnded: subject = QString("%1 ended radio silence").arg(fleetName); break;
     case GameEventKind::ProductionWaitingForShipyard:
         subject = QString("%1 waits for a shipyard on %2").arg(production_item_name(state, event), planetName);
         break;
@@ -330,6 +331,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
             || event.kind == GameEventKind::RouteCompleted
             || event.kind == GameEventKind::FleetTargetLost
             || event.kind == GameEventKind::FleetsMerged
+            || event.kind == GameEventKind::RadioSilenceEnded
             || event.kind == GameEventKind::FleetMobilityRestored
             || event.kind == GameEventKind::WormholeEntered
             || event.kind == GameEventKind::WormholeEmerged
@@ -764,6 +766,10 @@ QString event_text(const GameState& state, const GameEvent& event)
                     : event.quantity == 7 ? "Separate a Survey Probe fitted with a Decoy Transmitter."
                     : "Enable transmissions or reach a friendly populated colony to send the final report.");
         }
+    } else if (event.kind == GameEventKind::RadioSilenceEnded) {
+        text = QString("Turn %1 • %2 returned to Standard mode after %3.")
+            .arg(qulonglong(event.observedTurn)).arg(fleetName,
+                event.quantity ? "surviving a space battle" : "its onboard sensors detected a foreign hull");
     } else if (event.kind == GameEventKind::FleetsMerged) {
         text = QString("Turn %1  •  Fleet %2 rendezvoused with %3 and merged into it")
                    .arg(static_cast<qulonglong>(event.turn))

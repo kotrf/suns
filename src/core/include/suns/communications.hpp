@@ -73,6 +73,7 @@ struct CommunicationRoute {
     std::uint64_t atTurn = 0);
 // Only call for a dispatched packet; pure delay/knowledge queries never emit.
 void record_report_transmission(GameState&, PlayerId, Position, std::uint64_t, FleetId observer=0);
+void record_scan_transmission(GameState&, const Fleet&, std::uint64_t);
 void record_command_transmission(GameState&, PlayerId, Position target, std::uint64_t);
 // Physical local handover before dismantling a source; already sent packets stay unchanged.
 void transfer_fleet_report_outbox(GameState&, PlayerId, FleetId source, FleetId receiver);
