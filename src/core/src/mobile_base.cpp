@@ -188,7 +188,7 @@ bool submit_mobile_gate_command(GameState& state, PlayerId player, const MobileG
     }
     return true;
 }
-void resolve_mobile_gate_transits(GameState& state)
+void resolve_mobile_gate_transits(GameState& state, const std::function<void(Fleet&)>& beforeJump)
 {
     std::vector<Fleet*> jumps;
     for (auto& fleet : state.fleets) if (fleet.mobileGate) jumps.push_back(&fleet);
@@ -202,6 +202,7 @@ void resolve_mobile_gate_transits(GameState& state)
         const auto* star = planet ? find_star(state, planet->star) : nullptr;
         std::uint32_t fuelContainersSpent = 0;
         if (success) {
+            if (beforeJump) beforeJump(*fleet);
             for (auto id : {transit.source.base, transit.destination.base}) if (id) {
                 auto& base = *client_fleet(state, id);
                 base.fuel = fuel_after_consumption(base.fuel, kExpeditionGateFuelMg);

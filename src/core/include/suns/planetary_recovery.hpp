@@ -13,5 +13,5 @@ void decay_planet_contamination(Planet&);
 [[nodiscard]] bool same_aftermath_estimate(const PlanetAftermathObservation&, const PlanetAftermathObservation&);
 [[nodiscard]] std::optional<PlanetAftermathObservation> known_planet_aftermath(const GameState&, PlayerId, PlanetId);
 // Orbital active scanners only; their report can remain aboard a silent fleet.
-void observe_planetary_aftermath(GameState&, std::uint64_t turn);
+void observe_planetary_aftermath(GameState&, std::uint64_t turn, FleetId onlyFleet = 0);
 } // namespace suns

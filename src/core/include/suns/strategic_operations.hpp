@@ -46,7 +46,7 @@ void run_strategic_tasks(GameState&, std::uint64_t);
 [[nodiscard]] bool same_strategic_intel_subject(const StrategicIntel&, const StrategicIntel&);
 void record_decoy_pulse(GameState&, const Fleet&, std::uint64_t turn);
 void observe_emission_pulses(GameState&, std::uint64_t);
-void observe_strategic_objects(GameState&, std::uint64_t);
+void observe_strategic_objects(GameState&, std::uint64_t, FleetId onlyFleet = 0);
 void deliver_strategic_intel(GameState&);
 void apply_scientific_data(GameState&, Player&, const PendingPlayerReport&, std::vector<GameEvent>&);
 bool collect_field_science_once(GameState&,Fleet&,std::uint64_t key,Position,StarId,ResearchField,std::uint32_t,std::uint64_t);

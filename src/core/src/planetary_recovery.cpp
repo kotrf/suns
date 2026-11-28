@@ -75,7 +75,7 @@ std::optional<PlanetAftermathObservation> known_planet_aftermath(const GameState
     }
     return {};
 }
-void observe_planetary_aftermath(GameState& s,std::uint64_t turn)
+void observe_planetary_aftermath(GameState& s, std::uint64_t turn, FleetId onlyFleet)
 {
     // Select one real receiver per planet/year, in stable ID order. A faster
     // connected observer wins; identical estimates still refresh their date.
@@ -85,7 +85,7 @@ void observe_planetary_aftermath(GameState& s,std::uint64_t turn)
         const auto* star=find_star(s,p.star); if(!star) continue;
         const Fleet* best=nullptr; std::uint64_t delay=kAwaitingTransmission;
         for(const auto& f:s.fleets) {
-            if(f.owner!=player.id || !same_position(f.position,star->position)
+            if((onlyFleet && f.id != onlyFleet) || f.owner!=player.id || !same_position(f.position,star->position)
                 || !fleet_has_scanner(s,f) || !fleet_active_sensors(f,turn)
                 || sensor_interference(s,player.id,f.position,turn)>=0.5) continue;
             const auto candidate=fleet_report_delivery_turn(s,player.id,f.position,turn,f.id);

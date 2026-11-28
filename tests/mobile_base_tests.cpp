@@ -306,6 +306,68 @@ void expedition_gate_command_delivery()
     assert(sent.fleets[1].position == order.transit.destination.position && !sent.fleets[1].mobileGate);
 }
 
+void scan_once_uses_the_gate_entrance()
+{
+    const Position entrance{400, 0}, exit{500, 0};
+    auto state = gate_world(entrance, exit);
+    state.turn = 10;
+    for (const auto base : {0U, 2U}) {
+        state.fleets[base].electronics.mode = EmissionMode::Passive;
+        state.fleets[base].telemetry.electronics = state.fleets[base].electronics;
+    }
+    state.stars.push_back({2, "Near entrance", {355, 0}});
+    state.stars.push_back({3, "Near exit", {545, 0}});
+    state.planets.push_back({2, 2, "Entrance world", 50, 0, 0});
+    state.planets.push_back({3, 3, "Exit world", 50, 0, 0});
+    state.players[0].surveyedStars = {1};
+    std::erase_if(state.players[0].surveyKnowledge, [](const auto& survey) { return survey.star != 1; });
+    state.players.push_back({2, "Foreign fleets"});
+    state.shipDesigns.push_back({202, 1, "Quiet scout", ShipHullType::Scout, {C::QuickJump5, C::RhinoScanner}});
+    state.shipDesigns.push_back({203, 2, "Foreign scout", ShipHullType::Scout, {C::QuickJump5}});
+    state.nextShipDesignId = 204;
+    auto& scanner = state.fleets[1];
+    scanner.design = 202;
+    scanner.ships = {{202, 1}};
+    scanner.electronics = {EmissionMode::RadioSilence, 30};
+    initialize_initial_fleet_telemetry(scanner, state.turn);
+    scanner.telemetry.electronics = scanner.electronics;
+    for (const auto pos : {state.stars[1].position, state.stars[2].position}) {
+        Fleet target;
+        target.id = state.nextFleetId++;
+        target.owner = 2;
+        target.design = 203;
+        target.ships = {{203, 1}};
+        target.position = pos;
+        state.fleets.push_back(target);
+    }
+
+    const MoveFleetOrder scan{2, entrance, 2, {FleetArrivalActionKind::ScanOnce}};
+    const MobileGateOrder jump{2, {{0, 1, entrance}, {0, 3, exit}}};
+    const TurnProcessor processor;
+    auto result = processor.process(state, {{1, {scan, jump}}});
+    while (result.turn < 14) result = processor.process(result, {});
+    const auto* traveler = find_service_fleet(result, 2);
+    assert(traveler && traveler->position == exit && traveler->electronics.mode == EmissionMode::RadioSilence);
+    assert(std::count_if(result.emissions.begin(), result.emissions.end(), [&](const auto& pulse) {
+        return pulse.fleet == 2 && pulse.emittedTurn == result.turn && pulse.channel == SignalChannel::Fast
+            && pulse.position == entrance;
+    }) == 1);
+    assert(std::none_of(result.emissions.begin(), result.emissions.end(), [&](const auto& pulse) {
+        return pulse.owner == 1 && pulse.emittedTurn == result.turn && pulse.position == exit;
+    }));
+    const auto& observer = result.players[0];
+    assert(std::any_of(observer.pendingSurveyReports.begin(), observer.pendingSurveyReports.end(), [](const auto& report) {
+        return report.star == 2 && report.transmissionFleet == 2 && report.observedTurn == 14;
+    }));
+    assert(std::none_of(observer.pendingSurveyReports.begin(), observer.pendingSurveyReports.end(), [](const auto& report) {
+        return report.star == 3;
+    }));
+    assert(observer.pendingEnemyContacts.size() == 1);
+    const auto& contact = observer.pendingEnemyContacts.front();
+    assert(contact.fleet == state.fleets[3].id && contact.sourceFleet == 2 && contact.transmissionFleet == 2);
+    assert(contact.sensor == ContactSensor::Active && contact.observedTurn == 14);
+}
+
 void delayed_gate_order_blocks_reorganization_in_planning_and_on_host()
 {
     auto s = gate_world({900, 0}, {1000, 0});
@@ -347,6 +409,7 @@ int main()
     expedition_gate_fuel_and_movement();
     expedition_and_orbital_gates();
     expedition_gate_command_delivery();
+    scan_once_uses_the_gate_entrance();
     delayed_gate_order_blocks_reorganization_in_planning_and_on_host();
     std::cout << "mobile base tests passed\n";
 }

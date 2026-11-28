@@ -91,7 +91,9 @@ can instead use **Scan once** at a named waypoint and set an ordinary
 waypoint for its withdrawal. The scan creates a single physical emission and
 uses active sensors at arrival. The fleet retains its emission policy and
 uploads its observations when that policy next permits it or at a friendly
-colony. Save v138 and orders v64 carry the wake option and scan waypoint.
+colony. If an Expedition Stargate jump follows in the same year, the
+signal and scan readings come from the waypoint at the entrance.
+Save v138 and orders v64 carry the wake option and scan waypoint.
 
 Colonies and scanner ships can intercept transmitting enemies beyond reflected
 hull range. Emissions remain unidentified 20 ly cells with 15 ly uncertainty:

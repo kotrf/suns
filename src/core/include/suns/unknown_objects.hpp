@@ -20,6 +20,6 @@ inline constexpr double kIonVortexInterference = 0.30;
 [[nodiscard]] const ObjectObservation* known_unknown_object(const GameState&,PlayerId,UnknownObjectId);
 void generate_unknown_objects(GameState&,bool includeMoving=true);
 void advance_unknown_objects(GameState&);
-void observe_unknown_objects(GameState&,std::uint64_t);
+void observe_unknown_objects(GameState&, std::uint64_t, FleetId onlyFleet = 0);
 void research_unknown_objects(GameState&,Fleet&,std::uint64_t);
 } // namespace suns

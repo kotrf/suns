@@ -651,7 +651,7 @@ void observe_fleet_sensor_sweep(
         detail::dispatch_fleet_sensor_readings(state, std::move(*readings));
 }
 
-void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn)
+void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn, FleetId onlyFleet)
 {
     struct ColonyScanner { const Planet* planet; Position position; double range; };
     struct FleetScanner { Fleet* fleet; double range, penetrating; };
@@ -659,7 +659,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         return (1 - sensor_interference(state, owner, position, observationTurn)) * medium_active_sensor_factor(state, position);
     };
     std::vector<ColonyScanner> colonies;
-    for (const auto& planet : state.planets) {
+    if (!onlyFleet) for (const auto& planet : state.planets) {
         const auto radar = planetary_radar_range(planet.radar);
         if (!planet.owner || radar <= 0) continue;
         if (const auto* star = find_star(state, planet.star))
@@ -667,7 +667,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
     std::vector<FleetScanner> fleets;
     for (auto& fleet : state.fleets) {
-        if (!fleet_active_sensors(fleet, observationTurn) || !fleet_has_scanner(state, fleet)) continue;
+        if ((onlyFleet && fleet.id != onlyFleet) || !fleet_active_sensors(fleet, observationTurn)
+            || !fleet_has_scanner(state, fleet)) continue;
         const auto range = fleet_sensor_range(state, fleet);
         const auto signal = factor(fleet.owner, fleet.position);
         fleets.push_back({&fleet, range * signal, fleet_penetrating_sensor_range(state, fleet) * signal});
@@ -713,6 +714,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
     const auto cloudSlope = sensor_sweep_cloud_slope(state);
     for (const auto& fleet : state.fleets) {
+        if (onlyFleet && fleet.id != onlyFleet) continue;
         const auto range = geological_scanner_range(state, fleet, observationTurn);
         if (range <= 0) continue;
         const detail::FleetSensorSweep sweep{
