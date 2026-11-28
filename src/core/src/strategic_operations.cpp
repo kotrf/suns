@@ -833,12 +833,13 @@ bool submit_electronics_command(GameState& state, PlayerId player, FleetId id, E
     return true;
 }
 
-void observe_strategic_objects(GameState& state, std::uint64_t turn)
+void observe_strategic_objects(GameState& state, std::uint64_t turn, FleetId onlyFleet)
 {
 
     for (auto& player : state.players) {
         for (const auto& detector : state.fleets) {
-            if (detector.owner != player.id || !fleet_has_scanner(state, detector)) continue;
+            if ((onlyFleet && detector.id != onlyFleet) || detector.owner != player.id
+                || !fleet_has_scanner(state, detector)) continue;
             const double range = strategic_sensor_range(state, detector,turn);
             if (range > 0) for (const auto& old : player.strategicIntel) {
                 if (old.type == StrategicObjectKind::Emission || distance_between(old.position,detector.position) > range*0.5) continue;

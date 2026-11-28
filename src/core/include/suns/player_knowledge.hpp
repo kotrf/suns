@@ -34,7 +34,7 @@ void observe_fleet_sensor_sweep(
 // Observe stationary colony/fleet coverage at the end of the movement phase.
 // Arrival promotes to orbital knowledge; an additional turn in place promotes
 // to geology. Reports already in flight are dominance-coalesced deterministically.
-void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn);
+void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn, FleetId onlyFleet = 0);
 
 // Deliver reports due at the current planning boundary. Delivery is the only
 // operation that mutates Player::surveyedStars and emits briefing events.

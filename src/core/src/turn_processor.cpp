@@ -25,6 +25,7 @@
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/production.hpp"
 #include "suns/production_template_edits.hpp"
 #include "suns/propulsion.hpp"
@@ -3330,12 +3331,27 @@ TurnResult TurnProcessor::process_with_events(
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
     deploy_outposts(next, next.turn + 1);
-    resolve_mobile_gate_transits(next);
+    // A scan and an independent mobile gate order can execute in the same
+    // year. Sample the waypoint with the real pre-jump geometry and radio.
+    const auto observationTurn = next.turn + 1;
+    std::vector<WaypointContact> waypointContacts;
+    resolve_mobile_gate_transits(next, [&](Fleet& fleet) {
+        if (fleet.waypointScanTurn != observationTurn) return;
+        observe_current_sensor_coverage(next, observationTurn, fleet.id);
+        capture_waypoint_contacts(next, fleet, observationTurn, waypointContacts);
+        observe_wormhole_sweep(next, fleet, fleet.position, fleet.position, observationTurn);
+        observe_strategic_objects(next, observationTurn, fleet.id);
+        observe_planetary_aftermath(next, observationTurn, fleet.id);
+        observe_unknown_objects(next, observationTurn, fleet.id);
+        observe_visitors(next, observationTurn, fleet.id);
+        observe_interstellar_medium(next, observationTurn, fleet.id);
+        fleet.waypointScanTurn = 0;
+    });
     observe_current_wormholes(next, next.turn + 1);
     refresh_planetary_engineering(next);
     detail::assign_production_queue_ids(next);
     observe_current_sensor_coverage(next, next.turn + 1);
-    observe_enemy_fleet_contacts(next, next.turn + 1);
+    observe_reconnaissance(next, observationTurn, waypointContacts);
     std::vector<std::pair<PlayerId, std::uint64_t>> researchByPlayer;
     for (auto& planet : next.planets) {
         const auto industry=run_colony_production(next,planet); // Pays native support before retained science.
