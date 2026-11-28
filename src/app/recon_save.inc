@@ -44,19 +44,32 @@ void readSensorStatus(QDataStream& s,SensorStatus& x)
     x.observedTurn=observed; x.deliveryTurn=due;
     if(!sensor_status_valid(x)) markCorrupt(s);
 }
+quint8 signalKindFlags(SignalChannel channel, SignalActivity activity)
+{
+    return quint8(quint8(channel) | (quint8(activity) << 1));
+}
+bool readSignalKind(QDataStream& stream, quint8 flags, SignalChannel& channel, SignalActivity& activity)
+{
+    const auto maximum = gReadSaveFormatVersion >= 139 ? quint8(7) : quint8(SignalChannel::Slow);
+    if (flags > maximum) { markCorrupt(stream); return false; }
+    channel = SignalChannel(flags & 1);
+    activity = SignalActivity(flags >> 1);
+    return true;
+}
 void writeEmissionObservation(QDataStream& s,const std::optional<EmissionObservation>& value)
 {
     s << quint8(value.has_value());
-    if(value) s << quint64(value->emittedTurn) << quint8(value->channel);
+    if(value) s << quint64(value->emittedTurn) << signalKindFlags(value->channel, value->activity);
 }
 void readEmissionObservation(QDataStream& s,std::optional<EmissionObservation>& value,std::uint64_t observed)
 {
     quint8 present{}; s >> present;
     if(present>1) { markCorrupt(s); return; }
     if(present) {
-        quint64 emitted{}; quint8 channel{}; s >> emitted >> channel;
-        if(!emitted || emitted>observed || channel>quint8(SignalChannel::Slow)) { markCorrupt(s); return; }
-        value=EmissionObservation{emitted,SignalChannel(channel)};
+        quint64 emitted{}; quint8 flags{}; s >> emitted >> flags;
+        if(!emitted || emitted>observed) { markCorrupt(s); return; }
+        EmissionObservation evidence{emitted};
+        if (readSignalKind(s, flags, evidence.channel, evidence.activity)) value = evidence;
     }
 }
 void writeAftermathObservation(QDataStream& s,const PlanetAftermathObservation& x)

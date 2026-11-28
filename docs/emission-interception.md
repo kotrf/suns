@@ -37,8 +37,9 @@ contents. It records emission, interception and delivery years, and never follow
 a moved/destroyed emitter. The map marker lasts one receipt planning year; the
 message remains in history. Decoys use the emission-time jammer strength and
 position; sufficiently strong tachyon reception rejects only the false area.
-Contemporaneous known hull evidence can suppress a redundant anonymous marker;
-old pulses never query a departed source's current state.
+A contemporaneous hull sighting can replace an unclassified signal marker.
+A classified signal adds information about activity even when the receiver
+also sees the hull.
 
 ## Expendable decoy probes
 
@@ -60,7 +61,28 @@ the probe's genuine communication packets still follow ordinary interception
 rules. Genuine and forged emission observations are keyed by the apparent cell,
 emission year and channel. Exported evidence carries no pulse ID or decoy flag.
 
-Save v137 stores the decoy flag only in the host's in-flight pulses. Player turn
-files carry delivered anonymous evidence. Orders v63 carry the new waypoint
-action and ship fitting. Advanced traffic classification and specialized SIGINT
-remain design candidates under #58/#205.
+Save v137 introduced the host-only decoy flag. Player turn files carry
+delivered anonymous evidence. Orders v63 introduced the waypoint action and
+ship fitting.
+
+## Signal patterns
+
+With Electronics 8 a receiver in the inner half of its effective reception
+range can recognize radio traffic, active scanners or jamming, or both in the
+same annual batch. Distant signals remain unclassified. A forged pulse can
+imitate radio traffic. The map and Turn Messages show the received pattern
+with the original channel and dates. Patterns describe the observed signal
+and leave the sender and packet contents unknown. They survive save/reload
+and PBEM export from save v139.
+The first alert can arrive before a separate report with the classification.
+The refinement appears on the map and in Turn Messages in its own delivery
+year. Each listening ship carries its own copy until it can transmit.
+The host keeps the received classification while the wave can still be
+intercepted. A late duplicate leaves the map and messages alone, and a late
+classification can refine the first alert after its marker expires.
+
+Slow reception at a jammed physical endpoint over a hop longer than 450 ly
+adds a year of decoding to addressed packets. The signal still reaches
+interceptors along the same wavefront. Timing is selected at dispatch and
+remains attached to the packet. Specialized SIGINT and authentication
+remain design candidates.

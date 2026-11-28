@@ -5,6 +5,7 @@
 #include "suns/computer_player.hpp"
 #include "suns/production.hpp"
 #include "suns/combat.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
@@ -42,7 +43,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 138;
+constexpr quint32 kSaveFormatVersion = 139;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -3481,6 +3482,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeBattlePlans(stream, data.state);
     writeRemoteGeology(stream, data.state);
     writeMobileGateCommands(stream, data.state, data.mode == SessionMode::PlayerTurn);
+    writeEmissionActivities(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3622,6 +3624,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (version >= 133) readBattlePlans(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version >= 134) readRemoteGeology(stream, loaded.state);
     if (version >= 135) readMobileGateCommands(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
+    if (version >= 139) readEmissionActivities(stream, loaded.state);
     loaded.galaxyConfig.slowResearch = loaded.state.slowResearch;
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
@@ -3630,6 +3633,8 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
     }
+    if (version >= 139 && loaded.mode != SessionMode::PlayerTurn)
+        restore_emission_intel(loaded.state, loaded.strategicMessages);
     if(version<79 && loaded.mode!=SessionMode::PlayerTurn) generate_unknown_objects(loaded.state,false);
     if (loaded.pendingDescriptions.size() != static_cast<qsizetype>(loaded.pendingOrders.orders.size())) {
         errorMessage = "The Suns! save file has an inconsistent planning-order section.";

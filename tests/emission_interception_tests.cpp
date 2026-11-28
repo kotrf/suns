@@ -56,7 +56,8 @@ void two_physical_delays_and_immutable_source()
     assert(exported.players.front().strategicIntel.front().emission->emittedTurn==10);
     observe_emission_pulses(s,13); observe_emission_pulses(s,14);
     assert(s.players[0].pendingStrategicIntel.empty()); // No repeated reception inside a filled disk.
-    s.turn=16; deliver_strategic_intel(s); assert(s.players[0].strategicIntel.empty());
+    s.turn=16; deliver_strategic_intel(s);
+    assert(make_player_view(s,1).state.players[0].strategicIntel.empty());
 }
 void passive_reception_waits_for_real_dispatch()
 {
@@ -157,9 +158,176 @@ void expendable_probe_broadcasts_at_the_final_waypoint()
     assert(std::none_of(state.players[0].strategicIntel.begin(), state.players[0].strategicIntel.end(), echo));
 }
 
+void only_strong_signals_reveal_anonymous_activity()
+{
+    auto state = fixture();
+    state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+    state.fleets[0].position = {510, 0};
+    auto weak = state;
+    weak.fleets[0].position = {440, 0};
+    auto earlyTechnology = state;
+    earlyTechnology.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 7;
+    const auto detect = [](GameState& s, std::uint64_t observedTurn) {
+        record_scan_transmission(s, s.fleets[1], s.turn);
+        publish_fleet_telemetry(s, s.turn);
+        observe_emission_pulses(s, observedTurn);
+    };
+    const auto activity = [](const GameState& s, SignalChannel channel) {
+        const auto& evidence = s.players[0].pendingStrategicIntel;
+        const auto observation = std::find_if(evidence.begin(), evidence.end(), [channel](const auto& e) {
+            return e.emission && e.emission->channel == channel && same_position(e.position, {610, 10});
+        });
+        assert(observation != evidence.end() && !observation->owner && !observation->id);
+        return observation->emission->activity;
+    };
+    detect(state, 11);
+    assert(activity(state, SignalChannel::Slow) == SignalActivity::RadioTraffic);
+    assert(activity(state, SignalChannel::Fast) == SignalActivity::ActiveElectronics);
+    detect(weak, 12);
+    assert(activity(weak, SignalChannel::Slow) == SignalActivity::Unclassified);
+    detect(earlyTechnology, 11);
+    assert(activity(earlyTechnology, SignalChannel::Slow) == SignalActivity::Unclassified);
+
+    auto mixed = fixture();
+    mixed.stars[1].position = {700, 0};
+    mixed.fleets[0].position = {510, 0};
+    mixed.fleets[1].electronics = {};
+    mixed.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+    publish_fleet_telemetry(mixed, mixed.turn);
+    observe_emission_pulses(mixed, mixed.turn + 1);
+    assert(activity(mixed, SignalChannel::Fast) == SignalActivity::Mixed);
+}
+
+void late_classification_survives_the_first_alert()
+{
+    for (const bool silent : {false, true}) {
+        auto state = fixture();
+        const Position area{210, 10};
+        state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+        state.fleets[0].position = {285, 0};
+        state.fleets[1].position = {200, 0};
+        record_scan_transmission(state, state.fleets[1], 10);
+        state.fleets.pop_back(); // Isolate receipt ordering from simultaneous hull detection.
+        if (silent) {
+            state.fleets[0].electronics.mode = EmissionMode::Passive;
+            auto secondReceiver = state.fleets[0];
+            secondReceiver.id = state.nextFleetId++;
+            state.fleets.push_back(secondReceiver);
+        }
+        observe_emission_pulses(state, 10);
+        auto& player = state.players.front();
+        assert(player.pendingStrategicIntel.size() == (silent ? 3 : 2));
+        assert(player.pendingPlayerReports.size() == player.pendingStrategicIntel.size());
+        deliver_strategic_intel(state);
+        const auto alert = deliver_due_player_reports(state);
+        assert(alert.size() == 1 && alert[0].emission->activity == SignalActivity::Unclassified);
+        assert(player.strategicIntel.size() == 1 && player.strategicIntel[0].emission->activity == SignalActivity::Unclassified);
+        const auto reported = make_player_view(state, 1);
+        assert(reported.state.players.front().pendingStrategicIntel.empty());
+        assert(reported.state.players.front().pendingPlayerReports.empty());
+        state.turn = 11;
+        deliver_strategic_intel(state);
+        assert(deliver_due_player_reports(state).empty());
+        assert(make_player_view(state, 1).state.players.front().strategicIntel.empty());
+        if (silent) {
+            // The second listener reaches a friendly colony first. The original
+            // listener still has its copy aboard and stays in Passive.
+            state.turn = 13;
+            state.fleets.back().position = {0, 0};
+            dispatch_fleet_report_outbox(state);
+        } else {
+            state.turn = 12;
+        }
+        deliver_strategic_intel(state);
+        const auto refinement = deliver_due_player_reports(state);
+        assert(refinement.size() == 1 && refinement[0].emission->activity == SignalActivity::ActiveElectronics);
+        assert(refinement[0].observedTurn == 10 && refinement[0].emission->emittedTurn == 10);
+        assert(refinement[0].turn == state.turn && same_position(refinement[0].position, area));
+        assert(player.strategicIntel.size() == 1 && player.strategicIntel[0].emission->activity == SignalActivity::ActiveElectronics);
+        assert(!player.strategicIntel[0].owner && !player.strategicIntel[0].id);
+        assert(player.pendingStrategicIntel.empty() && player.pendingPlayerReports.empty());
+    }
+}
+
+void a_hull_contact_does_not_hide_a_classified_signal()
+{
+    auto state = fixture();
+    state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+    state.fleets[1].position = {485, 0};
+    assert(detector_detects_fleet(state, state.fleets[0], state.fleets[1]));
+    record_scan_transmission(state, state.fleets[1], 10);
+    auto earlyTechnology = state;
+    earlyTechnology.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 7;
+    observe_emission_pulses(earlyTechnology, 10);
+    assert(earlyTechnology.players[0].pendingStrategicIntel.empty());
+    observe_emission_pulses(state, 10);
+    const auto& pending = state.players[0].pendingStrategicIntel;
+    assert(pending.size() == 1 && pending.front().emission->activity == SignalActivity::ActiveElectronics);
+    assert(pending.front().deliveryTurn == 13 && same_position(pending.front().position, {490, 10}));
+    state.turn = 13;
+    deliver_strategic_intel(state);
+    const auto reports = deliver_due_player_reports(state);
+    assert(reports.size() == 1 && !reports[0].fleet && !reports[0].contactOwner);
+    assert(reports[0].emission->activity == SignalActivity::ActiveElectronics);
+    assert(state.players[0].strategicIntel.front().emission->activity == SignalActivity::ActiveElectronics);
+}
+
+void late_interception_uses_received_evidence_after_the_marker_expires()
+{
+    for (const bool classifiedFirst : {true, false}) {
+        auto state = fixture();
+        state.fleets.pop_back();
+        state.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 8;
+        state.stars[0].position = {classifiedFirst ? 100.0 : 160.0, 0};
+        state.fleets[0].position = {classifiedFirst ? 310.0 : 460.0, 0};
+        state.shipDesigns[0].components.back() = classifiedFirst ? C::GazelleScanner : C::PeerlessScanner;
+        EmissionPulse pulse;
+        pulse.id = state.nextEmissionId++;
+        pulse.owner = 2;
+        pulse.emittedTurn = 10;
+        pulse.channel = SignalChannel::Slow;
+        pulse.maximumRange = 1000;
+        pulse.activity = SignalActivity::RadioTraffic;
+        state.emissions.push_back(pulse);
+        const auto intercept = [&](std::uint64_t year) {
+            state.turn = year;
+            observe_emission_pulses(state, year);
+            deliver_strategic_intel(state);
+            return deliver_due_player_reports(state);
+        };
+        const auto firstYear = classifiedFirst ? 11U : 12U;
+        const auto first = intercept(firstYear);
+        assert(first.size() == 1 && first[0].turn == firstYear && same_position(first[0].position, {10, 10}));
+        assert(first[0].emission->activity == (classifiedFirst ? SignalActivity::RadioTraffic : SignalActivity::Unclassified));
+        assert(intercept(firstYear + 1).empty());
+        assert(make_player_view(state, 1).state.players.front().strategicIntel.empty());
+
+        const auto late = intercept(firstYear + 2);
+        const auto signal = std::find_if(state.emissions.begin(), state.emissions.end(), [&](const auto& item) {
+            return item.id == pulse.id;
+        });
+        assert(signal != state.emissions.end() && signal->receipts.size() == 2);
+        const auto view = make_player_view(state, 1);
+        const auto& markers = view.state.players.front().strategicIntel;
+        if (classifiedFirst) {
+            assert(late.empty() && markers.empty());
+        } else {
+            assert(late.size() == 1 && late[0].emission->activity == SignalActivity::RadioTraffic);
+            assert(markers.size() == 1 && markers[0].emission->activity == SignalActivity::RadioTraffic);
+            assert(markers[0].emission->emittedTurn == 10);
+        }
+        assert(intercept(18).empty());
+        assert(state.players.front().strategicIntel.empty());
+    }
+}
+
 int main()
 {
     two_physical_delays_and_immutable_source(); passive_reception_waits_for_real_dispatch();
     colony_forwards_silent_fleet_without_relocating_emission(); actual_fast_transmission_and_command_source();
     expendable_probe_broadcasts_at_the_final_waypoint();
+    only_strong_signals_reveal_anonymous_activity();
+    late_classification_survives_the_first_alert();
+    a_hull_contact_does_not_hide_a_classified_signal();
+    late_interception_uses_received_evidence_after_the_marker_expires();
 }

@@ -81,8 +81,8 @@ void writeEmissionPulses(QDataStream& stream,const GameState& state)
     stream << quint32(state.nextEmissionId) << quint32(state.emissions.size());
     for(const auto& pulse:state.emissions) {
         stream << quint32(pulse.id) << quint32(pulse.owner); writePosition(stream,pulse.position);
-        const auto channel = quint8(quint8(pulse.channel) | (pulse.decoyOnly ? kDecoyPulseFlag : 0));
-        stream << quint64(pulse.emittedTurn) << channel << pulse.maximumRange << pulse.deceptionStrength
+        const auto flags = quint8(quint8(pulse.channel) | (pulse.decoyOnly ? kDecoyPulseFlag : 0));
+        stream << quint64(pulse.emittedTurn) << flags << pulse.maximumRange << pulse.deceptionStrength
             << quint32(pulse.fleet) << quint32(pulse.colony) << quint32(pulse.receipts.size());
         for(const auto& receipt:pulse.receipts) stream << quint32(receipt.player) << quint32(receipt.fleet) << quint32(receipt.colony);
     }
@@ -92,16 +92,16 @@ void readEmissionPulses(QDataStream& stream,GameState& state)
     quint32 count{}; stream >> state.nextEmissionId;
     if(!state.nextEmissionId || state.nextEmissionId>0x7fffffffU || !readCount(stream,count)) { markCorrupt(stream); return; }
     for(quint32 n=0;n<count;++n) {
-        EmissionPulse pulse; quint64 turn{}; quint8 channel{}; quint32 receipts{};
+        EmissionPulse pulse; quint64 turn{}; quint8 flags{}; quint32 receipts{};
         stream >> pulse.id >> pulse.owner; readPosition(stream,pulse.position);
-        stream >> turn >> channel >> pulse.maximumRange >> pulse.deceptionStrength >> pulse.fleet >> pulse.colony;
+        stream >> turn >> flags >> pulse.maximumRange >> pulse.deceptionStrength >> pulse.fleet >> pulse.colony;
         if (gReadSaveFormatVersion >= 137) {
-            pulse.decoyOnly = (channel & kDecoyPulseFlag) != 0;
-            channel &= ~kDecoyPulseFlag;
+            pulse.decoyOnly = (flags & kDecoyPulseFlag) != 0;
+            flags &= ~kDecoyPulseFlag;
         }
-        pulse.emittedTurn=turn; pulse.channel=SignalChannel(channel);
+        pulse.emittedTurn=turn; pulse.channel=SignalChannel(flags);
         if(!pulse.id || pulse.id>=state.nextEmissionId || !find_player(state,pulse.owner)
-            || !turn || turn>state.turn || channel>quint8(SignalChannel::Slow)
+            || !turn || turn>state.turn || flags>quint8(SignalChannel::Slow)
             || !std::isfinite(pulse.maximumRange) || pulse.maximumRange<0 || pulse.maximumRange>20000
             || !std::isfinite(pulse.deceptionStrength) || pulse.deceptionStrength<0 || pulse.deceptionStrength>0.95
             || (pulse.fleet && pulse.colony) || (pulse.colony && pulse.deceptionStrength)
@@ -119,6 +119,29 @@ void readEmissionPulses(QDataStream& stream,GameState& state)
         state.emissions.push_back(std::move(pulse));
     }
 }
+
+constexpr quint32 kEmissionActivityMagic = 0x45414354u; // EACT
+
+void writeEmissionActivities(QDataStream& stream, const GameState& state)
+{
+    stream << kEmissionActivityMagic << quint32(state.emissions.size());
+    for (const auto& pulse : state.emissions) writeEnum(stream, pulse.activity);
+}
+
+void readEmissionActivities(QDataStream& stream, GameState& state)
+{
+    quint32 magic{}, count{};
+    stream >> magic;
+    if (magic != kEmissionActivityMagic || !readCount(stream, count) || count != state.emissions.size()) {
+        markCorrupt(stream);
+        return;
+    }
+    // The activity array follows the original pulse order. Older formats
+    // read the same pulse records with unclassified activity.
+    for (auto& pulse : state.emissions)
+        if (!readEnum(stream, pulse.activity, quint8(SignalActivity::Mixed))) return;
+}
+
 void writePlanetWarDamage(QDataStream& stream,const GameState& state)
 {
     stream << quint32(state.planets.size());

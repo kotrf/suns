@@ -176,7 +176,11 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         mix(std::bit_cast<std::uint64_t>(report.contactPosition.y));
         mix(report.deliveredColonists);
     }
-    if(report.emission) { mix(report.emission->emittedTurn); mix(std::uint64_t(report.emission->channel)); }
+    if (report.emission) {
+        mix(report.emission->emittedTurn);
+        mix(std::uint64_t(report.emission->channel));
+        if (report.emission->activity != SignalActivity::Unclassified) mix(std::uint64_t(report.emission->activity));
+    }
     if(report.objectObservation) {
         const auto& x=*report.objectObservation; mix(x.id); mix(std::uint64_t(x.level));
         mix(x.kind ? std::uint64_t(*x.kind)+1 : 0);
@@ -912,6 +916,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
     std::vector<GameEvent> events;
     for (auto& player : state.players) {
         prune_transport_receipts(player,state.turn);
+        discard_redundant_emission_reports(player, state.turn);
         std::stable_sort(player.pendingPlayerReports.begin(), player.pendingPlayerReports.end(),
             [](const PendingPlayerReport& lhs, const PendingPlayerReport& rhs) {
                 if (lhs.deliveryTurn != rhs.deliveryTurn) return lhs.deliveryTurn < rhs.deliveryTurn;

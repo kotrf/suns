@@ -38,7 +38,9 @@ Signals have the same propagation time regardless of message priority. Priority 
 An active hostile [Area Jammer](strategic-operations.md#area-jammer) disables
 fast radio at ships, colonies and relays within 90 ly. A clean route can use
 other relays. A jammed endpoint uses the ordinary slow hop between physical
-radios at 150 ly/year. A jammed homeworld continues to receive slow packets
+radios at 150 ly/year. Hops over 450 ly with an endpoint inside the jamming
+field add one year for packet decoding. The intercepted wavefront still
+travels at 150 ly/year. A jammed homeworld continues to receive slow packets
 and share data locally with fleets in orbit. A fleet outside the field can use
 its own fast relay chain, including working colony radars, before the slow hop
 to that homeworld. Observations from the initial flight legs are frozen before

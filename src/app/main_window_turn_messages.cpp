@@ -5,6 +5,7 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/megaprojects.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/communications.hpp"
@@ -154,7 +155,11 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::SampleDelivered: subject = QString("Specimen X%1 delivered to %2").arg(event.quantity).arg(planetName); break;
     case GameEventKind::SampleRetained: subject = QString("Specimen X%1 retained as a working research artifact").arg(event.quantity); break;
     case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
-    case GameEventKind::EmissionDetected: subject = QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity); break;
+    case GameEventKind::EmissionDetected:
+        subject = event.emission && event.emission->activity != SignalActivity::Unclassified
+            ? QString("Emission pattern — %1").arg(signal_activity_name(event.emission->activity))
+            : QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity);
+        break;
     case GameEventKind::AnomalyDetected: subject = QString("Spatial anomaly %1 detected").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeClassified: subject = QString("WH %1 classified").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeEntered: subject = QString("%1 entered WH %2").arg(fleetName).arg(event.wormholeEndpoint); break;
@@ -588,6 +593,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             if(event.emission) text+=QString("\n%1 channel. Emitted year %2; intercepted year %3; received year %4.")
                 .arg(event.emission->channel==SignalChannel::Slow?"Slow":"Fast")
                 .arg(qulonglong(event.emission->emittedTurn)).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn));
+            if (event.emission && event.emission->activity != SignalActivity::Unclassified)
+                text += QString("\nObserved pattern — %1.").arg(signal_activity_name(event.emission->activity));
             text += "\nThis is an uncertain emission-time signal area. The source, owner and fleet composition are unverified; it may be a decoy. It does not track a departed source or decode its messages. The marker expires after this planning year.";
         }
         else if (event.kind == GameEventKind::MineStrike)

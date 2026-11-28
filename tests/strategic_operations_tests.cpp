@@ -131,7 +131,9 @@ void stealth_jamming_and_signals()
     const auto& signal = s.players[0].strategicIntel[0];
     assert(signal.type == StrategicObjectKind::Emission && signal.owner == 0 && signal.radius == 15);
     assert(signal.position.x != enemy.position.x);
-    s.turn = 3; deliver_strategic_intel(s); assert(s.players[0].strategicIntel.empty());
+    s.turn = 3;
+    deliver_strategic_intel(s);
+    assert(make_player_view(s,1).state.players[0].strategicIntel.empty());
     s.shipDesigns[1].components = {C::FuelMizer,C::RhinoScanner,C::Jammer50};
     assert(strategic_sensor_range(s,s.fleets[0]) == 25);
     assert(communication_delay_turns(s,1,{0,0}) == 1);

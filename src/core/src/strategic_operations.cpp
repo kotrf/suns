@@ -873,17 +873,13 @@ bool same_strategic_intel_subject(const StrategicIntel& left, const StrategicInt
 
 void deliver_strategic_intel(GameState& state)
 {
+    deliver_emission_intel(state);
     for (auto& player : state.players) {
-        // Emissions are one planning-year evidence. Historical events survive.
-        std::erase_if(player.strategicIntel, [&](const auto& i) {
-            return i.type == StrategicObjectKind::Emission && i.deliveryTurn < state.turn;
-        });
         for (const auto& packet : player.pendingStrategicIntel) {
-            if (packet.deliveryTurn > state.turn) continue;
+            if (packet.type == StrategicObjectKind::Emission || packet.deliveryTurn > state.turn) continue;
             auto old = std::find_if(player.strategicIntel.begin(), player.strategicIntel.end(), [&](const auto& i) {
                 return same_strategic_intel_subject(i, packet);
             });
-            if (packet.type == StrategicObjectKind::Emission && packet.deliveryTurn < state.turn) continue;
             if (old == player.strategicIntel.end()) player.strategicIntel.push_back(packet);
             else if (old->observedTurn <= packet.observedTurn) *old = packet;
         }

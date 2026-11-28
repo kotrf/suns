@@ -562,6 +562,9 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     own.pendingSensorStatus.clear(); own.observedSensorStatus.clear();
     own.pendingWormholeReports.clear();
     own.pendingStrategicIntel.clear();
+    std::erase_if(own.strategicIntel, [&](const auto& intel) {
+        return intel.type == StrategicObjectKind::Emission && intel.deliveryTurn != host.turn;
+    });
     std::erase_if(own.fieldScience, [&](const auto& r) { return r.deliveryTurn > host.turn; });
     state.players.push_back(own);
     for (const auto& star : host.stars) {

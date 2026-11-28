@@ -1061,9 +1061,11 @@ struct ReconContact {
 };
 
 enum class SignalChannel : std::uint8_t { Fast, Slow };
+enum class SignalActivity : std::uint8_t { Unclassified, RadioTraffic, ActiveElectronics, Mixed };
 struct EmissionObservation {
     std::uint64_t emittedTurn{};
     SignalChannel channel{SignalChannel::Fast};
+    SignalActivity activity{SignalActivity::Unclassified};
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -1347,6 +1349,7 @@ struct EmissionPulse {
     PlanetId colony{};
     std::vector<EmissionReceipt> receipts;
     bool decoyOnly{}; // This pulse generates fabricated evidence only.
+    SignalActivity activity{SignalActivity::Unclassified};
 };
 enum class StrategicObjectKind : std::uint8_t { Minefield, Wreck, Emission };
 // Immutable sensor evidence, never a reference to current hidden truth.
